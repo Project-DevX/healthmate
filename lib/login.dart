@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'register.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -106,12 +107,7 @@ class _LoginPageState extends State<LoginPage> {
                   TextButton(
                     child: const Text('Register'),
                     onPressed: () {
-                      // TODO: Navigate to registration page
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Registration not implemented'),
-                        ),
-                      );
+                      Navigator.pushNamed(context, '/register');
                     },
                   ),
                 ],
