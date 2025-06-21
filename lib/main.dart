@@ -17,6 +17,18 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
       ),
       initialRoute: '/',
+      onGenerateRoute: (settings) {
+        if (settings.name == '/register') {
+          return MaterialPageRoute(builder: (_) => const RegisterPage());
+        } else if (settings.name == '/') {
+          return MaterialPageRoute(builder: (_) => const LoginPage());
+        } else if (settings.name == '/home') {
+          return MaterialPageRoute(builder: (_) => const MyHomePage(title: 'Flutter Demo Home Page'));
+        }
+        // Handle unknown routes
+        return MaterialPageRoute(builder: (_) => const LoginPage());
+      },
+      // Keep the routes map as a fallback
       routes: {
         '/': (context) => const LoginPage(),
         '/home': (context) => const MyHomePage(title: 'Flutter Demo Home Page'),

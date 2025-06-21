@@ -107,7 +107,12 @@ class _LoginPageState extends State<LoginPage> {
                   TextButton(
                     child: const Text('Register'),
                     onPressed: () {
-                      Navigator.pushNamed(context, '/register');
+                      // Use direct navigation instead of named routes
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => const RegisterPage()),
+                      );
                     },
                   ),
                 ],
