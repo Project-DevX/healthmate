@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "535481523181",
+    "project_id": "healthmate-devx",
+    "storage_bucket": "healthmate-devx.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:535481523181:android:eed7f5b9ddc3511f8c65e4",
+        "android_client_info": {
+          "package_name": "com.devx.healthmate"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBYKg3Aa4Q5p1J7oGva_KiLy95mdrz5dk0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
