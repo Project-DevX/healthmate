@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'register.dart';
 
 class LoginPage extends StatefulWidget {
@@ -13,14 +16,128 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
 
-  Future<void> _signInWithEmail() async {
-    setState(() => _isLoading = true);
-    // Simulate login delay
-    await Future.delayed(const Duration(seconds: 1));
-    setState(() => _isLoading = false);
+  // Firebase instances
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-    // For demonstration, always succeed
-    Navigator.pushReplacementNamed(context, '/home');
+  Future<void> _signInWithEmail() async {
+    if (_emailController.text.trim().isEmpty ||
+        _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter email and password')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Attempt to sign in with email and password
+      final UserCredential userCredential = await _auth
+          .signInWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
+
+      // Successfully signed in
+      if (mounted) Navigator.pushReplacementNamed(context, '/home');
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = 'An error occurred during sign in';
+      if (e.code == 'user-not-found') {
+        errorMessage = 'No user found with this email';
+      } else if (e.code == 'wrong-password') {
+        errorMessage = 'Wrong password';
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errorMessage)));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _isLoading = true);
+
+    try {
+      // Trigger Google sign-in flow
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) {
+        // User cancelled the sign-in flow
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // Obtain auth details from Google Sign-In
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
+      // Create credentials for Firebase
+      final OAuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // Sign in to Firebase with Google credentials
+      final UserCredential userCredential = await _auth.signInWithCredential(
+        credential,
+      );
+      final User? user = userCredential.user;
+
+      if (user != null) {
+        // Add/update user in Firestore database
+        await _saveUserToDatabase(user);
+
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/home');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Google Sign-In failed: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // Save user data to Firestore
+  Future<void> _saveUserToDatabase(User user) async {
+    // Check if user already exists in the database
+    final userDoc = await _firestore.collection('users').doc(user.uid).get();
+
+    if (!userDoc.exists) {
+      // New user - add to database
+      await _firestore.collection('users').doc(user.uid).set({
+        'uid': user.uid,
+        'email': user.email,
+        'displayName': user.displayName ?? '',
+        'photoURL': user.photoURL ?? '',
+        'createdAt': FieldValue.serverTimestamp(),
+        'lastLogin': FieldValue.serverTimestamp(),
+        // You can add other default fields here
+        'userType': 'patient', // Default user type
+        'accountComplete':
+            false, // Flag to identify new accounts that need setup
+      });
+    } else {
+      // Existing user - just update the login timestamp
+      await _firestore.collection('users').doc(user.uid).update({
+        'lastLogin': FieldValue.serverTimestamp(),
+      });
+    }
   }
 
   @override
@@ -45,8 +162,8 @@ class _LoginPageState extends State<LoginPage> {
                 keyboardType: TextInputType.emailAddress,
                 decoration: const InputDecoration(
                   labelText: 'Email',
-                  prefixIcon: Icon(Icons.email),
                   border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.email),
                 ),
               ),
               const SizedBox(height: 16),
@@ -55,8 +172,8 @@ class _LoginPageState extends State<LoginPage> {
                 obscureText: true,
                 decoration: const InputDecoration(
                   labelText: 'Password',
-                  prefixIcon: Icon(Icons.lock),
                   border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lock),
                 ),
               ),
               const SizedBox(height: 24),
@@ -64,39 +181,45 @@ class _LoginPageState extends State<LoginPage> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _signInWithEmail,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
                   child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text('Sign In'),
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Sign In', style: TextStyle(fontSize: 16)),
                 ),
               ),
               const SizedBox(height: 12),
               Row(
-                children: const [
-                  Expanded(child: Divider()),
-                  Padding(
+                children: [
+                  const Expanded(child: Divider()),
+                  const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8.0),
                     child: Text('OR'),
                   ),
-                  Expanded(child: Divider()),
+                  const Expanded(child: Divider()),
                 ],
               ),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  icon: Icon(
-                    Icons.login,
-                    color: Colors.red,
-                  ), // Placeholder for Google logo
+                  onPressed: _isLoading ? null : _signInWithGoogle,
+                  icon: Image.asset('assets/glogo.png', height: 12, width: 12),
                   label: const Text('Sign in with Google'),
-                  onPressed: () {
-                    // TODO: Implement Google Sign-In logic here
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Google Sign-In not implemented'),
-                      ),
-                    );
-                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -107,11 +230,11 @@ class _LoginPageState extends State<LoginPage> {
                   TextButton(
                     child: const Text('Register'),
                     onPressed: () {
-                      // Use direct navigation instead of named routes
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (context) => const RegisterPage()),
+                          builder: (context) => const RegisterPage(),
+                        ),
                       );
                     },
                   ),
@@ -122,5 +245,12 @@ class _LoginPageState extends State<LoginPage> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 }
