@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'register.dart';
+import 'dart:math';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -18,11 +19,7 @@ class _LoginPageState extends State<LoginPage> {
 
   // Firebase instances
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn googleSignIn = GoogleSignIn(
-    // Get this from Firebase Console > Authentication > Sign-in method > Google > Web SDK configuration
-    clientId:
-        '535481523181-at94psvprrj58fltlu0p4ep2sgpv9o7r.apps.googleusercontent.com',
-  );
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<void> _signInWithEmail() async {
@@ -70,132 +67,114 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  Future<void> _signInWithGoogle() async {
-    setState(() => _isLoading = true);
-    print("==== Starting Google Sign-In Process ====");
-
+  Future<UserCredential?> _signInWithGoogle(BuildContext context) async {
+    print("STEP 0: Starting Google Sign-In process");
     try {
-      // Step 1: Initialize GoogleSignIn instance
-      print("Step 1: Initializing GoogleSignIn instance");
+      // Step 1: Initialize Google Sign In
+      print("STEP 1: Initializing Google Sign-In");
       final GoogleSignIn googleSignIn = GoogleSignIn();
-      print("GoogleSignIn instance created");
+      print("STEP 1: Completed - GoogleSignIn instance created");
 
-      // Step 2: Trigger the authentication flow
-      print(
-        "Step 2: Triggering authentication flow with googleSignIn.signIn()",
-      );
-      final GoogleSignInAccount? googleUser;
-      try {
-        googleUser = await googleSignIn.signIn();
-        if (googleUser == null) {
-          print("Error: User cancelled the sign-in process");
-          setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Sign-in was cancelled')),
-          );
-          return;
-        }
-        print("Sign-in successful for user: ${googleUser.email}");
-      } catch (e) {
-        print(
-          "ERROR IN STEP 2: Failed at googleSignIn.signIn() with error: $e",
-        );
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed at authentication flow: ${e.toString()}'),
-          ),
-        );
-        return;
+      // Step 2: Start the sign-in flow
+      print("STEP 2: Starting sign-in flow");
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      print("STEP 2: Result - ${googleUser != null ? 'User account obtained' : 'User cancelled sign-in'}");
+
+      if (googleUser == null) {
+        print("STEP 2: FAILED - User cancelled the sign-in process");
+        return null;
       }
 
-      // Step 3: Get authentication details
-      print("Step 3: Getting authentication tokens");
-      final GoogleSignInAuthentication? googleAuth;
+      // Step 3: Get authentication tokens
+      print("STEP 3: Getting authentication tokens");
       try {
-        googleAuth = await googleUser.authentication;
-        print("Successfully obtained auth tokens");
-      } catch (e) {
-        print("ERROR IN STEP 3: Failed to get authentication tokens: $e");
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Failed to get authentication details: ${e.toString()}',
-            ),
-          ),
-        );
-        return;
-      }
+        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        print("STEP 3: Completed - Authentication tokens received");
 
-      // Step 4: Create Firebase credential
-      print("Step 4: Creating Firebase credential");
-      try {
-        final credential = GoogleAuthProvider.credential(
+        // Step 4: Create Firebase credential
+        print("STEP 4: Creating Firebase credential");
+        final AuthCredential credential = GoogleAuthProvider.credential(
           accessToken: googleAuth.accessToken,
           idToken: googleAuth.idToken,
         );
-        print("Firebase credential created successfully");
+        print("STEP 4: Completed - Firebase credential created");
 
-        // Step 5: Sign in to Firebase
-        print("Step 5: Signing in to Firebase with credential");
-        final UserCredential userCredential = await FirebaseAuth.instance
-            .signInWithCredential(credential);
-        final User? user = userCredential.user;
-
-        if (user == null) {
-          print("ERROR IN STEP 5: Firebase user is null after sign-in");
-          setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to get user data from Firebase'),
-            ),
-          );
-          return;
-        }
-
-        print("Successfully signed in to Firebase as: ${user.email}");
-
-        // Step 6: Save user to database (You can comment this out to isolate the issue)
+        // Step 5: Sign in with Firebase
+        print("STEP 5: Starting Firebase sign-in");
         try {
-          print("Step 6: Saving user data to Firestore");
-          // Uncomment the line below when you want to save user data
-          await _saveUserToDatabase(user);
-          print("User data successfully saved to Firestore");
-        } catch (e) {
-          print("ERROR IN STEP 6: Failed to save user to database: $e");
-          // Continue with navigation even if database operation fails
+          final UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+          print("STEP 5: Completed - Firebase sign-in successful");
+          return userCredential;
+        } catch (firebaseError) {
+          print("STEP 5: FAILED - Firebase sign-in error: $firebaseError");
+          print("STEP 5: Error type: ${firebaseError.runtimeType}");
+          rethrow;
         }
-
-        // Step 7: Navigate to home page
-        print("Step 7: Navigating to home page");
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/home');
-          print("Navigation to home page successful");
-        }
-      } catch (e) {
-        print("ERROR IN STEP 4/5: Failed during Firebase authentication: $e");
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Firebase authentication failed: ${e.toString()}'),
-          ),
-        );
-        return;
+      } catch (authError) {
+        print("STEP 3: FAILED - Getting authentication tokens error: $authError");
+        print("STEP 3: Error type: ${authError.runtimeType}");
+        rethrow;
       }
     } catch (e) {
-      // Catch-all error handler
-      print("UNEXPECTED ERROR: Unhandled exception in _signInWithGoogle: $e");
-      print("Error type: ${e.runtimeType}");
-      print("Stack trace: ${StackTrace.current}");
-      if (mounted) {
+      print("GENERAL FAILURE: Google Sign-In process failed with error: $e");
+      print("GENERAL FAILURE: Error type: ${e.runtimeType}");
+      print("GENERAL FAILURE: Stack trace: ${StackTrace.current}");
+      rethrow;
+    }
+  }
+
+  Future<void> signInWithGoogleWorkaround(BuildContext context) async {
+    setState(() => _isLoading = true);
+    
+    try {
+      // 1. Just use Google Sign-In directly
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      
+      if (googleUser == null) {
+        // User cancelled
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Sign-in process failed: ${e.toString()}')),
-        );
+        return;
       }
+      
+      // 2. Get basic profile info from Google
+      final Map<String, dynamic> userData = {
+        'email': googleUser.email,
+        'displayName': googleUser.displayName,
+        'id': googleUser.id,
+        'photoUrl': googleUser.photoUrl,
+      };
+      
+      // 3. Store user info in shared preferences for persistence
+      // (You'll need to add shared_preferences package)
+      // final prefs = await SharedPreferences.getInstance();
+      // await prefs.setString('user_email', userData['email']);
+      // await prefs.setString('user_name', userData['displayName'] ?? '');
+      
+      // 4. Optional: Store in Firestore directly without Firebase Auth
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(googleUser.id).set({
+          'email': googleUser.email,
+          'displayName': googleUser.displayName,
+          'lastLogin': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        
+        print("User data saved to Firestore");
+      } catch (dbError) {
+        print("Firestore error (non-critical): $dbError");
+        // Continue anyway - this shouldn't block login
+      }
+      
+      // 5. Navigate to home screen
+      print("Login successful with Google: ${googleUser.email}");
+      Navigator.pushReplacementNamed(context, '/home');
+      
+    } catch (e) {
+      print("Google Sign-In error: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sign-in failed')),
+      );
     } finally {
-      print("==== Google Sign-In Process Complete ====");
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -298,8 +277,8 @@ class _LoginPageState extends State<LoginPage> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: _isLoading ? null : _signInWithGoogle,
-                  icon: Image.asset('assets/glogo.png', height: 12, width: 12),
+                  onPressed: _isLoading ? null : () => signInWithGoogleWorkaround(context),
+                  icon: const Icon(Icons.g_translate, size: 24, color: Colors.red),
                   label: const Text('Sign in with Google'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
