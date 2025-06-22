@@ -18,7 +18,11 @@ class _LoginPageState extends State<LoginPage> {
 
   // Firebase instances
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
+  final GoogleSignIn googleSignIn = GoogleSignIn(
+    // Get this from Firebase Console > Authentication > Sign-in method > Google > Web SDK configuration
+    clientId:
+        '535481523181-at94psvprrj58fltlu0p4ep2sgpv9o7r.apps.googleusercontent.com',
+  );
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<void> _signInWithEmail() async {
@@ -68,47 +72,130 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
+    print("==== Starting Google Sign-In Process ====");
 
     try {
-      // Trigger Google sign-in flow
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) {
-        // User cancelled the sign-in flow
+      // Step 1: Initialize GoogleSignIn instance
+      print("Step 1: Initializing GoogleSignIn instance");
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      print("GoogleSignIn instance created");
+
+      // Step 2: Trigger the authentication flow
+      print(
+        "Step 2: Triggering authentication flow with googleSignIn.signIn()",
+      );
+      final GoogleSignInAccount? googleUser;
+      try {
+        googleUser = await googleSignIn.signIn();
+        if (googleUser == null) {
+          print("Error: User cancelled the sign-in process");
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Sign-in was cancelled')),
+          );
+          return;
+        }
+        print("Sign-in successful for user: ${googleUser.email}");
+      } catch (e) {
+        print(
+          "ERROR IN STEP 2: Failed at googleSignIn.signIn() with error: $e",
+        );
         setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed at authentication flow: ${e.toString()}'),
+          ),
+        );
         return;
       }
 
-      // Obtain auth details from Google Sign-In
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
+      // Step 3: Get authentication details
+      print("Step 3: Getting authentication tokens");
+      final GoogleSignInAuthentication? googleAuth;
+      try {
+        googleAuth = await googleUser.authentication;
+        print("Successfully obtained auth tokens");
+      } catch (e) {
+        print("ERROR IN STEP 3: Failed to get authentication tokens: $e");
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to get authentication details: ${e.toString()}',
+            ),
+          ),
+        );
+        return;
+      }
 
-      // Create credentials for Firebase
-      final OAuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
-      );
+      // Step 4: Create Firebase credential
+      print("Step 4: Creating Firebase credential");
+      try {
+        final credential = GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        );
+        print("Firebase credential created successfully");
 
-      // Sign in to Firebase with Google credentials
-      final UserCredential userCredential = await _auth.signInWithCredential(
-        credential,
-      );
-      final User? user = userCredential.user;
+        // Step 5: Sign in to Firebase
+        print("Step 5: Signing in to Firebase with credential");
+        final UserCredential userCredential = await FirebaseAuth.instance
+            .signInWithCredential(credential);
+        final User? user = userCredential.user;
 
-      if (user != null) {
-        // Add/update user in Firestore database
-        await _saveUserToDatabase(user);
+        if (user == null) {
+          print("ERROR IN STEP 5: Firebase user is null after sign-in");
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to get user data from Firebase'),
+            ),
+          );
+          return;
+        }
 
+        print("Successfully signed in to Firebase as: ${user.email}");
+
+        // Step 6: Save user to database (You can comment this out to isolate the issue)
+        try {
+          print("Step 6: Saving user data to Firestore");
+          // Uncomment the line below when you want to save user data
+          await _saveUserToDatabase(user);
+          print("User data successfully saved to Firestore");
+        } catch (e) {
+          print("ERROR IN STEP 6: Failed to save user to database: $e");
+          // Continue with navigation even if database operation fails
+        }
+
+        // Step 7: Navigate to home page
+        print("Step 7: Navigating to home page");
         if (mounted) {
           Navigator.pushReplacementNamed(context, '/home');
+          print("Navigation to home page successful");
         }
+      } catch (e) {
+        print("ERROR IN STEP 4/5: Failed during Firebase authentication: $e");
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Firebase authentication failed: ${e.toString()}'),
+          ),
+        );
+        return;
       }
     } catch (e) {
+      // Catch-all error handler
+      print("UNEXPECTED ERROR: Unhandled exception in _signInWithGoogle: $e");
+      print("Error type: ${e.runtimeType}");
+      print("Stack trace: ${StackTrace.current}");
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Google Sign-In failed: ${e.toString()}')),
+          SnackBar(content: Text('Sign-in process failed: ${e.toString()}')),
         );
       }
     } finally {
+      print("==== Google Sign-In Process Complete ====");
       if (mounted) setState(() => _isLoading = false);
     }
   }
