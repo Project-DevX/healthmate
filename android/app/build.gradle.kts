@@ -11,7 +11,7 @@ plugins {
 android {
     namespace = "com.devx.healthmate"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.12077973"  // Use this consistent version
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
