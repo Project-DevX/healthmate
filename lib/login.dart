@@ -58,9 +58,27 @@ class _LoginPageState extends State<LoginPage> {
       if (userCredential.user != null) {
         await _updateLastLoginTime(userCredential.user!.uid);
         
-        // Navigate to home page after successful sign-in
+        // Check user type and navigate accordingly
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .get();
+        
         if (mounted) {
-          Navigator.pushReplacementNamed(context, '/home');
+          if (userDoc.exists) {
+            final userData = userDoc.data();
+            final userType = userData?['userType'] as String?;
+            
+            if (userType == 'patient') {
+              Navigator.pushReplacementNamed(context, '/patientDashboard');
+            } else {
+              // Default route for other user types
+              Navigator.pushReplacementNamed(context, '/home');
+            }
+          } else {
+            // If user document doesn't exist, go to default home
+            Navigator.pushReplacementNamed(context, '/home');
+          }
         }
       }
     } on FirebaseAuthException catch (e) {
