@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -9,15 +12,142 @@ class PatientDashboard extends StatefulWidget {
 
 class _PatientDashboardState extends State<PatientDashboard> {
   int _currentIndex = 0;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  Map<String, dynamic>? userData;
+  bool _isLoading = true;
+  String? _userId;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUserData();
+  }
+
+  Future<void> _fetchUserData() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Get current user
+      final User? user = _auth.currentUser;
+      
+      if (user != null) {
+        _userId = user.uid;
+        
+        // Try to get user document from Firestore
+        final DocumentSnapshot userDoc = await _firestore.collection('users').doc(_userId).get();
+        
+        if (userDoc.exists) {
+          setState(() {
+            userData = userDoc.data() as Map<String, dynamic>?;
+            _isLoading = false;
+          });
+        } else {
+          // If document doesn't exist in Firestore but we have Firebase Auth user
+          setState(() {
+            userData = {
+              'email': user.email,
+              'displayName': user.displayName,
+              'photoURL': user.photoURL,
+            };
+            _isLoading = false;
+          });
+          
+          // Optionally create a new document for this user
+          await _firestore.collection('users').doc(_userId).set({
+            'email': user.email,
+            'displayName': user.displayName,
+            'photoURL': user.photoURL,
+            'lastLogin': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        }
+      } else {
+        // No authenticated user
+        Navigator.pushReplacementNamed(context, '/');
+      }
+    } catch (e) {
+      print('Error fetching user data: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _getDisplayName() {
+    if (userData == null) return 'Patient';
+    
+    // First try firstName and lastName
+    final String? firstName = userData?['firstName'];
+    final String? lastName = userData?['lastName'];
+    if (firstName != null) {
+      return '$firstName${lastName != null ? ' $lastName' : ''}';
+    }
+    
+    // Then try displayName
+    final String? displayName = userData?['displayName'];
+    if (displayName != null) return displayName;
+    
+    // Fallback to email
+    final String? email = userData?['email'];
+    if (email != null) {
+      return email.split('@')[0]; // Just use the part before @ as name
+    }
+    
+    return 'Patient';
+  }
+
+  String? _getEmail() {
+    return userData?['email'];
+  }
+
+  String? _getPhotoUrl() {
+    return userData?['photoURL'] ?? userData?['photoUrl'];
+  }
+
+  String _getDateOfBirth() {
+    if (userData == null) return 'Not specified';
+    
+    final dob = userData?['dateOfBirth'];
+    if (dob is Timestamp) {
+      return DateFormat('MMMM d, yyyy').format(dob.toDate());
+    }
+    
+    return 'Not specified';
+  }
+
+  String _getPhoneNumber() {
+    return userData?['phone'] ?? 'Not specified';
+  }
+
+  String _getGender() {
+    return userData?['gender'] ?? 'Not specified';
+  }
 
   // List of pages to display
-  final List<Widget> _pages = [
-    const DashboardContent(),
-    const UserProfileContent(),
+  List<Widget> get _pages => [
+    DashboardContent(userData: userData),
+    UserProfileContent(
+      displayName: _getDisplayName(),
+      email: _getEmail(),
+      photoUrl: _getPhotoUrl(),
+      dateOfBirth: _getDateOfBirth(),
+      phoneNumber: _getPhoneNumber(),
+      gender: _getGender(),
+    ),
   ];
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('HealthMate'),
@@ -174,7 +304,36 @@ class _PatientDashboardState extends State<PatientDashboard> {
 
 // Dashboard Content Widget
 class DashboardContent extends StatelessWidget {
-  const DashboardContent({super.key});
+  final Map<String, dynamic>? userData;
+
+  const DashboardContent({super.key, required this.userData});
+
+  String _getDisplayName() {
+    if (userData == null) return 'Patient';
+    
+    // First try firstName and lastName
+    final String? firstName = userData?['firstName'];
+    final String? lastName = userData?['lastName'];
+    if (firstName != null) {
+      return '$firstName${lastName != null ? ' $lastName' : ''}';
+    }
+    
+    // Then try displayName
+    final String? displayName = userData?['displayName'];
+    if (displayName != null) return displayName;
+    
+    // Fallback to email
+    final String? email = userData?['email'];
+    if (email != null) {
+      return email.split('@')[0]; // Just use the part before @ as name
+    }
+    
+    return 'Patient';
+  }
+
+  String? _getPhotoUrl() {
+    return userData?['photoURL'] ?? userData?['photoUrl'];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -197,11 +356,11 @@ class DashboardContent extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      const CircleAvatar(
+                      CircleAvatar(
                         radius: 24,
-                        backgroundImage: NetworkImage(
-                          'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y',
-                        ),
+                        backgroundImage: _getPhotoUrl() != null
+                            ? NetworkImage(_getPhotoUrl()!)
+                            : const NetworkImage('https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'),
                       ),
                       const SizedBox(width: 16),
                       Column(
@@ -215,7 +374,7 @@ class DashboardContent extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            'Patient Name',
+                            _getDisplayName(),
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -368,7 +527,33 @@ class DashboardContent extends StatelessWidget {
 
 // User Profile Content Widget
 class UserProfileContent extends StatelessWidget {
-  const UserProfileContent({super.key});
+  final String displayName;
+  final String? email;
+  final String? photoUrl;
+  final String dateOfBirth;
+  final String phoneNumber;
+  final String gender;
+
+  const UserProfileContent({
+    super.key,
+    required this.displayName,
+    required this.email,
+    required this.photoUrl,
+    required this.dateOfBirth,
+    required this.phoneNumber,
+    required this.gender,
+  });
+
+  Future<void> _signOut(BuildContext context) async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      Navigator.pushReplacementNamed(context, '/');
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error signing out: $e')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -387,26 +572,28 @@ class UserProfileContent extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  const CircleAvatar(
+                  CircleAvatar(
                     radius: 48,
-                    backgroundImage: NetworkImage(
-                      'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y',
-                    ),
+                    backgroundImage: photoUrl != null
+                        ? NetworkImage(photoUrl!)
+                        : const NetworkImage('https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Patient Name',
-                    style: TextStyle(
+                  Text(
+                    displayName,
+                    style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  Text(
-                    'patient@example.com',
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
+                  email != null
+                      ? Text(
+                          email!,
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                          ),
+                        )
+                      : const SizedBox.shrink(),
                   const SizedBox(height: 16),
                   OutlinedButton(
                     onPressed: () {
@@ -440,11 +627,11 @@ class UserProfileContent extends StatelessWidget {
             ),
             child: Column(
               children: [
-                _buildProfileDetail(Icons.calendar_today, 'Date of Birth', 'January 1, 1990'),
+                _buildProfileDetail(Icons.calendar_today, 'Date of Birth', dateOfBirth),
                 const Divider(height: 1),
-                _buildProfileDetail(Icons.phone, 'Phone', '+1 123-456-7890'),
+                _buildProfileDetail(Icons.phone, 'Phone', phoneNumber),
                 const Divider(height: 1),
-                _buildProfileDetail(Icons.people, 'Gender', 'Male'),
+                _buildProfileDetail(Icons.people, 'Gender', gender),
               ],
             ),
           ),
@@ -497,10 +684,7 @@ class UserProfileContent extends StatelessWidget {
                   Icons.logout,
                   'Logout',
                   () {
-                    // TODO: Implement logout
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Logging out...')),
-                    );
+                    _signOut(context);
                   },
                   isDestructive: true,
                 ),
