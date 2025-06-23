@@ -1,13 +1,26 @@
 import 'package:flutter/material.dart';
+import 'patientReg.dart';
 
 class RegisterPage extends StatelessWidget {
   const RegisterPage({super.key});
 
   void _onRoleSelected(BuildContext context, String role) {
-    // TODO: Navigate to the respective registration form for the selected role
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Selected role: $role')));
+    switch (role) {
+      case 'Patient':
+        Navigator.push(
+          context, 
+          MaterialPageRoute(builder: (context) => const PatientRegistrationPage()),
+        );
+        break;
+      case 'Doctor':
+      case 'Caregiver':
+      case 'Hospital':
+        // TODO: Navigate to other registration pages when implemented
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$role registration coming soon')),
+        );
+        break;
+    }
   }
 
   @override
