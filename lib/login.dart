@@ -22,6 +22,20 @@ class _LoginPageState extends State<LoginPage> {
   final GoogleSignIn _googleSignIn = GoogleSignIn();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // Add this function to update last login time in Firestore
+  Future<void> _updateLastLoginTime(String userId) async {
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(userId).update({
+        'lastLogin': FieldValue.serverTimestamp(),
+      });
+      print('Last login time updated successfully');
+    } catch (e) {
+      print('Error updating last login time: $e');
+      // Don't throw the error - we still want the user to be logged in
+      // even if updating the timestamp fails
+    }
+  }
+
   Future<void> _signInWithEmail() async {
     if (_emailController.text.trim().isEmpty ||
         _passwordController.text.isEmpty) {
@@ -34,36 +48,49 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
 
     try {
-      // Attempt to sign in with email and password
-      final UserCredential userCredential = await _auth
-          .signInWithEmailAndPassword(
-            email: _emailController.text.trim(),
-            password: _passwordController.text,
-          );
-
-      // Successfully signed in
-      if (mounted) Navigator.pushReplacementNamed(context, '/home');
+      // Sign in with email and password
+      final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+      
+      // If sign-in is successful, update the last login time
+      if (userCredential.user != null) {
+        await _updateLastLoginTime(userCredential.user!.uid);
+        
+        // Navigate to home page after successful sign-in
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/home');
+        }
+      }
     } on FirebaseAuthException catch (e) {
-      String errorMessage = 'An error occurred during sign in';
+      String errorMessage = 'Authentication failed';
+      
       if (e.code == 'user-not-found') {
         errorMessage = 'No user found with this email';
       } else if (e.code == 'wrong-password') {
-        errorMessage = 'Wrong password';
+        errorMessage = 'Incorrect password';
+      } else if (e.code == 'invalid-email') {
+        errorMessage = 'Invalid email format';
+      } else if (e.code == 'user-disabled') {
+        errorMessage = 'This account has been disabled';
       }
-
+      
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(errorMessage)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMessage)),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sign-in error: ${e.toString()}')),
+        );
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
