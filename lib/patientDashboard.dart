@@ -217,7 +217,6 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 Colors.red,
                 () {
                   Navigator.pop(context);
-                  // TODO: Navigate to emergency page
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Emergency option selected')),
                   );
@@ -231,7 +230,6 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 Colors.blue,
                 () {
                   Navigator.pop(context);
-                  // TODO: Navigate to find doctor page
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Find Doctor option selected')),
                   );
@@ -245,9 +243,22 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 Colors.green,
                 () {
                   Navigator.pop(context);
-                  // TODO: Navigate to find caregiver page
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Find Caregiver option selected')),
+                  );
+                },
+              ),
+              const SizedBox(height: 8),
+              // Add new option for uploading medical records
+              _buildEmergencyOption(
+                context,
+                Icons.upload_file,
+                'Upload Medical Record',
+                Colors.orange,
+                () {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Upload Medical Record selected')),
                   );
                 },
               ),
@@ -408,6 +419,59 @@ class DashboardContent extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           
+          // Quick access buttons including Medical Records
+          const Text(
+            'Quick Access',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildQuickAccessButton(
+                  context,
+                  Icons.folder_shared,
+                  'Medical Records',
+                  Colors.purple,
+                  () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Medical Records button clicked')),
+                    );
+                  },
+                ),
+                SizedBox(width: 12),
+                _buildQuickAccessButton(
+                  context,
+                  Icons.medication,
+                  'Medications',
+                  Colors.orange,
+                  () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Medications button clicked')),
+                    );
+                  },
+                ),
+                SizedBox(width: 12),
+                _buildQuickAccessButton(
+                  context,
+                  Icons.calendar_month,
+                  'Appointments',
+                  Colors.blue,
+                  () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Appointments button clicked')),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          
           // Upcoming appointments
           const Text(
             'Upcoming Appointments',
@@ -521,6 +585,43 @@ class DashboardContent extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildQuickAccessButton(
+    BuildContext context,
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback onPressed,
+  ) {
+    return Material(
+      color: color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 100,
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 28),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color.withOpacity(0.8),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 12,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
