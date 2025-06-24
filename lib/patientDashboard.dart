@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import 'services/document_service.dart';
 import 'services/auth_service.dart';
-import 'screens/medical_records_screen.dart';
+import 'screens/medical_records_screen_clean.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -357,9 +356,15 @@ class _PatientDashboardState extends State<PatientDashboard> {
   }
 
   Future<void> _uploadMedicalRecord() async {
-    if (_userId != null) {
-      final documentService = DocumentService();
-      await documentService.uploadDocument(context, _userId!);
+    final User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      // Navigate to Medical Records screen instead of uploading directly
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MedicalRecordsScreen(userId: user.uid),
+        ),
+      );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -503,14 +508,24 @@ class DashboardContent extends StatelessWidget {
                   'Medical Records',
                   Colors.purple,
                   () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => MedicalRecordsScreen(
-                          userId: userData?['uid'] ?? '',
+                    final User? user = FirebaseAuth.instance.currentUser;
+                    if (user != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              MedicalRecordsScreen(userId: user.uid),
                         ),
-                      ),
-                    );
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Please log in to view medical records',
+                          ),
+                        ),
+                      );
+                    }
                   },
                 ),
                 SizedBox(width: 12),
