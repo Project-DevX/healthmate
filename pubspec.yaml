@@ -35,6 +35,9 @@ dependencies:
   google_sign_in: ^6.2.1
   cloud_firestore: ^5.2.1
   intl: ^0.18.1
+  firebase_storage: ^12.4.7
+  file_picker: ^6.1.0
+  url_launcher: ^6.2.5
 
 dev_dependencies:
   flutter_test:
@@ -46,6 +49,12 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+
+dependency_overrides:
+  file_picker:
+    git:
+      url: https://github.com/miguelpruivo/flutter_file_picker.git
+      ref: master
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
