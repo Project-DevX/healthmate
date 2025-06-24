@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
+import 'services/document_service.dart';
+import 'screens/medical_records_screen.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -257,9 +259,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 Colors.orange,
                 () {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Upload Medical Record selected')),
-                  );
+                  _uploadMedicalRecord();
                 },
               ),
             ],
@@ -310,6 +310,17 @@ class _PatientDashboardState extends State<PatientDashboard> {
         ),
       ),
     );
+  }
+
+  Future<void> _uploadMedicalRecord() async {
+    if (_userId != null) {
+      final documentService = DocumentService();
+      await documentService.uploadDocument(context, _userId!);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('User ID not found. Please try logging in again.')),
+      );
+    }
   }
 }
 
@@ -438,8 +449,11 @@ class DashboardContent extends StatelessWidget {
                   'Medical Records',
                   Colors.purple,
                   () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Medical Records button clicked')),
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => MedicalRecordsScreen(userId: userData?['uid'] ?? ''),
+                      ),
                     );
                   },
                 ),
