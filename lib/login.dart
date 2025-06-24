@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'register.dart';
-import 'dart:math';
+import 'services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -16,12 +16,12 @@ class _LoginPageState extends State<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _rememberMe = false;
 
   // Firebase instances
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
   // Add this function to update last login time in Firestore
   Future<void> _updateLastLoginTime(String userId) async {
     try {
@@ -33,6 +33,17 @@ class _LoginPageState extends State<LoginPage> {
       print('Error updating last login time: $e');
       // Don't throw the error - we still want the user to be logged in
       // even if updating the timestamp fails
+    }
+  }
+
+  // Save login state to SharedPreferences
+  Future<void> _saveLoginState(
+    String userId,
+    String email,
+    String userType,
+  ) async {
+    if (_rememberMe) {
+      await AuthService.saveLoginState(userId, email, userType);
     }
   }
 
@@ -49,26 +60,34 @@ class _LoginPageState extends State<LoginPage> {
 
     try {
       // Sign in with email and password
-      final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      
+      final userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
+
       // If sign-in is successful, update the last login time
       if (userCredential.user != null) {
         await _updateLastLoginTime(userCredential.user!.uid);
-        
+
         // Check user type and navigate accordingly
         final userDoc = await FirebaseFirestore.instance
             .collection('users')
             .doc(userCredential.user!.uid)
             .get();
-        
+
         if (mounted) {
           if (userDoc.exists) {
             final userData = userDoc.data();
-            final userType = userData?['userType'] as String?;
-            
+            final userType = userData?['userType'] as String? ?? 'patient';
+
+            // Save login state if remember me is checked
+            await _saveLoginState(
+              userCredential.user!.uid,
+              userCredential.user!.email ?? '',
+              userType,
+            );
+
             if (userType == 'patient') {
               Navigator.pushReplacementNamed(context, '/patientDashboard');
             } else {
@@ -77,13 +96,18 @@ class _LoginPageState extends State<LoginPage> {
             }
           } else {
             // If user document doesn't exist, go to default home
+            await _saveLoginState(
+              userCredential.user!.uid,
+              userCredential.user!.email ?? '',
+              'patient',
+            );
             Navigator.pushReplacementNamed(context, '/home');
           }
         }
       }
     } on FirebaseAuthException catch (e) {
       String errorMessage = 'Authentication failed';
-      
+
       if (e.code == 'user-not-found') {
         errorMessage = 'No user found with this email';
       } else if (e.code == 'wrong-password') {
@@ -93,11 +117,11 @@ class _LoginPageState extends State<LoginPage> {
       } else if (e.code == 'user-disabled') {
         errorMessage = 'This account has been disabled';
       }
-      
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMessage)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errorMessage)));
       }
     } catch (e) {
       if (mounted) {
@@ -123,7 +147,9 @@ class _LoginPageState extends State<LoginPage> {
       // Step 2: Start the sign-in flow
       print("STEP 2: Starting sign-in flow");
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      print("STEP 2: Result - ${googleUser != null ? 'User account obtained' : 'User cancelled sign-in'}");
+      print(
+        "STEP 2: Result - ${googleUser != null ? 'User account obtained' : 'User cancelled sign-in'}",
+      );
 
       if (googleUser == null) {
         print("STEP 2: FAILED - User cancelled the sign-in process");
@@ -133,7 +159,8 @@ class _LoginPageState extends State<LoginPage> {
       // Step 3: Get authentication tokens
       print("STEP 3: Getting authentication tokens");
       try {
-        final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+        final GoogleSignInAuthentication googleAuth =
+            await googleUser.authentication;
         print("STEP 3: Completed - Authentication tokens received");
 
         // Step 4: Create Firebase credential
@@ -147,7 +174,8 @@ class _LoginPageState extends State<LoginPage> {
         // Step 5: Sign in with Firebase
         print("STEP 5: Starting Firebase sign-in");
         try {
-          final UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+          final UserCredential userCredential = await FirebaseAuth.instance
+              .signInWithCredential(credential);
           print("STEP 5: Completed - Firebase sign-in successful");
           return userCredential;
         } catch (firebaseError) {
@@ -156,7 +184,9 @@ class _LoginPageState extends State<LoginPage> {
           rethrow;
         }
       } catch (authError) {
-        print("STEP 3: FAILED - Getting authentication tokens error: $authError");
+        print(
+          "STEP 3: FAILED - Getting authentication tokens error: $authError",
+        );
         print("STEP 3: Error type: ${authError.runtimeType}");
         rethrow;
       }
@@ -170,18 +200,18 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> signInWithGoogleWorkaround(BuildContext context) async {
     setState(() => _isLoading = true);
-    
+
     try {
       // 1. Just use Google Sign-In directly
       final GoogleSignIn googleSignIn = GoogleSignIn();
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      
+
       if (googleUser == null) {
         // User cancelled
         setState(() => _isLoading = false);
         return;
       }
-      
+
       // 2. Get basic profile info from Google
       final Map<String, dynamic> userData = {
         'email': googleUser.email,
@@ -189,36 +219,38 @@ class _LoginPageState extends State<LoginPage> {
         'id': googleUser.id,
         'photoUrl': googleUser.photoUrl,
       };
-      
+
       // 3. Store user info in shared preferences for persistence
       // (You'll need to add shared_preferences package)
       // final prefs = await SharedPreferences.getInstance();
       // await prefs.setString('user_email', userData['email']);
       // await prefs.setString('user_name', userData['displayName'] ?? '');
-      
+
       // 4. Optional: Store in Firestore directly without Firebase Auth
       try {
-        await FirebaseFirestore.instance.collection('users').doc(googleUser.id).set({
-          'email': googleUser.email,
-          'displayName': googleUser.displayName,
-          'lastLogin': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-        
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(googleUser.id)
+            .set({
+              'email': googleUser.email,
+              'displayName': googleUser.displayName,
+              'lastLogin': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+
         print("User data saved to Firestore");
       } catch (dbError) {
         print("Firestore error (non-critical): $dbError");
         // Continue anyway - this shouldn't block login
       }
-      
+
       // 5. Navigate to home screen
       print("Login successful with Google: ${googleUser.email}");
       Navigator.pushReplacementNamed(context, '/home');
-      
     } catch (e) {
       print("Google Sign-In error: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Sign-in failed')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Sign-in failed')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -287,7 +319,21 @@ class _LoginPageState extends State<LoginPage> {
                   prefixIcon: Icon(Icons.lock),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Checkbox(
+                    value: _rememberMe,
+                    onChanged: (value) {
+                      setState(() {
+                        _rememberMe = value ?? false;
+                      });
+                    },
+                  ),
+                  const Text('Remember me'),
+                ],
+              ),
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -322,8 +368,14 @@ class _LoginPageState extends State<LoginPage> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: _isLoading ? null : () => signInWithGoogleWorkaround(context),
-                  icon: const Icon(Icons.g_translate, size: 24, color: Colors.red),
+                  onPressed: _isLoading
+                      ? null
+                      : () => signInWithGoogleWorkaround(context),
+                  icon: const Icon(
+                    Icons.g_translate,
+                    size: 24,
+                    color: Colors.red,
+                  ),
                   label: const Text('Sign in with Google'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
