@@ -172,6 +172,37 @@ class DocumentService {
       return false;
     }
   }
+
+  /// Get document text content for analysis
+  Future<Map<String, String>> getDocumentContents(String userId) async {
+    try {
+      final documents = await getUserDocuments(userId);
+      Map<String, String> contents = {};
+      
+      for (var doc in documents) {
+        // Store document metadata in a structured format
+        contents[doc.fileName] = 'Type: ${doc.fileType}, Size: ${_formatFileSize(doc.fileSize)}, Date: ${_formatDate(doc.uploadDate)}';
+        
+        // For real implementation, you would extract text content here
+        // This would require additional processing based on file type
+      }
+      
+      return contents;
+    } catch (e) {
+      print('Error getting document contents: $e');
+      return {};
+    }
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1048576) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / 1048576).toStringAsFixed(1)} MB';
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year}';
+  }
 }
 
 // Model class for documents
