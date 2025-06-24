@@ -3,12 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'services/auth_service.dart';
-
+import 'services/document_service.dart';
 import 'services/gemini_service.dart';
 import 'screens/medical_records_screen.dart';
 import 'screens/medical_summary_screen.dart';
-
-import 'screens/medical_records_screen_clean.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -77,40 +75,50 @@ class _PatientDashboardState extends State<PatientDashboard> {
   }
 
   void _showEmergencyOptions() {
-    showModalBottomSheet(
+    showDialog(
       context: context,
       builder: (BuildContext context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
+        return AlertDialog(
+          title: const Text('Emergency'),
+          content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Emergency Options',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              ListTile(
-                leading: const Icon(Icons.local_hospital, color: Colors.red),
-                title: const Text('Call Emergency Services'),
-                subtitle: const Text('911'),
-                onTap: () {
+              _buildEmergencyOption(
+                context,
+                Icons.local_hospital,
+                'Call Emergency Services',
+                Colors.red,
+                () {
                   Navigator.pop(context);
                   // Add emergency call functionality
                 },
               ),
-              ListTile(
-                leading: const Icon(Icons.location_on, color: Colors.blue),
-                title: const Text('Find Nearest Hospital'),
-                onTap: () {
+              _buildEmergencyOption(
+                context,
+                Icons.phone,
+                'Call Emergency Contact',
+                Colors.orange,
+                () {
                   Navigator.pop(context);
-                  // Add hospital finder functionality
+                  // Add emergency contact functionality
                 },
               ),
-              ListTile(
-                leading: const Icon(Icons.contact_phone, color: Colors.green),
-                title: const Text('Emergency Contacts'),
-                onTap: () {
+              _buildEmergencyOption(
+                context,
+                Icons.location_on,
+                'Share Location',
+                Colors.blue,
+                () {
+                  Navigator.pop(context);
+                  // Add location sharing functionality
+                },
+              ),
+              _buildEmergencyOption(
+                context,
+                Icons.contacts,
+                'Emergency Contacts',
+                Colors.green,
+                () {
                   Navigator.pop(context);
                   // Add emergency contacts functionality
                 },
@@ -121,20 +129,6 @@ class _PatientDashboardState extends State<PatientDashboard> {
       },
     );
   }
-
-
-  Future<void> _logout() async {
-    try {
-      await _auth.signOut(); // Use Firebase Auth directly instead of AuthService
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, '/login');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error logging out: $e')),
-        );
-      }
 
   Widget _buildEmergencyOption(
     BuildContext context,
@@ -172,10 +166,24 @@ class _PatientDashboardState extends State<PatientDashboard> {
     );
   }
 
+  Future<void> _logout() async {
+    try {
+      await _auth.signOut();
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/login');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error logging out: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _uploadMedicalRecord() async {
     final User? user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      // Navigate to Medical Records screen instead of uploading directly
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -188,7 +196,6 @@ class _PatientDashboardState extends State<PatientDashboard> {
           content: Text('User ID not found. Please try logging in again.'),
         ),
       );
-
     }
   }
 
@@ -357,52 +364,6 @@ class DashboardContent extends StatelessWidget {
                   '72 bpm',
                   Icons.favorite,
                   Colors.red,
-
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildQuickAccessButton(
-                  context,
-                  Icons.folder_shared,
-                  'Medical Records',
-                  Colors.purple,
-                  () {
-                    final User? user = FirebaseAuth.instance.currentUser;
-                    if (user != null) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) =>
-                              MedicalRecordsScreen(userId: user.uid),
-                        ),
-                      );
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Please log in to view medical records',
-                          ),
-                        ),
-                      );
-                    }
-                  },
-                ),
-                SizedBox(width: 12),
-                _buildQuickAccessButton(
-                  context,
-                  Icons.medication,
-                  'Medications',
-                  Colors.orange,
-                  () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Medications button clicked'),
-                      ),
-                    );
-                  },
-
                 ),
               ),
               const SizedBox(width: 12),
