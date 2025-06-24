@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'services/document_service.dart';
+import 'services/auth_service.dart';
 import 'screens/medical_records_screen.dart';
 
 class PatientDashboard extends StatefulWidget {
@@ -34,13 +35,16 @@ class _PatientDashboardState extends State<PatientDashboard> {
     try {
       // Get current user
       final User? user = _auth.currentUser;
-      
+
       if (user != null) {
         _userId = user.uid;
-        
+
         // Try to get user document from Firestore
-        final DocumentSnapshot userDoc = await _firestore.collection('users').doc(_userId).get();
-        
+        final DocumentSnapshot userDoc = await _firestore
+            .collection('users')
+            .doc(_userId)
+            .get();
+
         if (userDoc.exists) {
           setState(() {
             userData = userDoc.data() as Map<String, dynamic>?;
@@ -56,7 +60,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
             };
             _isLoading = false;
           });
-          
+
           // Optionally create a new document for this user
           await _firestore.collection('users').doc(_userId).set({
             'email': user.email,
@@ -79,24 +83,24 @@ class _PatientDashboardState extends State<PatientDashboard> {
 
   String _getDisplayName() {
     if (userData == null) return 'Patient';
-    
+
     // First try firstName and lastName
     final String? firstName = userData?['firstName'];
     final String? lastName = userData?['lastName'];
     if (firstName != null) {
       return '$firstName${lastName != null ? ' $lastName' : ''}';
     }
-    
+
     // Then try displayName
     final String? displayName = userData?['displayName'];
     if (displayName != null) return displayName;
-    
+
     // Fallback to email
     final String? email = userData?['email'];
     if (email != null) {
       return email.split('@')[0]; // Just use the part before @ as name
     }
-    
+
     return 'Patient';
   }
 
@@ -110,12 +114,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
 
   String _getDateOfBirth() {
     if (userData == null) return 'Not specified';
-    
+
     final dob = userData?['dateOfBirth'];
     if (dob is Timestamp) {
       return DateFormat('MMMM d, yyyy').format(dob.toDate());
     }
-    
+
     return 'Not specified';
   }
 
@@ -140,16 +144,60 @@ class _PatientDashboardState extends State<PatientDashboard> {
     ),
   ];
 
+  Future<void> _logout() async {
+    try {
+      // Show confirmation dialog
+      final shouldLogout = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Logout'),
+          content: const Text('Are you sure you want to logout?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Logout'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldLogout == true) {
+        // Clear saved login state
+        await AuthService.clearLoginState();
+
+        // Sign out from Firebase
+        await _auth.signOut();
+
+        // Navigate to login screen
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            '/login',
+            (route) => false,
+          );
+        }
+      }
+    } catch (e) {
+      print('Error during logout: $e');
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error during logout: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      return Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('HealthMate'),
@@ -160,6 +208,11 @@ class _PatientDashboardState extends State<PatientDashboard> {
             onPressed: () {
               // TODO: Implement notifications
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _logout,
+            tooltip: 'Logout',
           ),
         ],
       ),
@@ -176,10 +229,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
             icon: Icon(Icons.dashboard),
             label: 'Dashboard',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profile',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -206,10 +256,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
             children: [
               const Text(
                 'Emergency Options',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
               _buildEmergencyOption(
@@ -233,7 +280,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 () {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Find Doctor option selected')),
+                    const SnackBar(
+                      content: Text('Find Doctor option selected'),
+                    ),
                   );
                 },
               ),
@@ -246,7 +295,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 () {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Find Caregiver option selected')),
+                    const SnackBar(
+                      content: Text('Find Caregiver option selected'),
+                    ),
                   );
                 },
               ),
@@ -286,19 +337,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
             CircleAvatar(
               backgroundColor: color.withOpacity(0.2),
               radius: 24,
-              child: Icon(
-                icon,
-                color: color,
-                size: 24,
-              ),
+              child: Icon(icon, color: color, size: 24),
             ),
             const SizedBox(width: 16),
             Text(
               label,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
             const Spacer(),
             Icon(
@@ -318,7 +362,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
       await documentService.uploadDocument(context, _userId!);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User ID not found. Please try logging in again.')),
+        const SnackBar(
+          content: Text('User ID not found. Please try logging in again.'),
+        ),
       );
     }
   }
@@ -332,24 +378,24 @@ class DashboardContent extends StatelessWidget {
 
   String _getDisplayName() {
     if (userData == null) return 'Patient';
-    
+
     // First try firstName and lastName
     final String? firstName = userData?['firstName'];
     final String? lastName = userData?['lastName'];
     if (firstName != null) {
       return '$firstName${lastName != null ? ' $lastName' : ''}';
     }
-    
+
     // Then try displayName
     final String? displayName = userData?['displayName'];
     if (displayName != null) return displayName;
-    
+
     // Fallback to email
     final String? email = userData?['email'];
     if (email != null) {
       return email.split('@')[0]; // Just use the part before @ as name
     }
-    
+
     return 'Patient';
   }
 
@@ -382,7 +428,9 @@ class DashboardContent extends StatelessWidget {
                         radius: 24,
                         backgroundImage: _getPhotoUrl() != null
                             ? NetworkImage(_getPhotoUrl()!)
-                            : const NetworkImage('https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'),
+                            : const NetworkImage(
+                                'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y',
+                              ),
                       ),
                       const SizedBox(width: 16),
                       Column(
@@ -390,10 +438,7 @@ class DashboardContent extends StatelessWidget {
                         children: [
                           const Text(
                             'Welcome back,',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey,
-                            ),
+                            style: TextStyle(fontSize: 14, color: Colors.grey),
                           ),
                           Text(
                             _getDisplayName(),
@@ -410,18 +455,30 @@ class DashboardContent extends StatelessWidget {
                   const SizedBox(height: 16),
                   const Text(
                     'Your Health Summary',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildHealthMetric(context, '120/80', 'Blood Pressure', Icons.favorite),
-                      _buildHealthMetric(context, '72 bpm', 'Heart Rate', Icons.monitor_heart),
-                      _buildHealthMetric(context, '98.6°F', 'Temperature', Icons.thermostat),
+                      _buildHealthMetric(
+                        context,
+                        '120/80',
+                        'Blood Pressure',
+                        Icons.favorite,
+                      ),
+                      _buildHealthMetric(
+                        context,
+                        '72 bpm',
+                        'Heart Rate',
+                        Icons.monitor_heart,
+                      ),
+                      _buildHealthMetric(
+                        context,
+                        '98.6°F',
+                        'Temperature',
+                        Icons.thermostat,
+                      ),
                     ],
                   ),
                 ],
@@ -429,14 +486,11 @@ class DashboardContent extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          
+
           // Quick access buttons including Medical Records
           const Text(
             'Quick Access',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           SingleChildScrollView(
@@ -452,7 +506,9 @@ class DashboardContent extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => MedicalRecordsScreen(userId: userData?['uid'] ?? ''),
+                        builder: (context) => MedicalRecordsScreen(
+                          userId: userData?['uid'] ?? '',
+                        ),
                       ),
                     );
                   },
@@ -465,7 +521,9 @@ class DashboardContent extends StatelessWidget {
                   Colors.orange,
                   () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Medications button clicked')),
+                      const SnackBar(
+                        content: Text('Medications button clicked'),
+                      ),
                     );
                   },
                 ),
@@ -477,7 +535,9 @@ class DashboardContent extends StatelessWidget {
                   Colors.blue,
                   () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Appointments button clicked')),
+                      const SnackBar(
+                        content: Text('Appointments button clicked'),
+                      ),
                     );
                   },
                 ),
@@ -485,14 +545,11 @@ class DashboardContent extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          
+
           // Upcoming appointments
           const Text(
             'Upcoming Appointments',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Card(
@@ -510,7 +567,9 @@ class DashboardContent extends StatelessWidget {
                     child: Icon(Icons.medical_services),
                   ),
                   title: Text(
-                    index == 0 ? 'Dr. Smith - Cardiology' : 'Dr. Johnson - General',
+                    index == 0
+                        ? 'Dr. Smith - Cardiology'
+                        : 'Dr. Johnson - General',
                   ),
                   subtitle: Text(
                     index == 0 ? 'Tomorrow, 10:00 AM' : 'Jun 30, 2:30 PM',
@@ -524,14 +583,11 @@ class DashboardContent extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          
+
           // Medications
           const Text(
             'Your Medications',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Card(
@@ -547,14 +603,12 @@ class DashboardContent extends StatelessWidget {
                 List<String> medications = [
                   'Aspirin - 1 tablet daily',
                   'Vitamin D - 1 capsule daily',
-                  'Metformin - 2 tablets daily'
+                  'Metformin - 2 tablets daily',
                 ];
                 List<String> times = ['8:00 AM', '8:00 AM', '8:00 AM, 8:00 PM'];
-                
+
                 return ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.medication),
-                  ),
+                  leading: const CircleAvatar(child: Icon(Icons.medication)),
                   title: Text(medications[index]),
                   subtitle: Text(times[index]),
                   trailing: Checkbox(
@@ -572,32 +626,25 @@ class DashboardContent extends StatelessWidget {
     );
   }
 
-  Widget _buildHealthMetric(BuildContext context, String value, String label, IconData icon) {
+  Widget _buildHealthMetric(
+    BuildContext context,
+    String value,
+    String label,
+    IconData icon,
+  ) {
     return Column(
       children: [
         CircleAvatar(
           backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
           radius: 24,
-          child: Icon(
-            icon,
-            color: Theme.of(context).primaryColor,
-          ),
+          child: Icon(icon, color: Theme.of(context).primaryColor),
         ),
         const SizedBox(height: 8),
         Text(
           value,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
         ),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: Colors.grey,
-          ),
-        ),
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
       ],
     );
   }
@@ -664,9 +711,9 @@ class UserProfileContent extends StatelessWidget {
       await FirebaseAuth.instance.signOut();
       Navigator.pushReplacementNamed(context, '/');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error signing out: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error signing out: $e')));
     }
   }
 
@@ -691,7 +738,9 @@ class UserProfileContent extends StatelessWidget {
                     radius: 48,
                     backgroundImage: photoUrl != null
                         ? NetworkImage(photoUrl!)
-                        : const NetworkImage('https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'),
+                        : const NetworkImage(
+                            'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y',
+                          ),
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -704,9 +753,7 @@ class UserProfileContent extends StatelessWidget {
                   email != null
                       ? Text(
                           email!,
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                          ),
+                          style: TextStyle(color: Colors.grey.shade600),
                         )
                       : const SizedBox.shrink(),
                   const SizedBox(height: 16),
@@ -726,14 +773,11 @@ class UserProfileContent extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          
+
           // Profile details
           const Text(
             'Personal Information',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Card(
@@ -742,7 +786,11 @@ class UserProfileContent extends StatelessWidget {
             ),
             child: Column(
               children: [
-                _buildProfileDetail(Icons.calendar_today, 'Date of Birth', dateOfBirth),
+                _buildProfileDetail(
+                  Icons.calendar_today,
+                  'Date of Birth',
+                  dateOfBirth,
+                ),
                 const Divider(height: 1),
                 _buildProfileDetail(Icons.phone, 'Phone', phoneNumber),
                 const Divider(height: 1),
@@ -751,14 +799,11 @@ class UserProfileContent extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          
+
           // Account settings
           const Text(
             'Account Settings',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Card(
@@ -785,24 +830,13 @@ class UserProfileContent extends StatelessWidget {
                   },
                 ),
                 const Divider(height: 1),
-                _buildSettingsOption(
-                  context,
-                  Icons.help,
-                  'Help & Support',
-                  () {
-                    // TODO: Navigate to help & support
-                  },
-                ),
+                _buildSettingsOption(context, Icons.help, 'Help & Support', () {
+                  // TODO: Navigate to help & support
+                }),
                 const Divider(height: 1),
-                _buildSettingsOption(
-                  context,
-                  Icons.logout,
-                  'Logout',
-                  () {
-                    _signOut(context);
-                  },
-                  isDestructive: true,
-                ),
+                _buildSettingsOption(context, Icons.logout, 'Logout', () {
+                  _signOut(context);
+                }, isDestructive: true),
               ],
             ),
           ),
@@ -817,27 +851,16 @@ class UserProfileContent extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       child: Row(
         children: [
-          Icon(
-            icon,
-            color: Colors.grey.shade600,
-          ),
+          Icon(icon, color: Colors.grey.shade600),
           const SizedBox(width: 16),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 label,
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontSize: 13,
-                ),
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
               ),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 16,
-                ),
-              ),
+              Text(value, style: const TextStyle(fontSize: 16)),
             ],
           ),
         ],
