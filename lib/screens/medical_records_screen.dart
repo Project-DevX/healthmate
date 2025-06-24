@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import '../services/document_service.dart';
+import '../services/gemini_service.dart';
+import '../screens/medical_summary_screen.dart';
 
 class MedicalRecordsScreen extends StatefulWidget {
   final String userId;
@@ -18,6 +20,7 @@ class MedicalRecordsScreen extends StatefulWidget {
 class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   final DocumentService _documentService = DocumentService();
   bool _isLoading = true;
+  bool _isAnalyzing = false;
   List<DocumentInfo> _documents = [];
 
   @override
@@ -102,75 +105,153 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
+  void _analyzeDocuments() async {
+    if (_documents.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No medical records found to analyze')),
+      );
+      return;
+    }
+
+    setState(() => _isAnalyzing = true);
+    
+    try {
+      final geminiService = GeminiService();
+      final summary = await geminiService.analyzeMedicalRecords(widget.userId);
+      
+      setState(() => _isAnalyzing = false);
+      
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MedicalSummaryScreen(userId: widget.userId),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isAnalyzing = false);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error analyzing documents: $e')),
+        );
+      }
+    }
+  }
+
+  void _viewMedicalSummary() async {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MedicalSummaryScreen(userId: widget.userId),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Medical Records'),
+        actions: [
+          if (_documents.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.summarize),
+              tooltip: 'View AI Summary',
+              onPressed: _viewMedicalSummary,
+            ),
+        ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _documents.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.folder_open,
-                        size: 64,
-                        color: Colors.grey.shade400,
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'No medical records found',
-                        style: TextStyle(fontSize: 18),
-                      ),
-                    ],
+      body: Column(
+        children: [
+          // Add a prominent summary button at the top
+          if (_documents.isNotEmpty)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.all(16),
+              child: ElevatedButton.icon(
+                onPressed: _viewMedicalSummary,
+                icon: const Icon(Icons.auto_awesome),
+                label: const Text('View AI Medical Summary'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _documents.length,
-                  itemBuilder: (context, index) {
-                    final doc = _documents[index];
-                    final formattedDate = DateFormat('MMM d, yyyy').format(doc.uploadDate);
-                    
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 2,
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(12),
-                        leading: _getFileIcon(doc.fileType),
-                        title: Text(
-                          doc.fileName,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          '${_formatFileSize(doc.fileSize)} • $formattedDate',
-                          style: TextStyle(color: Colors.grey.shade600),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
+                ),
+              ),
+            ),
+          // Existing content
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _documents.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.open_in_new),
-                              onPressed: () => _openDocument(doc.downloadUrl),
+                            Icon(
+                              Icons.folder_open,
+                              size: 64,
+                              color: Colors.grey.shade400,
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              color: Colors.red,
-                              onPressed: () => _deleteDocument(doc),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'No medical records found',
+                              style: TextStyle(fontSize: 18),
                             ),
                           ],
                         ),
-                        onTap: () => _openDocument(doc.downloadUrl),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _documents.length,
+                        itemBuilder: (context, index) {
+                          final doc = _documents[index];
+                          final formattedDate = DateFormat('MMM d, yyyy').format(doc.uploadDate);
+                          
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 2,
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.all(12),
+                              leading: _getFileIcon(doc.fileType),
+                              title: Text(
+                                doc.fileName,
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                              subtitle: Text(
+                                '${_formatFileSize(doc.fileSize)} • $formattedDate',
+                                style: TextStyle(color: Colors.grey.shade600),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.open_in_new),
+                                    onPressed: () => _openDocument(doc.downloadUrl),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline),
+                                    color: Colors.red,
+                                    onPressed: () => _deleteDocument(doc),
+                                  ),
+                                ],
+                              ),
+                              onTap: () => _openDocument(doc.downloadUrl),
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           await _documentService.uploadDocument(context, widget.userId);

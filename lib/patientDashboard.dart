@@ -4,7 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'services/document_service.dart';
 import 'services/auth_service.dart';
+import 'services/gemini_service.dart';
 import 'screens/medical_records_screen.dart';
+import 'screens/medical_summary_screen.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -14,126 +16,48 @@ class PatientDashboard extends StatefulWidget {
 }
 
 class _PatientDashboardState extends State<PatientDashboard> {
-  int _currentIndex = 0;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final AuthService _authService = AuthService();
+  final DocumentService _documentService = DocumentService();
+
   Map<String, dynamic>? userData;
   bool _isLoading = true;
-  String? _userId;
+  int _selectedIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    _fetchUserData();
+    _loadUserData();
   }
 
-  Future<void> _fetchUserData() async {
-    setState(() {
-      _isLoading = true;
-    });
-
+  Future<void> _loadUserData() async {
     try {
-      // Get current user
-      final User? user = _auth.currentUser;
-
+      final user = _auth.currentUser;
       if (user != null) {
-        _userId = user.uid;
-
-        // Try to get user document from Firestore
-        final DocumentSnapshot userDoc = await _firestore
-            .collection('users')
-            .doc(_userId)
-            .get();
-
+        final userDoc = await _firestore.collection('users').doc(user.uid).get();
         if (userDoc.exists) {
           setState(() {
-            userData = userDoc.data() as Map<String, dynamic>?;
+            userData = userDoc.data();
+            userData!['uid'] = user.uid;
             _isLoading = false;
           });
         } else {
-          // If document doesn't exist in Firestore but we have Firebase Auth user
-          setState(() {
-            userData = {
-              'email': user.email,
-              'displayName': user.displayName,
-              'photoURL': user.photoURL,
-            };
-            _isLoading = false;
-          });
-
-          // Optionally create a new document for this user
-          await _firestore.collection('users').doc(_userId).set({
-            'email': user.email,
-            'displayName': user.displayName,
-            'photoURL': user.photoURL,
-            'lastLogin': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+          setState(() => _isLoading = false);
         }
       } else {
-        // No authenticated user
-        Navigator.pushReplacementNamed(context, '/');
+        setState(() => _isLoading = false);
       }
     } catch (e) {
-      print('Error fetching user data: $e');
-      setState(() {
-        _isLoading = false;
-      });
+      print('Error loading user data: $e');
+      setState(() => _isLoading = false);
     }
   }
 
-  String _getDisplayName() {
-    if (userData == null) return 'Patient';
-
-    // First try firstName and lastName
-    final String? firstName = userData?['firstName'];
-    final String? lastName = userData?['lastName'];
-    if (firstName != null) {
-      return '$firstName${lastName != null ? ' $lastName' : ''}';
-    }
-
-    // Then try displayName
-    final String? displayName = userData?['displayName'];
-    if (displayName != null) return displayName;
-
-    // Fallback to email
-    final String? email = userData?['email'];
-    if (email != null) {
-      return email.split('@')[0]; // Just use the part before @ as name
-    }
-
-    return 'Patient';
-  }
-
-  String? _getEmail() {
-    return userData?['email'];
-  }
-
-  String? _getPhotoUrl() {
-    return userData?['photoURL'] ?? userData?['photoUrl'];
-  }
-
-  String _getDateOfBirth() {
-    if (userData == null) return 'Not specified';
-
-    final dob = userData?['dateOfBirth'];
-    if (dob is Timestamp) {
-      return DateFormat('MMMM d, yyyy').format(dob.toDate());
-    }
-
-    return 'Not specified';
-  }
-
-  String _getPhoneNumber() {
-    return userData?['phone'] ?? 'Not specified';
-  }
-
-  String _getGender() {
-    return userData?['gender'] ?? 'Not specified';
-  }
-
-  // List of pages to display
   List<Widget> get _pages => [
     DashboardContent(userData: userData),
+    const Center(child: Text('Appointments')),
+    MedicalRecordsScreen(userId: userData?['uid'] ?? ''),
     UserProfileContent(
       displayName: _getDisplayName(),
       email: _getEmail(),
@@ -144,113 +68,18 @@ class _PatientDashboardState extends State<PatientDashboard> {
     ),
   ];
 
-  Future<void> _logout() async {
-    try {
-      // Show confirmation dialog
-      final shouldLogout = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Logout'),
-          content: const Text('Are you sure you want to logout?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Logout'),
-            ),
-          ],
-        ),
-      );
-
-      if (shouldLogout == true) {
-        // Clear saved login state
-        await AuthService.clearLoginState();
-
-        // Sign out from Firebase
-        await _auth.signOut();
-
-        // Navigate to login screen
-        if (mounted) {
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            '/login',
-            (route) => false,
-          );
-        }
-      }
-    } catch (e) {
-      print('Error during logout: $e');
-      // Show error message
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error during logout: $e')));
-      }
-    }
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('HealthMate'),
-        elevation: 2,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications),
-            onPressed: () {
-              // TODO: Implement notifications
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-            tooltip: 'Logout',
-          ),
-        ],
-      ),
-      body: _pages[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          _showEmergencyOptions(context);
-        },
-        backgroundColor: Colors.red,
-        child: const Icon(Icons.add_alert),
-      ),
-    );
-  }
-
-  void _showEmergencyOptions(BuildContext context) {
+  void _showEmergencyOptions() {
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
       builder: (BuildContext context) {
         return Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -258,59 +87,30 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 'Emergency Options',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 16),
-              _buildEmergencyOption(
-                context,
-                Icons.emergency,
-                'Emergency',
-                Colors.red,
-                () {
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(Icons.local_hospital, color: Colors.red),
+                title: const Text('Call Emergency Services'),
+                subtitle: const Text('911'),
+                onTap: () {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Emergency option selected')),
-                  );
+                  // Add emergency call functionality
                 },
               ),
-              const SizedBox(height: 8),
-              _buildEmergencyOption(
-                context,
-                Icons.medical_services,
-                'Find Doctor',
-                Colors.blue,
-                () {
+              ListTile(
+                leading: const Icon(Icons.location_on, color: Colors.blue),
+                title: const Text('Find Nearest Hospital'),
+                onTap: () {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Find Doctor option selected'),
-                    ),
-                  );
+                  // Add hospital finder functionality
                 },
               ),
-              const SizedBox(height: 8),
-              _buildEmergencyOption(
-                context,
-                Icons.people,
-                'Find Caregiver',
-                Colors.green,
-                () {
+              ListTile(
+                leading: const Icon(Icons.contact_phone, color: Colors.green),
+                title: const Text('Emergency Contacts'),
+                onTap: () {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Find Caregiver option selected'),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 8),
-              // Add new option for uploading medical records
-              _buildEmergencyOption(
-                context,
-                Icons.upload_file,
-                'Upload Medical Record',
-                Colors.orange,
-                () {
-                  Navigator.pop(context);
-                  _uploadMedicalRecord();
+                  // Add emergency contacts functionality
                 },
               ),
             ],
@@ -320,331 +120,380 @@ class _PatientDashboardState extends State<PatientDashboard> {
     );
   }
 
-  Widget _buildEmergencyOption(
-    BuildContext context,
-    IconData icon,
-    String label,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          children: [
-            CircleAvatar(
-              backgroundColor: color.withOpacity(0.2),
-              radius: 24,
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(width: 16),
-            Text(
-              label,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-            ),
-            const Spacer(),
-            Icon(
-              Icons.arrow_forward_ios,
-              size: 16,
-              color: Colors.grey.shade400,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _uploadMedicalRecord() async {
-    if (_userId != null) {
-      final documentService = DocumentService();
-      await documentService.uploadDocument(context, _userId!);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('User ID not found. Please try logging in again.'),
-        ),
-      );
+  Future<void> _logout() async {
+    try {
+      await _auth.signOut(); // Use Firebase Auth directly instead of AuthService
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/login');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error logging out: $e')),
+        );
+      }
     }
   }
-}
-
-// Dashboard Content Widget
-class DashboardContent extends StatelessWidget {
-  final Map<String, dynamic>? userData;
-
-  const DashboardContent({super.key, required this.userData});
 
   String _getDisplayName() {
-    if (userData == null) return 'Patient';
+    return userData?['name'] ?? _auth.currentUser?.displayName ?? 'Unknown User';
+  }
 
-    // First try firstName and lastName
-    final String? firstName = userData?['firstName'];
-    final String? lastName = userData?['lastName'];
-    if (firstName != null) {
-      return '$firstName${lastName != null ? ' $lastName' : ''}';
-    }
-
-    // Then try displayName
-    final String? displayName = userData?['displayName'];
-    if (displayName != null) return displayName;
-
-    // Fallback to email
-    final String? email = userData?['email'];
-    if (email != null) {
-      return email.split('@')[0]; // Just use the part before @ as name
-    }
-
-    return 'Patient';
+  String _getEmail() {
+    return userData?['email'] ?? _auth.currentUser?.email ?? 'No email';
   }
 
   String? _getPhotoUrl() {
-    return userData?['photoURL'] ?? userData?['photoUrl'];
+    return userData?['photoUrl'] ?? _auth.currentUser?.photoURL;
+  }
+
+  String _getDateOfBirth() {
+    final dob = userData?['dateOfBirth'];
+    if (dob != null) {
+      if (dob is Timestamp) {
+        return DateFormat('MMMM d, yyyy').format(dob.toDate());
+      } else if (dob is String) {
+        try {
+          final date = DateTime.parse(dob);
+          return DateFormat('MMMM d, yyyy').format(date);
+        } catch (e) {
+          return dob;
+        }
+      }
+    }
+    return 'Not provided';
+  }
+
+  String _getPhoneNumber() {
+    return userData?['phoneNumber'] ?? 'Not provided';
+  }
+
+  String _getGender() {
+    return userData?['gender'] ?? 'Not specified';
   }
 
   @override
   Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('HealthMate'),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.emergency),
+            onPressed: _showEmergencyOptions,
+            tooltip: 'Emergency',
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _logout,
+            tooltip: 'Logout',
+          ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : userData == null
+              ? const Center(child: Text('Unable to load user data'))
+              : _pages[_selectedIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: _onItemTapped,
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: Colors.blue,
+        unselectedItemColor: Colors.grey,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_today),
+            label: 'Appointments',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.medical_services),
+            label: 'Records',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class DashboardContent extends StatelessWidget {
+  final Map<String, dynamic>? userData;
+
+  const DashboardContent({
+    super.key,
+    required this.userData,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final greeting = _getGreeting();
+    final userName = userData?['name'] ?? 'User';
+
     return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Greeting and summary
+          // User greeting card
           Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
             elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 24,
-                        backgroundImage: _getPhotoUrl() != null
-                            ? NetworkImage(_getPhotoUrl()!)
-                            : const NetworkImage(
-                                'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y',
-                              ),
-                      ),
-                      const SizedBox(width: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Welcome back,',
-                            style: TextStyle(fontSize: 14, color: Colors.grey),
-                          ),
-                          Text(
-                            _getDisplayName(),
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Theme.of(context).primaryColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Your Health Summary',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  Text(
+                    '$greeting, $userName!',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildHealthMetric(
-                        context,
-                        '120/80',
-                        'Blood Pressure',
-                        Icons.favorite,
-                      ),
-                      _buildHealthMetric(
-                        context,
-                        '72 bpm',
-                        'Heart Rate',
-                        Icons.monitor_heart,
-                      ),
-                      _buildHealthMetric(
-                        context,
-                        '98.6°F',
-                        'Temperature',
-                        Icons.thermostat,
-                      ),
-                    ],
+                  const Text(
+                    'How are you feeling today?',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
                   ),
                 ],
               ),
             ),
           ),
+
           const SizedBox(height: 16),
 
-          // Quick access buttons including Medical Records
+          // Medical Summary Card
+          _buildMedicalSummaryCard(context, userData?['uid']),
+
+          const SizedBox(height: 16),
+
+          // Quick Access Buttons
+          _buildQuickAccessButtons(context, userData?['uid']),
+
+          const SizedBox(height: 24),
+
+          // Health Stats Section
           const Text(
-            'Quick Access',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            'Health Overview',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildQuickAccessButton(
-                  context,
-                  Icons.folder_shared,
-                  'Medical Records',
-                  Colors.purple,
-                  () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => MedicalRecordsScreen(
-                          userId: userData?['uid'] ?? '',
-                        ),
-                      ),
-                    );
-                  },
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildHealthStatCard(
+                  'Heart Rate',
+                  '72 bpm',
+                  Icons.favorite,
+                  Colors.red,
                 ),
-                SizedBox(width: 12),
-                _buildQuickAccessButton(
-                  context,
-                  Icons.medication,
-                  'Medications',
-                  Colors.orange,
-                  () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Medications button clicked'),
-                      ),
-                    );
-                  },
-                ),
-                SizedBox(width: 12),
-                _buildQuickAccessButton(
-                  context,
-                  Icons.calendar_month,
-                  'Appointments',
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildHealthStatCard(
+                  'Blood Pressure',
+                  '120/80',
+                  Icons.bloodtype,
                   Colors.blue,
-                  () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Appointments button clicked'),
-                      ),
-                    );
-                  },
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-
-          // Upcoming appointments
-          const Text(
-            'Upcoming Appointments',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: 2,
-              separatorBuilder: (context, index) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                return ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.medical_services),
-                  ),
-                  title: Text(
-                    index == 0
-                        ? 'Dr. Smith - Cardiology'
-                        : 'Dr. Johnson - General',
-                  ),
-                  subtitle: Text(
-                    index == 0 ? 'Tomorrow, 10:00 AM' : 'Jun 30, 2:30 PM',
-                  ),
-                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                  onTap: () {
-                    // TODO: Navigate to appointment details
-                  },
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Medications
-          const Text(
-            'Your Medications',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: 3,
-              separatorBuilder: (context, index) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                List<String> medications = [
-                  'Aspirin - 1 tablet daily',
-                  'Vitamin D - 1 capsule daily',
-                  'Metformin - 2 tablets daily',
-                ];
-                List<String> times = ['8:00 AM', '8:00 AM', '8:00 AM, 8:00 PM'];
-
-                return ListTile(
-                  leading: const CircleAvatar(child: Icon(Icons.medication)),
-                  title: Text(medications[index]),
-                  subtitle: Text(times[index]),
-                  trailing: Checkbox(
-                    value: false,
-                    onChanged: (_) {
-                      // TODO: Mark medication as taken
-                    },
-                  ),
-                );
-              },
-            ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildHealthStatCard(
+                  'Weight',
+                  '70 kg',
+                  Icons.monitor_weight,
+                  Colors.green,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildHealthStatCard(
+                  'Temperature',
+                  '98.6°F',
+                  Icons.thermostat,
+                  Colors.orange,
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildHealthMetric(
-    BuildContext context,
-    String value,
-    String label,
-    IconData icon,
-  ) {
+  Widget _buildMedicalSummaryCard(BuildContext context, String? userId) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          if (userId != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => MedicalSummaryScreen(userId: userId),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Please log in to view medical summary')),
+            );
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.auto_awesome,
+                      color: Colors.purple,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'AI Medical Summary',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 16,
+                    color: Colors.grey.shade400,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'View your AI-generated medical history summary based on uploaded documents',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickAccessButtons(BuildContext context, String? userId) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        CircleAvatar(
-          backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-          radius: 24,
-          child: Icon(icon, color: Theme.of(context).primaryColor),
+        const Text(
+          'Quick Access',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildQuickAccessButton(
+                context,
+                Icons.folder_shared,
+                'Medical Records',
+                Colors.blue,
+                () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => MedicalRecordsScreen(userId: userId ?? ''),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildQuickAccessButton(
+                context,
+                Icons.auto_awesome,
+                'AI Summary',
+                Colors.purple,
+                () {
+                  if (userId != null) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => MedicalSummaryScreen(userId: userId),
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please log in to view medical summary')),
+                    );
+                  }
+                },
+              ),
+            ),
+          ],
         ),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildQuickAccessButton(
+                context,
+                Icons.medication,
+                'Medications',
+                Colors.orange,
+                () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Medications feature coming soon')),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildQuickAccessButton(
+                context,
+                Icons.calendar_month,
+                'Appointments',
+                Colors.green,
+                () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Appointments feature coming soon')),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -663,18 +512,17 @@ class DashboardContent extends StatelessWidget {
         onTap: onPressed,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          width: 100,
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: color, size: 28),
+              Icon(icon, color: color, size: 32),
               const SizedBox(height: 8),
               Text(
                 label,
                 style: TextStyle(
-                  color: color.withOpacity(0.8),
-                  fontWeight: FontWeight.w500,
+                  color: color,
+                  fontWeight: FontWeight.w600,
                   fontSize: 12,
                 ),
                 textAlign: TextAlign.center,
@@ -685,12 +533,54 @@ class DashboardContent extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildHealthStatCard(String title, String value, IconData icon, Color color) {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: color, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) {
+      return 'Good Morning';
+    } else if (hour < 17) {
+      return 'Good Afternoon';
+    } else {
+      return 'Good Evening';
+    }
+  }
 }
 
-// User Profile Content Widget
 class UserProfileContent extends StatelessWidget {
   final String displayName;
-  final String? email;
+  final String email;
   final String? photoUrl;
   final String dateOfBirth;
   final String phoneNumber;
@@ -700,22 +590,11 @@ class UserProfileContent extends StatelessWidget {
     super.key,
     required this.displayName,
     required this.email,
-    required this.photoUrl,
+    this.photoUrl,
     required this.dateOfBirth,
     required this.phoneNumber,
     required this.gender,
   });
-
-  Future<void> _signOut(BuildContext context) async {
-    try {
-      await FirebaseAuth.instance.signOut();
-      Navigator.pushReplacementNamed(context, '/');
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error signing out: $e')));
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -724,183 +603,118 @@ class UserProfileContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // User info card
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            elevation: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 48,
-                    backgroundImage: photoUrl != null
-                        ? NetworkImage(photoUrl!)
-                        : const NetworkImage(
-                            'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y',
-                          ),
+          // Profile Header
+          Center(
+            child: Column(
+              children: [
+                CircleAvatar(
+                  radius: 50,
+                  backgroundImage: photoUrl != null ? NetworkImage(photoUrl!) : null,
+                  child: photoUrl == null ? Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U', style: const TextStyle(fontSize: 32)) : null,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  displayName,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    displayName,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                ),
+                Text(
+                  email,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey.shade600,
                   ),
-                  email != null
-                      ? Text(
-                          email!,
-                          style: TextStyle(color: Colors.grey.shade600),
-                        )
-                      : const SizedBox.shrink(),
-                  const SizedBox(height: 16),
-                  OutlinedButton(
-                    onPressed: () {
-                      // TODO: Edit profile
-                    },
-                    style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text('Edit Profile'),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 16),
 
-          // Profile details
+          const SizedBox(height: 32),
+
+          // Profile Information
           const Text(
             'Personal Information',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                _buildProfileDetail(
-                  Icons.calendar_today,
-                  'Date of Birth',
-                  dateOfBirth,
-                ),
-                const Divider(height: 1),
-                _buildProfileDetail(Icons.phone, 'Phone', phoneNumber),
-                const Divider(height: 1),
-                _buildProfileDetail(Icons.people, 'Gender', gender),
-              ],
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 16),
 
-          // Account settings
+          _buildInfoCard('Date of Birth', dateOfBirth, Icons.cake),
+          _buildInfoCard('Phone Number', phoneNumber, Icons.phone),
+          _buildInfoCard('Gender', gender, Icons.person),
+
+          const SizedBox(height: 24),
+
+          // Settings Section
           const Text(
-            'Account Settings',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                _buildSettingsOption(
-                  context,
-                  Icons.privacy_tip,
-                  'Privacy Settings',
-                  () {
-                    // TODO: Navigate to privacy settings
-                  },
-                ),
-                const Divider(height: 1),
-                _buildSettingsOption(
-                  context,
-                  Icons.notifications,
-                  'Notification Preferences',
-                  () {
-                    // TODO: Navigate to notification settings
-                  },
-                ),
-                const Divider(height: 1),
-                _buildSettingsOption(context, Icons.help, 'Help & Support', () {
-                  // TODO: Navigate to help & support
-                }),
-                const Divider(height: 1),
-                _buildSettingsOption(context, Icons.logout, 'Logout', () {
-                  _signOut(context);
-                }, isDestructive: true),
-              ],
+            'Settings',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
+          const SizedBox(height: 16),
 
-  Widget _buildProfileDetail(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.grey.shade600),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-              ),
-              Text(value, style: const TextStyle(fontSize: 16)),
-            ],
+          _buildSettingsOption(
+            context,
+            'Edit Profile',
+            Icons.edit,
+            () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Edit profile feature coming soon')),
+              );
+            },
+          ),
+          _buildSettingsOption(
+            context,
+            'Privacy Settings',
+            Icons.privacy_tip,
+            () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Privacy settings feature coming soon')),
+              );
+            },
+          ),
+          _buildSettingsOption(
+            context,
+            'Notifications',
+            Icons.notifications,
+            () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Notification settings feature coming soon')),
+              );
+            },
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSettingsOption(
-    BuildContext context,
-    IconData icon,
-    String label,
-    VoidCallback onTap, {
-    bool isDestructive = false,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              color: isDestructive ? Colors.red : Colors.grey.shade600,
-            ),
-            const SizedBox(width: 16),
-            Text(
-              label,
-              style: TextStyle(
-                color: isDestructive ? Colors.red : Colors.black,
-                fontSize: 16,
-              ),
-            ),
-            const Spacer(),
-            Icon(
-              Icons.arrow_forward_ios,
-              size: 16,
-              color: Colors.grey.shade400,
-            ),
-          ],
-        ),
+  Widget _buildInfoCard(String title, String value, IconData icon) {
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Icon(icon, color: Colors.blue),
+        title: Text(title),
+        subtitle: Text(value),
+      ),
+    );
+  }
+
+  Widget _buildSettingsOption(BuildContext context, String title, IconData icon, VoidCallback onTap) {
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Icon(icon, color: Colors.blue),
+        title: Text(title),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+        onTap: onTap,
       ),
     );
   }
