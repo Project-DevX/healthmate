@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import 'services/document_service.dart';
 import 'services/auth_service.dart';
+
 import 'services/gemini_service.dart';
 import 'screens/medical_records_screen.dart';
 import 'screens/medical_summary_screen.dart';
+
+import 'screens/medical_records_screen_clean.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -120,6 +122,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
     );
   }
 
+
   Future<void> _logout() async {
     try {
       await _auth.signOut(); // Use Firebase Auth directly instead of AuthService
@@ -132,6 +135,60 @@ class _PatientDashboardState extends State<PatientDashboard> {
           SnackBar(content: Text('Error logging out: $e')),
         );
       }
+
+  Widget _buildEmergencyOption(
+    BuildContext context,
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: color.withOpacity(0.2),
+              radius: 24,
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+            ),
+            const Spacer(),
+            Icon(
+              Icons.arrow_forward_ios,
+              size: 16,
+              color: Colors.grey.shade400,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _uploadMedicalRecord() async {
+    final User? user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      // Navigate to Medical Records screen instead of uploading directly
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => MedicalRecordsScreen(userId: user.uid),
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('User ID not found. Please try logging in again.'),
+        ),
+      );
+
     }
   }
 
@@ -290,6 +347,7 @@ class DashboardContent extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
+
           const SizedBox(height: 12),
           Row(
             children: [
@@ -299,6 +357,52 @@ class DashboardContent extends StatelessWidget {
                   '72 bpm',
                   Icons.favorite,
                   Colors.red,
+
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildQuickAccessButton(
+                  context,
+                  Icons.folder_shared,
+                  'Medical Records',
+                  Colors.purple,
+                  () {
+                    final User? user = FirebaseAuth.instance.currentUser;
+                    if (user != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              MedicalRecordsScreen(userId: user.uid),
+                        ),
+                      );
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Please log in to view medical records',
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                ),
+                SizedBox(width: 12),
+                _buildQuickAccessButton(
+                  context,
+                  Icons.medication,
+                  'Medications',
+                  Colors.orange,
+                  () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Medications button clicked'),
+                      ),
+                    );
+                  },
+
                 ),
               ),
               const SizedBox(width: 12),
