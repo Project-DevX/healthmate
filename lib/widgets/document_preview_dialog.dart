@@ -10,28 +10,16 @@ import '../models/document_model.dart';
 
 class DocumentPreviewDialog extends StatefulWidget {
   final MedicalDocument document;
-  
+
   const DocumentPreviewDialog({Key? key, required this.document})
     : super(key: key);
-    
+
   @override
   _DocumentPreviewDialogState createState() => _DocumentPreviewDialogState();
 }
 
 class _DocumentPreviewDialogState extends State<DocumentPreviewDialog> {
   bool _isDownloading = false;
-
-class DocumentPreviewDialog extends StatefulWidget {
-  final MedicalDocument document;
-  
-  const DocumentPreviewDialog({Key? key, required this.document})
-    : super(key: key);
-    
-  @override
-  _DocumentPreviewDialogState createState() => _DocumentPreviewDialogState();
-}
-
-class _DocumentPreviewDialogState extends State<DocumentPreviewDialog> {
   @override
   Widget build(BuildContext context) {
     final isImage = [
@@ -41,7 +29,7 @@ class _DocumentPreviewDialogState extends State<DocumentPreviewDialog> {
     ].contains(widget.document.fileType.toLowerCase());
 
     return Dialog(
-      child: Container(
+      child: SizedBox(
         width: MediaQuery.of(context).size.width * 0.9,
         height: MediaQuery.of(context).size.height * 0.8,
         child: Column(
@@ -59,7 +47,8 @@ class _DocumentPreviewDialogState extends State<DocumentPreviewDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(                          widget.document.fileName,
+                        Text(
+                          widget.document.fileName,
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -81,9 +70,7 @@ class _DocumentPreviewDialogState extends State<DocumentPreviewDialog> {
               ),
             ),
             // Content
-            Expanded(
-              child: isImage ? _buildImagePreview() : _buildFilePreview(),
-            ),
+            Expanded(child: isImage ? buildImagePreview() : buildFilePreview()),
             // Actions
             Container(
               padding: EdgeInsets.all(16),
@@ -91,12 +78,12 @@ class _DocumentPreviewDialogState extends State<DocumentPreviewDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   ElevatedButton.icon(
-                    onPressed: () => _openDocument(),
+                    onPressed: () => openDocument(),
                     icon: Icon(Icons.open_in_new),
                     label: Text('Open'),
                   ),
                   ElevatedButton.icon(
-                    onPressed: () => _downloadDocument(),
+                    onPressed: () => downloadDocument(),
                     icon: Icon(Icons.download),
                     label: Text('Download'),
                   ),
@@ -108,7 +95,8 @@ class _DocumentPreviewDialogState extends State<DocumentPreviewDialog> {
       ),
     );
   }
-  Widget _buildImagePreview() {
+
+  Widget buildImagePreview() {
     return PhotoView(
       imageProvider: CachedNetworkImageProvider(widget.document.downloadUrl),
       minScale: PhotoViewComputedScale.contained,
@@ -117,13 +105,13 @@ class _DocumentPreviewDialogState extends State<DocumentPreviewDialog> {
     );
   }
 
-  Widget _buildFilePreview() {
+  Widget buildFilePreview() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            _getFileIcon(widget.document.fileType),
+            getFileIcon(widget.document.fileType),
             size: 80,
             color: Colors.grey[600],
           ),
@@ -140,7 +128,7 @@ class _DocumentPreviewDialogState extends State<DocumentPreviewDialog> {
           ),
           SizedBox(height: 16),
           Text(
-            'File Size: ${_formatFileSize(widget.document.fileSize)}',
+            'File Size: ${formatFileSize(widget.document.fileSize)}',
             style: TextStyle(color: Colors.grey[500]),
           ),
           SizedBox(height: 8),
@@ -153,7 +141,7 @@ class _DocumentPreviewDialogState extends State<DocumentPreviewDialog> {
     );
   }
 
-  IconData _getFileIcon(String fileType) {
+  IconData getFileIcon(String fileType) {
     switch (fileType.toLowerCase()) {
       case 'pdf':
         return Icons.picture_as_pdf;
@@ -165,61 +153,67 @@ class _DocumentPreviewDialogState extends State<DocumentPreviewDialog> {
     }
   }
 
-  String _formatFileSize(int bytes) {
+  String formatFileSize(int bytes) {
     if (bytes < 1024) return '$bytes B';
     if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
-  void _openDocument() async {
+
+  void openDocument() async {
     final url = Uri.parse(widget.document.downloadUrl);
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
     }
-  }  Future<void> _downloadDocument() async {
+  }
+
+  Future<void> downloadDocument() async {
     try {
       setState(() {
         _isDownloading = true;
       });
-      
+
       // Get storage permissions
       if (await Permission.storage.request().isGranted) {
         // Show a loading indicator
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Downloading document...')),
-        );
-        
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Downloading document...')));
+
         // Use path_provider to get the external storage directory
         final directory = await getExternalStorageDirectory();
         if (directory == null) {
           throw Exception('Could not access storage directory');
         }
-        
+
         // Create the file path
-        final filePath = '${directory.path}/HealthMate/${document.fileName}';
+        final filePath =
+            '${directory.path}/HealthMate/${widget.document.fileName}';
         final file = File(filePath);
-        
+
         // Create parent directories if they don't exist
         if (!(await file.parent.exists())) {
           await file.parent.create(recursive: true);
         }
-        
+
         // Download the file from Firebase Storage
-        final ref = FirebaseStorage.instance.refFromURL(document.downloadUrl);
+        final ref = FirebaseStorage.instance.refFromURL(
+          widget.document.downloadUrl,
+        );
         await ref.writeToFile(file);
-        
+
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Document downloaded to: $filePath')),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Storage permission denied')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Storage permission denied')));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error downloading document: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error downloading document: $e')));
     }
   }
 }

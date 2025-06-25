@@ -8,10 +8,7 @@ import '../screens/medical_summary_screen.dart';
 class MedicalRecordsScreen extends StatefulWidget {
   final String userId;
 
-  const MedicalRecordsScreen({
-    Key? key,
-    required this.userId,
-  }) : super(key: key);
+  const MedicalRecordsScreen({super.key, required this.userId});
 
   @override
   State<MedicalRecordsScreen> createState() => _MedicalRecordsScreenState();
@@ -39,9 +36,9 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading documents: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error loading documents: $e')));
       setState(() => _isLoading = false);
     }
   }
@@ -55,9 +52,9 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error opening document: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error opening document: $e')));
     }
   }
 
@@ -82,14 +79,17 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
 
     if (confirmed == true) {
       setState(() => _isLoading = true);
-      
-      final success = await _documentService.deleteDocument(widget.userId, document);
-      
+
+      final success = await _documentService.deleteDocument(
+        widget.userId,
+        document,
+      );
+
       if (success) {
         _loadDocuments(); // Reload the list
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Document deleted')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Document deleted')));
       } else {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -114,13 +114,13 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     }
 
     setState(() => _isAnalyzing = true);
-    
+
     try {
       final geminiService = GeminiService();
       final summary = await geminiService.analyzeMedicalRecords(widget.userId);
-      
+
       setState(() => _isAnalyzing = false);
-      
+
       if (mounted) {
         Navigator.push(
           context,
@@ -131,7 +131,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
       }
     } catch (e) {
       setState(() => _isAnalyzing = false);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error analyzing documents: $e')),
@@ -189,66 +189,68 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _documents.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.folder_open,
-                              size: 64,
-                              color: Colors.grey.shade400,
-                            ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'No medical records found',
-                              style: TextStyle(fontSize: 18),
-                            ),
-                          ],
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.folder_open,
+                          size: 64,
+                          color: Colors.grey.shade400,
                         ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _documents.length,
-                        itemBuilder: (context, index) {
-                          final doc = _documents[index];
-                          final formattedDate = DateFormat('MMM d, yyyy').format(doc.uploadDate);
-                          
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 2,
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.all(12),
-                              leading: _getFileIcon(doc.fileType),
-                              title: Text(
-                                doc.fileName,
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'No medical records found',
+                          style: TextStyle(fontSize: 18),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _documents.length,
+                    itemBuilder: (context, index) {
+                      final doc = _documents[index];
+                      final formattedDate = DateFormat(
+                        'MMM d, yyyy',
+                      ).format(doc.uploadDate);
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 2,
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.all(12),
+                          leading: _getFileIcon(doc.fileType),
+                          title: Text(
+                            doc.fileName,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text(
+                            '${_formatFileSize(doc.fileSize)} • $formattedDate',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.open_in_new),
+                                onPressed: () => _openDocument(doc.downloadUrl),
                               ),
-                              subtitle: Text(
-                                '${_formatFileSize(doc.fileSize)} • $formattedDate',
-                                style: TextStyle(color: Colors.grey.shade600),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline),
+                                color: Colors.red,
+                                onPressed: () => _deleteDocument(doc),
                               ),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.open_in_new),
-                                    onPressed: () => _openDocument(doc.downloadUrl),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline),
-                                    color: Colors.red,
-                                    onPressed: () => _deleteDocument(doc),
-                                  ),
-                                ],
-                              ),
-                              onTap: () => _openDocument(doc.downloadUrl),
-                            ),
-                          );
-                        },
-                      ),
+                            ],
+                          ),
+                          onTap: () => _openDocument(doc.downloadUrl),
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -265,7 +267,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   Widget _getFileIcon(String fileType) {
     IconData iconData;
     Color color;
-    
+
     switch (fileType.toLowerCase()) {
       case 'pdf':
         iconData = Icons.picture_as_pdf;
@@ -286,7 +288,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         iconData = Icons.insert_drive_file;
         color = Colors.grey;
     }
-    
+
     return CircleAvatar(
       radius: 24,
       backgroundColor: color.withOpacity(0.2),

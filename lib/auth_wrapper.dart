@@ -12,7 +12,7 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
-  bool _isLoading = true;
+  final bool _isLoading = true;
 
   @override
   void initState() {

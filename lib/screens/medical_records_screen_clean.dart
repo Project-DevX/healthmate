@@ -7,8 +7,7 @@ import '../services/medical_records_service_clean.dart';
 class MedicalRecordsScreen extends StatefulWidget {
   final String userId;
 
-  const MedicalRecordsScreen({Key? key, required this.userId})
-    : super(key: key);
+  const MedicalRecordsScreen({super.key, required this.userId});
 
   @override
   State<MedicalRecordsScreen> createState() => _MedicalRecordsScreenState();
