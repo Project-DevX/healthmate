@@ -1,5 +1,4 @@
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class GeminiService {
@@ -21,7 +20,7 @@ class GeminiService {
       if (analysisDoc.exists) {
         final data = analysisDoc.data();
         final timestamp = data?['timestamp'] as Timestamp?;
-        
+
         if (timestamp != null) {
           final analysisAge = DateTime.now().difference(timestamp.toDate());
           if (analysisAge.inHours < 24) {
@@ -51,9 +50,9 @@ class GeminiService {
   /// Get cached medical analysis without triggering new analysis
   Future<String?> getCachedAnalysis(String userId) async {
     try {
-      final result = await _functions
-          .httpsCallable('getMedicalAnalysis')
-          .call({'userId': userId});
+      final result = await _functions.httpsCallable('getMedicalAnalysis').call({
+        'userId': userId,
+      });
 
       return result.data['summary'];
     } catch (e) {
@@ -76,12 +75,12 @@ class GeminiService {
 
       final data = analysisDoc.data();
       final timestamp = data?['timestamp'] as Timestamp?;
-      
+
       if (timestamp != null) {
         final analysisAge = DateTime.now().difference(timestamp.toDate());
         return analysisAge.inHours < 24;
       }
-      
+
       return false;
     } catch (e) {
       print('Error checking analysis status: $e');
@@ -118,9 +117,6 @@ class GeminiService {
         .doc(userId)
         .collection('ai_analysis')
         .doc('latest')
-        .set({
-      'summary': summary,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
+        .set({'summary': summary, 'timestamp': FieldValue.serverTimestamp()});
   }
 }

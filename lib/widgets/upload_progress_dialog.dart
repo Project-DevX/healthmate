@@ -8,10 +8,10 @@ class UploadProgressDialog extends StatefulWidget {
   final MedicalRecordsService recordsService;
 
   const UploadProgressDialog({
-    Key? key,
+    super.key,
     required this.file,
     required this.recordsService,
-  }) : super(key: key);
+  });
 
   @override
   _UploadProgressDialogState createState() => _UploadProgressDialogState();

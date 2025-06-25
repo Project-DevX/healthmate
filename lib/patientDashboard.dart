@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'services/auth_service.dart';
 import 'services/document_service.dart';
-import 'services/gemini_service.dart';
 import 'screens/medical_records_screen.dart';
 import 'screens/medical_summary_screen.dart';
 
@@ -264,7 +263,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : userData == null
+
           ? const Center(child: Text('No user data available'))
+
           : _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
