@@ -28,6 +28,7 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
   DateTime? _dateOfBirth;
   String? _selectedGender;
   bool _isLoading = false;
+  bool _acceptedTerms = false;
   File? _governmentIdFile;
   File? _medicalLicenseFile;
   String? _governmentIdFileName;
@@ -165,6 +166,12 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
     if (_medicalLicenseFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please upload your medical license')),
+      );
+      return;
+    }
+    if (!_acceptedTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You must accept the Terms & Conditions to register.')),
       );
       return;
     }
@@ -311,48 +318,6 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
                     }
                     if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
                       return 'Please enter a valid email address';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Password field
-                TextFormField(
-                  controller: _passwordController,
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock),
-                  ),
-                  obscureText: true,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter a password';
-                    }
-                    if (value.length < 6) {
-                      return 'Password must be at least 6 characters';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Confirm Password field
-                TextFormField(
-                  controller: _confirmPasswordController,
-                  decoration: const InputDecoration(
-                    labelText: 'Confirm Password',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock_outline),
-                  ),
-                  obscureText: true,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please confirm your password';
-                    }
-                    if (value != _passwordController.text) {
-                      return 'Passwords do not match';
                     }
                     return null;
                   },
@@ -590,6 +555,44 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
+
+                // Password fields (move here)
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Please enter a password'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Confirm Password',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Please confirm your password'
+                      : null,
+                ),
+                const SizedBox(height: 24),
+
+                // Accept Terms & Conditions
+                CheckboxListTile(
+                  value: _acceptedTerms,
+                  onChanged: (value) {
+                    setState(() {
+                      _acceptedTerms = value ?? false;
+                    });
+                  },
+                  title: const Text('I accept the Terms & Conditions'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
 
                 // Register button
                 SizedBox(
