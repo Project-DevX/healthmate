@@ -35,19 +35,21 @@ class _PatientDashboardState extends State<PatientDashboard> {
     try {
       final user = _auth.currentUser;
       if (user != null) {
-        final userDoc = await _firestore.collection('users').doc(user.uid).get();
+        final userDoc = await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .get();
         if (userDoc.exists) {
           setState(() {
             userData = userDoc.data();
             userData!['uid'] = user.uid;
+            _isLoading = false; // Set loading to false here
           });
+        } else {
+          setState(() => _isLoading = false);
         }
-      }
-      // Set isLoading to false regardless of whether user data was found.
-      // This indicates that the loading process is complete.
-      setState(() {
+      } else {
         setState(() => _isLoading = false);
-
       }
     } catch (e) {
       print('Error loading user data: $e');
@@ -175,9 +177,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error logging out: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error logging out: $e')));
       }
     }
   }
@@ -201,7 +203,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
   }
 
   String _getDisplayName() {
-    return userData?['name'] ?? _auth.currentUser?.displayName ?? 'Unknown User';
+    return userData?['name'] ??
+        _auth.currentUser?.displayName ??
+        'Unknown User';
   }
 
   String _getEmail() {
@@ -260,8 +264,8 @@ class _PatientDashboardState extends State<PatientDashboard> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : userData == null
-              ? const Center(child: Text('No user data available'))
-              : _pages[_selectedIndex],
+          ? const Center(child: Text('No user data available'))
+          : _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
@@ -269,10 +273,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
         selectedItemColor: Colors.blue,
         unselectedItemColor: Colors.grey,
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_today),
             label: 'Appointments',
@@ -281,10 +282,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
             icon: Icon(Icons.medical_services),
             label: 'Records',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profile',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
     );
@@ -294,10 +292,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
 class DashboardContent extends StatelessWidget {
   final Map<String, dynamic>? userData;
 
-  const DashboardContent({
-    super.key,
-    required this.userData,
-  });
+  const DashboardContent({super.key, required this.userData});
 
   @override
   Widget build(BuildContext context) {
@@ -312,7 +307,9 @@ class DashboardContent extends StatelessWidget {
           // User greeting card
           Card(
             elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -350,10 +347,7 @@ class DashboardContent extends StatelessWidget {
           // Health Stats Section
           const Text(
             'Health Overview',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 12),
@@ -421,7 +415,9 @@ class DashboardContent extends StatelessWidget {
             );
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Please log in to view medical summary')),
+              const SnackBar(
+                content: Text('Please log in to view medical summary'),
+              ),
             );
           }
         },
@@ -479,10 +475,7 @@ class DashboardContent extends StatelessWidget {
       children: [
         const Text(
           'Quick Access',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
         Row(
@@ -497,7 +490,8 @@ class DashboardContent extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => MedicalRecordsScreen(userId: userId ?? ''),
+                      builder: (context) =>
+                          MedicalRecordsScreen(userId: userId ?? ''),
                     ),
                   );
                 },
@@ -515,12 +509,15 @@ class DashboardContent extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => MedicalSummaryScreen(userId: userId),
+                        builder: (context) =>
+                            MedicalSummaryScreen(userId: userId),
                       ),
                     );
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please log in to view medical summary')),
+                      const SnackBar(
+                        content: Text('Please log in to view medical summary'),
+                      ),
                     );
                   }
                 },
@@ -539,7 +536,9 @@ class DashboardContent extends StatelessWidget {
                 Colors.orange,
                 () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Medications feature coming soon')),
+                    const SnackBar(
+                      content: Text('Medications feature coming soon'),
+                    ),
                   );
                 },
               ),
@@ -553,7 +552,9 @@ class DashboardContent extends StatelessWidget {
                 Colors.green,
                 () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Appointments feature coming soon')),
+                    const SnackBar(
+                      content: Text('Appointments feature coming soon'),
+                    ),
                   );
                 },
               ),
@@ -600,7 +601,12 @@ class DashboardContent extends StatelessWidget {
     );
   }
 
-  Widget _buildHealthStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildHealthStatCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Card(
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -616,7 +622,10 @@ class DashboardContent extends StatelessWidget {
                 Expanded(
                   child: Text(
                     title,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
@@ -675,8 +684,17 @@ class UserProfileContent extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 50,
-                  backgroundImage: photoUrl != null ? NetworkImage(photoUrl!) : null,
-                  child: photoUrl == null ? Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U', style: const TextStyle(fontSize: 32)) : null,
+                  backgroundImage: photoUrl != null
+                      ? NetworkImage(photoUrl!)
+                      : null,
+                  child: photoUrl == null
+                      ? Text(
+                          displayName.isNotEmpty
+                              ? displayName[0].toUpperCase()
+                              : 'U',
+                          style: const TextStyle(fontSize: 32),
+                        )
+                      : null,
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -688,10 +706,7 @@ class UserProfileContent extends StatelessWidget {
                 ),
                 Text(
                   email,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
                 ),
               ],
             ),
@@ -702,10 +717,7 @@ class UserProfileContent extends StatelessWidget {
           // Profile Information
           const Text(
             'Personal Information',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
 
@@ -718,30 +730,24 @@ class UserProfileContent extends StatelessWidget {
           // Settings Section
           const Text(
             'Settings',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
 
-          _buildSettingsOption(
-            context,
-            'Edit Profile',
-            Icons.edit,
-            () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Edit profile feature coming soon')),
-              );
-            },
-          ),
+          _buildSettingsOption(context, 'Edit Profile', Icons.edit, () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Edit profile feature coming soon')),
+            );
+          }),
           _buildSettingsOption(
             context,
             'Privacy Settings',
             Icons.privacy_tip,
             () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Privacy settings feature coming soon')),
+                const SnackBar(
+                  content: Text('Privacy settings feature coming soon'),
+                ),
               );
             },
           ),
@@ -751,7 +757,9 @@ class UserProfileContent extends StatelessWidget {
             Icons.notifications,
             () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Notification settings feature coming soon')),
+                const SnackBar(
+                  content: Text('Notification settings feature coming soon'),
+                ),
               );
             },
           ),
@@ -772,7 +780,12 @@ class UserProfileContent extends StatelessWidget {
     );
   }
 
-  Widget _buildSettingsOption(BuildContext context, String title, IconData icon, VoidCallback onTap) {
+  Widget _buildSettingsOption(
+    BuildContext context,
+    String title,
+    IconData icon,
+    VoidCallback onTap,
+  ) {
     return Card(
       elevation: 1,
       margin: const EdgeInsets.only(bottom: 8),
