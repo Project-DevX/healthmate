@@ -28,12 +28,18 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
   DateTime? _dateOfBirth;
   String? _selectedGender;
   bool _isLoading = false;
+  bool _acceptedTerms = false;
   File? _governmentIdFile;
   File? _medicalLicenseFile;
   String? _governmentIdFileName;
   String? _medicalLicenseFileName;
 
-  final List<String> _genderOptions = ['Male', 'Female', 'Other', 'Prefer not to say'];
+  final List<String> _genderOptions = [
+    'Male',
+    'Female',
+    'Other',
+    'Prefer not to say',
+  ];
 
   @override
   void dispose() {
@@ -52,7 +58,8 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
   int _calculateAge(DateTime birthDate) {
     final DateTime today = DateTime.now();
     int age = today.year - birthDate.year;
-    if (today.month < birthDate.month || (today.month == birthDate.month && today.day < birthDate.day)) {
+    if (today.month < birthDate.month ||
+        (today.month == birthDate.month && today.day < birthDate.day)) {
       age--;
     }
     return age;
@@ -98,9 +105,9 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error picking file: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error picking file: $e')));
     }
   }
 
@@ -118,22 +125,22 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error picking file: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error picking file: $e')));
     }
   }
 
   Future<String?> _uploadFile(File file, String fileName, String folder) async {
     try {
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child('doctor_documents/$folder/$fileName');
-      
+      final storageRef = FirebaseStorage.instance.ref().child(
+        'doctor_documents/$folder/$fileName',
+      );
+
       final uploadTask = storageRef.putFile(file);
       final snapshot = await uploadTask;
       final downloadUrl = await snapshot.ref.getDownloadURL();
-      
+
       return downloadUrl;
     } catch (e) {
       throw Exception('Failed to upload file: $e');
@@ -151,20 +158,30 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
       return;
     }
     if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passwords do not match')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
       return;
     }
     if (_governmentIdFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please upload your government-issued ID')),
+        const SnackBar(
+          content: Text('Please upload your government-issued ID'),
+        ),
       );
       return;
     }
     if (_medicalLicenseFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please upload your medical license')),
+      );
+      return;
+    }
+    if (!_acceptedTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You must accept the Terms & Conditions to register.'),
+        ),
       );
       return;
     }
@@ -175,10 +192,11 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
 
     try {
       // Create user with email and password
-      final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
+      final userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
 
       // Upload files
       String? governmentIdUrl;
@@ -204,23 +222,27 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
       final int age = _calculateAge(_dateOfBirth!);
 
       // Add user details to Firestore
-      await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
-        'fullName': _fullNameController.text.trim(),
-        'email': _emailController.text.trim(),
-        'dateOfBirth': Timestamp.fromDate(_dateOfBirth!),
-        'age': age,
-        'gender': _selectedGender,
-        'phone': _phoneController.text.trim(),
-        'specialization': _specializationController.text.trim(),
-        'licenseNumber': _licenseController.text.trim(),
-        'experienceYears': int.tryParse(_experienceController.text.trim()) ?? 0,
-        'affiliation': _affiliationController.text.trim(),
-        'governmentIdUrl': governmentIdUrl,
-        'medicalLicenseUrl': medicalLicenseUrl,
-        'userType': 'doctor',
-        'createdAt': FieldValue.serverTimestamp(),
-        'lastLogin': FieldValue.serverTimestamp(),
-      });
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .set({
+            'fullName': _fullNameController.text.trim(),
+            'email': _emailController.text.trim(),
+            'dateOfBirth': Timestamp.fromDate(_dateOfBirth!),
+            'age': age,
+            'gender': _selectedGender,
+            'phone': _phoneController.text.trim(),
+            'specialization': _specializationController.text.trim(),
+            'licenseNumber': _licenseController.text.trim(),
+            'experienceYears':
+                int.tryParse(_experienceController.text.trim()) ?? 0,
+            'affiliation': _affiliationController.text.trim(),
+            'governmentIdUrl': governmentIdUrl,
+            'medicalLicenseUrl': medicalLicenseUrl,
+            'userType': 'doctor',
+            'createdAt': FieldValue.serverTimestamp(),
+            'lastLogin': FieldValue.serverTimestamp(),
+          });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -238,15 +260,15 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
         errorMessage = 'Please enter a valid email address';
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMessage)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errorMessage)));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
       }
     } finally {
       if (mounted) {
@@ -260,9 +282,7 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Doctor Registration'),
-      ),
+      appBar: AppBar(title: const Text('Doctor Registration')),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -309,50 +329,10 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
                     if (value == null || value.isEmpty) {
                       return 'Please enter an email address';
                     }
-                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                    if (!RegExp(
+                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                    ).hasMatch(value)) {
                       return 'Please enter a valid email address';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Password field
-                TextFormField(
-                  controller: _passwordController,
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock),
-                  ),
-                  obscureText: true,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter a password';
-                    }
-                    if (value.length < 6) {
-                      return 'Password must be at least 6 characters';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Confirm Password field
-                TextFormField(
-                  controller: _confirmPasswordController,
-                  decoration: const InputDecoration(
-                    labelText: 'Confirm Password',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock_outline),
-                  ),
-                  obscureText: true,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please confirm your password';
-                    }
-                    if (value != _passwordController.text) {
-                      return 'Passwords do not match';
                     }
                     return null;
                   },
@@ -518,7 +498,10 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
                       children: [
                         const Text(
                           'Government-Issued ID',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         const Text(
@@ -529,7 +512,10 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
                         if (_governmentIdFileName != null)
                           Text(
                             'Selected: $_governmentIdFileName',
-                            style: const TextStyle(fontSize: 12, color: Colors.green),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.green,
+                            ),
                           ),
                         const SizedBox(height: 8),
                         SizedBox(
@@ -559,7 +545,10 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
                       children: [
                         const Text(
                           'Medical License',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         const Text(
@@ -570,7 +559,10 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
                         if (_medicalLicenseFileName != null)
                           Text(
                             'Selected: $_medicalLicenseFileName',
-                            style: const TextStyle(fontSize: 12, color: Colors.green),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.green,
+                            ),
                           ),
                         const SizedBox(height: 8),
                         SizedBox(
@@ -590,6 +582,44 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
+
+                // Password fields (move here)
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Please enter a password'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Confirm Password',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Please confirm your password'
+                      : null,
+                ),
+                const SizedBox(height: 24),
+
+                // Accept Terms & Conditions
+                CheckboxListTile(
+                  value: _acceptedTerms,
+                  onChanged: (value) {
+                    setState(() {
+                      _acceptedTerms = value ?? false;
+                    });
+                  },
+                  title: const Text('I accept the Terms & Conditions'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
 
                 // Register button
                 SizedBox(

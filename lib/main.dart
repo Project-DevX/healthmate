@@ -6,6 +6,7 @@ import 'register.dart';
 import 'patientDashboard.dart'; // Import the patient dashboard
 import 'auth_wrapper.dart';
 import 'doctorReg.dart';
+import 'caregiverReg.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,7 +41,13 @@ class MyApp extends StatelessWidget {
         } else if (settings.name == '/patientDashboard') {
           return MaterialPageRoute(builder: (_) => const PatientDashboard());
         } else if (settings.name == '/doctorRegister') {
-          return MaterialPageRoute(builder: (_) => const DoctorRegistrationPage());
+          return MaterialPageRoute(
+            builder: (_) => const DoctorRegistrationPage(),
+          );
+        } else if (settings.name == '/caregiverRegister') {
+          return MaterialPageRoute(
+            builder: (_) => const CaregiverRegistrationPage(),
+          );
         }
         // Handle unknown routes
         return MaterialPageRoute(builder: (_) => const AuthWrapper());
@@ -53,6 +60,7 @@ class MyApp extends StatelessWidget {
         '/register': (context) => const RegisterPage(),
         '/patientDashboard': (context) => const PatientDashboard(),
         '/doctorRegister': (context) => const DoctorRegistrationPage(),
+        '/caregiverRegister': (context) => const CaregiverRegistrationPage(),
       },
     );
   }

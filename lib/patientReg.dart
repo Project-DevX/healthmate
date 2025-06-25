@@ -7,7 +7,8 @@ class PatientRegistrationPage extends StatefulWidget {
   const PatientRegistrationPage({super.key});
 
   @override
-  State<PatientRegistrationPage> createState() => _PatientRegistrationPageState();
+  State<PatientRegistrationPage> createState() =>
+      _PatientRegistrationPageState();
 }
 
 class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
@@ -18,13 +19,19 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _phoneController = TextEditingController();
-  
+
   DateTime? _dateOfBirth;
   String? _selectedGender;
   bool _isLoading = false;
-  
+  bool _acceptedTerms = false;
+
   // List of gender options
-  final List<String> _genderOptions = ['Male', 'Female', 'Other', 'Prefer not to say'];
+  final List<String> _genderOptions = [
+    'Male',
+    'Female',
+    'Other',
+    'Prefer not to say',
+  ];
 
   @override
   void dispose() {
@@ -41,17 +48,18 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
   int _calculateAge(DateTime birthDate) {
     final DateTime today = DateTime.now();
     int age = today.year - birthDate.year;
-    
+
     // Adjust age if birthday hasn't occurred yet this year
     final int birthMonth = birthDate.month;
     final int birthDay = birthDate.day;
     final int currentMonth = today.month;
     final int currentDay = today.day;
-    
-    if (currentMonth < birthMonth || (currentMonth == birthMonth && currentDay < birthDay)) {
+
+    if (currentMonth < birthMonth ||
+        (currentMonth == birthMonth && currentDay < birthDay)) {
       age--;
     }
-    
+
     return age;
   }
 
@@ -75,7 +83,7 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
         );
       },
     );
-    
+
     if (picked != null && picked != _dateOfBirth) {
       setState(() {
         _dateOfBirth = picked;
@@ -89,7 +97,7 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-    
+
     // Check if date of birth is selected
     if (_dateOfBirth == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -97,55 +105,68 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
       );
       return;
     }
-    
+
     // Check if passwords match
     if (_passwordController.text != _confirmPasswordController.text) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
+      return;
+    }
+
+    if (!_acceptedTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passwords do not match')),
+        const SnackBar(
+          content: Text('You must accept the Terms & Conditions to register.'),
+        ),
       );
       return;
     }
-    
+
     setState(() {
       _isLoading = true;
     });
-    
+
     try {
       // Create user with email and password
-      final userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-      
+      final userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
+
       // Calculate age from date of birth
       final int age = _calculateAge(_dateOfBirth!);
-      
+
       // Add user details to Firestore
-      await FirebaseFirestore.instance.collection('users').doc(userCredential.user!.uid).set({
-        'firstName': _firstNameController.text.trim(),
-        'lastName': _lastNameController.text.trim(),
-        'email': _emailController.text.trim(),
-        'dateOfBirth': Timestamp.fromDate(_dateOfBirth!),
-        'age': age,
-        'gender': _selectedGender,
-        'phone': _phoneController.text.trim(),
-        'userType': 'patient',
-        'createdAt': FieldValue.serverTimestamp(),
-        'lastLogin': FieldValue.serverTimestamp(),
-      });
-      
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .set({
+            'firstName': _firstNameController.text.trim(),
+            'lastName': _lastNameController.text.trim(),
+            'email': _emailController.text.trim(),
+            'dateOfBirth': Timestamp.fromDate(_dateOfBirth!),
+            'age': age,
+            'gender': _selectedGender,
+            'phone': _phoneController.text.trim(),
+            'userType': 'patient',
+            'createdAt': FieldValue.serverTimestamp(),
+            'lastLogin': FieldValue.serverTimestamp(),
+          });
+
       if (mounted) {
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Registration successful!')),
         );
-        
+
         // Navigate to home page after successful registration
         Navigator.pushReplacementNamed(context, '/home');
       }
     } on FirebaseAuthException catch (e) {
       String errorMessage = 'Registration failed';
-      
+
       if (e.code == 'weak-password') {
         errorMessage = 'The password provided is too weak';
       } else if (e.code == 'email-already-in-use') {
@@ -153,17 +174,17 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
       } else if (e.code == 'invalid-email') {
         errorMessage = 'Please enter a valid email address';
       }
-      
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(errorMessage)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errorMessage)));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
       }
     } finally {
       if (mounted) {
@@ -177,9 +198,7 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Patient Registration'),
-      ),
+      appBar: AppBar(title: const Text('Patient Registration')),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -194,7 +213,7 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),
-                
+
                 // First Name field
                 TextFormField(
                   controller: _firstNameController,
@@ -212,7 +231,7 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
                   },
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Last Name field
                 TextFormField(
                   controller: _lastNameController,
@@ -230,7 +249,7 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
                   },
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Email field
                 TextFormField(
                   controller: _emailController,
@@ -244,56 +263,16 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
                     if (value == null || value.isEmpty) {
                       return 'Please enter an email address';
                     }
-                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                    if (!RegExp(
+                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                    ).hasMatch(value)) {
                       return 'Please enter a valid email address';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 16),
-                
-                // Password field
-                TextFormField(
-                  controller: _passwordController,
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock),
-                  ),
-                  obscureText: true,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter a password';
-                    }
-                    if (value.length < 6) {
-                      return 'Password must be at least 6 characters';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                
-                // Confirm Password field
-                TextFormField(
-                  controller: _confirmPasswordController,
-                  decoration: const InputDecoration(
-                    labelText: 'Confirm Password',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock_outline),
-                  ),
-                  obscureText: true,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please confirm your password';
-                    }
-                    if (value != _passwordController.text) {
-                      return 'Passwords do not match';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                
+
                 // Date of Birth field
                 InkWell(
                   onTap: () => _selectDateOfBirth(context),
@@ -323,7 +302,7 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Gender dropdown
                 DropdownButtonFormField<String>(
                   value: _selectedGender,
@@ -351,7 +330,7 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
                   },
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Phone field
                 TextFormField(
                   controller: _phoneController,
@@ -369,7 +348,45 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
                   },
                 ),
                 const SizedBox(height: 24),
-                
+
+                // Password fields (move here)
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Please enter a password'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Confirm Password',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Please confirm your password'
+                      : null,
+                ),
+                const SizedBox(height: 24),
+
+                // Accept Terms & Conditions checkbox
+                CheckboxListTile(
+                  value: _acceptedTerms,
+                  onChanged: (value) {
+                    setState(() {
+                      _acceptedTerms = value ?? false;
+                    });
+                  },
+                  title: const Text('I accept the Terms & Conditions'),
+                  controlAffinity: ListTileControlAffinity.leading,
+                ),
+
                 // Register button
                 SizedBox(
                   height: 50,
@@ -393,7 +410,7 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Back to login
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,

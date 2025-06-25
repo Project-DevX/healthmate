@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'patientReg.dart';
 import 'doctorReg.dart';
+import 'caregiverReg.dart';
 
 class RegisterPage extends StatelessWidget {
   const RegisterPage({super.key});
@@ -20,6 +21,11 @@ class RegisterPage extends StatelessWidget {
         );
         break;
       case 'Caregiver':
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const CaregiverRegistrationPage()),
+        );
+        break;
       case 'Hospital':
         // TODO: Navigate to other registration pages when implemented
         ScaffoldMessenger.of(context).showSnackBar(
