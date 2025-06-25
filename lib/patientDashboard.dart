@@ -42,7 +42,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
           setState(() {
             userData = userDoc.data();
             userData!['uid'] = user.uid;
-            _isLoading = false;
+            _isLoading = false; // Set loading to false here
           });
         } else {
           setState(() => _isLoading = false);
@@ -263,7 +263,9 @@ class _PatientDashboardState extends State<PatientDashboard> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : userData == null
-          ? const Center(child: Text('Unable to load user data'))
+
+          ? const Center(child: Text('No user data available'))
+
           : _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
