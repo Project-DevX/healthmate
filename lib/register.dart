@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'patientReg.dart';
 import 'doctorReg.dart';
 import 'caregiverReg.dart';
+import 'hospitalReg.dart';
 
 class RegisterPage extends StatelessWidget {
   const RegisterPage({super.key});
@@ -10,26 +11,34 @@ class RegisterPage extends StatelessWidget {
     switch (role) {
       case 'Patient':
         Navigator.push(
-          context, 
-          MaterialPageRoute(builder: (context) => const PatientRegistrationPage()),
+          context,
+          MaterialPageRoute(
+            builder: (context) => const PatientRegistrationPage(),
+          ),
         );
         break;
       case 'Doctor':
         Navigator.push(
-          context, 
-          MaterialPageRoute(builder: (context) => const DoctorRegistrationPage()),
+          context,
+          MaterialPageRoute(
+            builder: (context) => const DoctorRegistrationPage(),
+          ),
         );
         break;
       case 'Caregiver':
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const CaregiverRegistrationPage()),
+          MaterialPageRoute(
+            builder: (context) => const CaregiverRegistrationPage(),
+          ),
         );
         break;
-      case 'Hospital':
-        // TODO: Navigate to other registration pages when implemented
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$role registration coming soon')),
+      case 'Hospital/Lab/Pharmacy':
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const HospitalRegistrationPage(),
+          ),
         );
         break;
     }
@@ -51,7 +60,11 @@ class RegisterPage extends StatelessWidget {
               const SizedBox(height: 20),
               _roleButton(context, 'Caregiver', Icons.volunteer_activism),
               const SizedBox(height: 20),
-              _roleButton(context, 'Hospital', Icons.local_hospital),
+              _roleButton(
+                context,
+                'Hospital/Lab/Pharmacy',
+                Icons.local_hospital,
+              ),
             ],
           ),
         ),

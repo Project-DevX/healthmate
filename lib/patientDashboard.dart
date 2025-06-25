@@ -263,9 +263,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : userData == null
-
           ? const Center(child: Text('No user data available'))
-
           : _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
