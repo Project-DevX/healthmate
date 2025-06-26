@@ -1,122 +1,157 @@
-import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as path;
+import 'dart:typed_data';
+import 'dart:io' as io;
 
 class DocumentService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Upload a document to Firebase Storage and save reference to Firestore
-  Future<bool> uploadDocument(BuildContext context, String userId) async {
+  Future<void> uploadDocument(BuildContext context, String userId) async {
     try {
-      // 1. Pick file using file_picker
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
-      );
-
-      if (result == null || result.files.isEmpty) {
-        // User canceled the picker
-        return false;
-      }
-
-      final file = result.files.first;
-      
       // Show loading indicator
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Uploading document...')),
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
       );
 
-      // 2. Process file
-      late File fileToUpload;
-      String fileName = file.name;
-      
-      if (file.path != null) {
-        fileToUpload = File(file.path!);
-      } else {
-        // Handle web platform or path issue
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+        allowMultiple: false,
+        withData: kIsWeb, // Important: Get file bytes for web
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final file = result.files.first;
+
+        // Validate file size (max 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+          Navigator.pop(context); // Remove loading indicator
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('File size should be less than 10MB')),
+          );
+          return;
+        }
+
+        String fileName = file.name;
+        String fileExtension = fileName.split('.').last.toLowerCase();
+
+        // Generate unique filename
+        String uniqueFileName =
+            '${DateTime.now().millisecondsSinceEpoch}_$fileName';
+
+        // Create reference to Firebase Storage
+        Reference ref = _storage
+            .ref()
+            .child('medical_documents')
+            .child(userId)
+            .child(uniqueFileName);
+
+        UploadTask uploadTask;
+
+        if (kIsWeb) {
+          // Web upload using bytes
+          if (file.bytes != null) {
+            uploadTask = ref.putData(
+              file.bytes!,
+              SettableMetadata(
+                contentType: _getContentType(fileExtension),
+                customMetadata: {
+                  'uploadedBy': userId,
+                  'originalName': fileName,
+                },
+              ),
+            );
+          } else {
+            Navigator.pop(context);
+            throw Exception('Failed to read file data');
+          }
+        } else {
+          // Mobile upload using file path
+          if (file.path != null) {
+            // Use dart:io File directly since we're not on web
+            uploadTask = ref.putFile(
+              io.File(file.path!),
+              SettableMetadata(
+                contentType: _getContentType(fileExtension),
+                customMetadata: {
+                  'uploadedBy': userId,
+                  'originalName': fileName,
+                },
+              ),
+            );
+          } else {
+            Navigator.pop(context);
+            throw Exception('File path not available');
+          }
+        }
+
+        // Monitor upload progress
+        uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+          double progress = snapshot.bytesTransferred / snapshot.totalBytes;
+          print('Upload progress: ${(progress * 100).toStringAsFixed(2)}%');
+        });
+
+        // Wait for upload completion
+        TaskSnapshot snapshot = await uploadTask;
+        String downloadUrl = await snapshot.ref.getDownloadURL();
+
+        // Save document metadata to Firestore
+        await _firestore
+            .collection('users')
+            .doc(userId)
+            .collection('documents')
+            .add({
+              'fileName': fileName,
+              'fileSize': file.size,
+              'fileType': fileExtension,
+              'downloadUrl': downloadUrl,
+              'uploadDate': FieldValue.serverTimestamp(),
+              'storagePath': ref.fullPath,
+            });
+
+        Navigator.pop(context); // Remove loading indicator
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Unable to process file')),
+          SnackBar(
+            content: Text('$fileName uploaded successfully!'),
+            backgroundColor: Colors.green,
+          ),
         );
-        return false;
+      } else {
+        Navigator.pop(context); // Remove loading indicator
       }
+    } catch (e) {
+      Navigator.pop(context); // Remove loading indicator
+      print('Error uploading document: $e');
 
-      // 3. Generate a unique storage path
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileExtension = path.extension(fileName);
-      final storagePath = 'documents/$userId/${timestamp}_$fileName';
-
-      // 4. Upload to Firebase Storage
-      final uploadTask = _storage.ref(storagePath).putFile(
-        fileToUpload,
-        SettableMetadata(
-          contentType: _getContentType(fileExtension),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Upload failed: ${e.toString()}'),
+          backgroundColor: Colors.red,
         ),
       );
-
-      // 5. Monitor upload progress (optional)
-      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-        final progress = snapshot.bytesTransferred / snapshot.totalBytes;
-        // Could update UI with progress if needed
-        print('Upload progress: ${(progress * 100).toStringAsFixed(2)}%');
-      });
-
-      // 6. Wait for upload to complete
-      final snapshot = await uploadTask;
-
-      // 7. Get download URL
-      final downloadUrl = await snapshot.ref.getDownloadURL();
-
-      // 8. Save document reference to Firestore
-      final docData = {
-        'userId': userId,
-        'fileName': fileName,
-        'fileType': fileExtension.replaceFirst('.', ''),
-        'fileSize': file.size,
-        'uploadDate': FieldValue.serverTimestamp(),
-        'downloadUrl': downloadUrl,
-        'storagePath': storagePath,
-      };
-
-      // Save to documents collection with a reference to user
-      await _firestore.collection('documents').add(docData);
-
-      // Also save reference in user's documents subcollection for easy querying
-      await _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('documents')
-          .add(docData);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Document uploaded successfully')),
-      );
-      return true;
-    } catch (e) {
-      print('Error uploading document: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error uploading document: ${e.toString()}')),
-      );
-      return false;
     }
   }
 
-  // Get content type based on file extension
   String _getContentType(String extension) {
     switch (extension.toLowerCase()) {
-      case '.pdf':
+      case 'pdf':
         return 'application/pdf';
-      case '.doc':
-      case '.docx':
-        return 'application/msword';
-      case '.jpg':
-      case '.jpeg':
+      case 'jpg':
+      case 'jpeg':
         return 'image/jpeg';
-      case '.png':
+      case 'png':
         return 'image/png';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
       default:
         return 'application/octet-stream';
     }
@@ -153,10 +188,10 @@ class DocumentService {
           .where('storagePath', isEqualTo: document.storagePath)
           .get()
           .then((snapshot) {
-        for (var doc in snapshot.docs) {
-          doc.reference.delete();
-        }
-      });
+            for (var doc in snapshot.docs) {
+              doc.reference.delete();
+            }
+          });
 
       // 3. Delete from user's documents subcollection
       await _firestore
@@ -178,15 +213,16 @@ class DocumentService {
     try {
       final documents = await getUserDocuments(userId);
       Map<String, String> contents = {};
-      
+
       for (var doc in documents) {
         // Store document metadata in a structured format
-        contents[doc.fileName] = 'Type: ${doc.fileType}, Size: ${_formatFileSize(doc.fileSize)}, Date: ${_formatDate(doc.uploadDate)}';
-        
+        contents[doc.fileName] =
+            'Type: ${doc.fileType}, Size: ${_formatFileSize(doc.fileSize)}, Date: ${_formatDate(doc.uploadDate)}';
+
         // For real implementation, you would extract text content here
         // This would require additional processing based on file type
       }
-      
+
       return contents;
     } catch (e) {
       print('Error getting document contents: $e');
@@ -230,7 +266,7 @@ class DocumentInfo {
   factory DocumentInfo.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     final timestamp = data['uploadDate'] as Timestamp?;
-    
+
     return DocumentInfo(
       id: doc.id,
       userId: data['userId'] ?? '',
