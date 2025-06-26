@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
+import 'dart:math';
+import 'config/testing_config.dart';
 
 class CaregiverRegistrationPage extends StatefulWidget {
   const CaregiverRegistrationPage({super.key});
@@ -22,6 +25,8 @@ class _CaregiverRegistrationPageState extends State<CaregiverRegistrationPage> {
   final _phoneController = TextEditingController();
   final _nicController = TextEditingController();
   final _inviteCodeController = TextEditingController();
+  final _relationshipController = TextEditingController();
+  final _patientCodeController = TextEditingController();
 
   DateTime? _dateOfBirth;
   String? _selectedGender;
@@ -38,6 +43,36 @@ class _CaregiverRegistrationPageState extends State<CaregiverRegistrationPage> {
   ];
   final List<String> _typeOptions = ['Family', 'Professional', 'Nurse'];
 
+  final List<Map<String, dynamic>> _sampleCaregivers = [
+    {
+      'firstName': 'Mary',
+      'lastName': 'Johnson',
+      'email': 'mary.johnson@care.com',
+      'password': 'password123',
+      'relationship': 'Spouse',
+      'patientCode': 'PAT001',
+      'phone': '+1234567810',
+    },
+    {
+      'firstName': 'David',
+      'lastName': 'Miller',
+      'email': 'david.miller@family.com',
+      'password': 'password123',
+      'relationship': 'Son',
+      'patientCode': 'PAT002',
+      'phone': '+1234567811',
+    },
+    {
+      'firstName': 'Susan',
+      'lastName': 'Garcia',
+      'email': 'susan.garcia@caregiver.com',
+      'password': 'password123',
+      'relationship': 'Daughter',
+      'patientCode': 'PAT003',
+      'phone': '+1234567812',
+    },
+  ];
+
   @override
   void dispose() {
     _fullNameController.dispose();
@@ -47,6 +82,8 @@ class _CaregiverRegistrationPageState extends State<CaregiverRegistrationPage> {
     _phoneController.dispose();
     _nicController.dispose();
     _inviteCodeController.dispose();
+    _relationshipController.dispose();
+    _patientCodeController.dispose();
     super.dispose();
   }
 
@@ -123,13 +160,31 @@ class _CaregiverRegistrationPageState extends State<CaregiverRegistrationPage> {
       ).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
       return;
     }
-    if (_selectedType == 'Nurse' && _certFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please upload your certification or nursing license'),
-        ),
+
+    // Skip document upload requirements in testing mode
+    print(
+      '🧪 Caregiver Registration - Testing Mode: ${TestingConfig.isTestingMode}',
+    );
+    print(
+      '📁 Caregiver Registration - Skip Document Uploads: ${TestingConfig.skipDocumentUploads}',
+    );
+
+    if (!TestingConfig.skipDocumentUploads) {
+      print(
+        '📋 Caregiver Registration - Checking document upload requirements...',
       );
-      return;
+      if (_selectedType == 'Nurse' && _certFile == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please upload your certification or nursing license',
+            ),
+          ),
+        );
+        return;
+      }
+    } else {
+      print('🧪 CAREGIVER TESTING MODE: Skipping document upload requirements');
     }
     if (!_acceptedTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -175,7 +230,22 @@ class _CaregiverRegistrationPageState extends State<CaregiverRegistrationPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Registration successful!')),
         );
-        Navigator.pushReplacementNamed(context, '/home');
+
+        // In testing mode, redirect to login with pre-filled credentials
+        if (TestingConfig.isTestingMode) {
+          Navigator.pushReplacementNamed(
+            context,
+            '/login',
+            arguments: {
+              'email': _emailController.text.trim(),
+              'password': _passwordController.text,
+              'message':
+                  '🧪 Testing Mode: Caregiver credentials auto-filled from registration',
+            },
+          );
+        } else {
+          Navigator.pushReplacementNamed(context, '/home');
+        }
       }
     } on FirebaseAuthException catch (e) {
       String errorMessage = 'Registration failed';
@@ -203,6 +273,48 @@ class _CaregiverRegistrationPageState extends State<CaregiverRegistrationPage> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  void _fillSampleData() {
+    final random = Random();
+    final sampleData =
+        _sampleCaregivers[random.nextInt(_sampleCaregivers.length)];
+
+    setState(() {
+      _fullNameController.text =
+          '${sampleData['firstName']} ${sampleData['lastName']}';
+      _emailController.text = sampleData['email'];
+      _passwordController.text = sampleData['password'];
+      _confirmPasswordController.text = sampleData['password'];
+      _relationshipController.text = sampleData['relationship'];
+      _patientCodeController.text = sampleData['patientCode'];
+      _phoneController.text = sampleData['phone'];
+
+      // Set additional required fields
+      _dateOfBirth = DateTime(
+        1970 + random.nextInt(30),
+        1 + random.nextInt(12),
+        1 + random.nextInt(28),
+      );
+      _selectedGender = _genderOptions[random.nextInt(_genderOptions.length)];
+      _selectedType = _typeOptions[random.nextInt(_typeOptions.length)];
+      _nicController.text = 'NIC${1000000000 + random.nextInt(1000000000)}';
+      _inviteCodeController.text = 'INV${random.nextInt(10000)}';
+      _acceptedTerms = true;
+    });
+
+    // Show confirmation that testing mode is active
+    if (TestingConfig.skipDocumentUploads) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '🧪 Sample data filled! Testing mode: Document uploads bypassed',
+          ),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -328,6 +440,27 @@ class _CaregiverRegistrationPageState extends State<CaregiverRegistrationPage> {
                 ),
                 if (_selectedType == 'Nurse') ...[
                   const SizedBox(height: 16),
+                  if (TestingConfig.isTestingMode) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8),
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        border: Border.all(color: Colors.green),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        '✅ TESTING MODE: Nursing license upload is OPTIONAL',
+                        style: TextStyle(
+                          color: Colors.green,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
                   OutlinedButton.icon(
                     icon: const Icon(Icons.upload_file),
                     label: Text(
@@ -414,6 +547,19 @@ class _CaregiverRegistrationPageState extends State<CaregiverRegistrationPage> {
                     ),
                   ],
                 ),
+                // Debug button - only visible in debug mode
+                if (kDebugMode || TestingConfig.showDebugUI) ...[
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _fillSampleData,
+                    icon: const Icon(Icons.bug_report),
+                    label: const Text('Fill Sample Data (DEBUG)'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

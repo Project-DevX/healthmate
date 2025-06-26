@@ -4,6 +4,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'register.dart';
 import 'services/auth_service.dart';
+import 'config/testing_config.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -22,6 +23,46 @@ class _LoginPageState extends State<LoginPage> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    // Handle arguments passed from registration pages
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final arguments =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      if (arguments != null) {
+        print('🧪 Login page received arguments: $arguments');
+        final email = arguments['email'] as String?;
+        final password = arguments['password'] as String?;
+        final message = arguments['message'] as String?;
+
+        if (email != null) {
+          _emailController.text = email;
+          print('🧪 Email pre-filled: $email');
+        }
+        if (password != null) {
+          _passwordController.text = password;
+          print(
+            '🧪 Password pre-filled: ${password.replaceAll(RegExp(r'.'), '*')}',
+          );
+        }
+        if (message != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+
+        // Force UI rebuild to show pre-filled values
+        setState(() {});
+      }
+    });
+  }
+
   // Add this function to update last login time in Firestore
   Future<void> _updateLastLoginTime(String userId) async {
     try {
@@ -299,27 +340,145 @@ class _LoginPageState extends State<LoginPage> {
                 'Welcome to HealthMate',
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
+
+              // Testing mode indicator
+              if (TestingConfig.isTestingMode) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.2),
+                    border: Border.all(color: Colors.orange),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    '🧪 TESTING MODE: Credentials auto-filled from registration',
+                    style: TextStyle(
+                      color: Colors.orange,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 32),
               TextField(
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Email',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.email),
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color:
+                          TestingConfig.isTestingMode &&
+                              _emailController.text.isNotEmpty
+                          ? Colors.orange
+                          : Colors.grey,
+                      width:
+                          TestingConfig.isTestingMode &&
+                              _emailController.text.isNotEmpty
+                          ? 2
+                          : 1,
+                    ),
+                  ),
+                  prefixIcon: Icon(
+                    Icons.email,
+                    color:
+                        TestingConfig.isTestingMode &&
+                            _emailController.text.isNotEmpty
+                        ? Colors.orange
+                        : null,
+                  ),
+                  suffixIcon:
+                      TestingConfig.isTestingMode &&
+                          _emailController.text.isNotEmpty
+                      ? const Icon(
+                          Icons.auto_fix_high,
+                          color: Colors.orange,
+                          size: 20,
+                        )
+                      : null,
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _passwordController,
                 obscureText: true,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Password',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lock),
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide(
+                      color:
+                          TestingConfig.isTestingMode &&
+                              _passwordController.text.isNotEmpty
+                          ? Colors.orange
+                          : Colors.grey,
+                      width:
+                          TestingConfig.isTestingMode &&
+                              _passwordController.text.isNotEmpty
+                          ? 2
+                          : 1,
+                    ),
+                  ),
+                  prefixIcon: Icon(
+                    Icons.lock,
+                    color:
+                        TestingConfig.isTestingMode &&
+                            _passwordController.text.isNotEmpty
+                        ? Colors.orange
+                        : null,
+                  ),
+                  suffixIcon:
+                      TestingConfig.isTestingMode &&
+                          _passwordController.text.isNotEmpty
+                      ? const Icon(
+                          Icons.auto_fix_high,
+                          color: Colors.orange,
+                          size: 20,
+                        )
+                      : null,
                 ),
               ),
               const SizedBox(height: 16),
+
+              // Testing mode credential info
+              if (TestingConfig.isTestingMode &&
+                  _emailController.text.isNotEmpty &&
+                  _passwordController.text.isNotEmpty) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    border: Border.all(color: Colors.green),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle,
+                        color: Colors.green,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Ready to login with registration credentials!',
+                          style: TextStyle(
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
               Row(
                 children: [
                   Checkbox(
@@ -339,6 +498,12 @@ class _LoginPageState extends State<LoginPage> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _signInWithEmail,
                   style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        TestingConfig.isTestingMode &&
+                            _emailController.text.isNotEmpty &&
+                            _passwordController.text.isNotEmpty
+                        ? Colors.orange
+                        : null,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -350,7 +515,25 @@ class _LoginPageState extends State<LoginPage> {
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Text('Sign In', style: TextStyle(fontSize: 16)),
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (TestingConfig.isTestingMode &&
+                                _emailController.text.isNotEmpty &&
+                                _passwordController.text.isNotEmpty) ...[
+                              const Icon(Icons.auto_fix_high, size: 20),
+                              const SizedBox(width: 8),
+                            ],
+                            Text(
+                              TestingConfig.isTestingMode &&
+                                      _emailController.text.isNotEmpty &&
+                                      _passwordController.text.isNotEmpty
+                                  ? 'Sign In (Testing Mode)'
+                                  : 'Sign In',
+                              style: const TextStyle(fontSize: 16),
+                            ),
+                          ],
+                        ),
                 ),
               ),
               const SizedBox(height: 12),

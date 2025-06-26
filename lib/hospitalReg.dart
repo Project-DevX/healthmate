@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
+import 'dart:math';
+import 'config/testing_config.dart';
 
 class HospitalRegistrationPage extends StatefulWidget {
   const HospitalRegistrationPage({super.key});
@@ -22,13 +25,8 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
   final _registrationNumberController = TextEditingController();
-  String? _selectedType;
-  File? _certificateFile;
-  String? _certificateFileName;
   bool _isLoading = false;
   bool _acceptedTerms = false;
-
-  final List<String> _typeOptions = ['General', 'Specialty', 'Clinic', 'Other'];
 
   final _institutionNameController = TextEditingController();
   final _licenseNumberController = TextEditingController();
@@ -59,6 +57,51 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
   File? _pharmacyLicenseFile;
   String? _pharmacyLicenseFileName;
 
+  final List<Map<String, dynamic>> _sampleHospitals = [
+    {
+      'institutionName': 'City General Hospital',
+      'institutionType': 'Hospital',
+      'licenseNumber': 'HOSP001',
+      'officialEmail': 'admin@citygeneral.com',
+      'hotline': '+1234567820',
+      'address': '123 Medical Drive, Healthcare City, HC 12345',
+      'website': 'www.citygeneral.com',
+      'repName': 'Dr. John Smith',
+      'repDesignation': 'Chief Medical Officer',
+      'repContact': '+1234567821',
+      'repEmail': 'cmo@citygeneral.com',
+      'password': 'password123',
+    },
+    {
+      'institutionName': 'Metro Medical Laboratory',
+      'institutionType': 'Laboratory',
+      'licenseNumber': 'LAB002',
+      'officialEmail': 'info@metrolab.com',
+      'hotline': '+1234567822',
+      'address': '456 Lab Avenue, Metro City, MC 67890',
+      'website': 'www.metrolab.com',
+      'repName': 'Dr. Sarah Johnson',
+      'repDesignation': 'Laboratory Director',
+      'repContact': '+1234567823',
+      'repEmail': 'director@metrolab.com',
+      'password': 'password123',
+    },
+    {
+      'institutionName': 'HealthCare Pharmacy',
+      'institutionType': 'Pharmacy',
+      'licenseNumber': 'PHARM003',
+      'officialEmail': 'contact@healthcarepharm.com',
+      'hotline': '+1234567824',
+      'address': '789 Pharmacy Lane, Health Town, HT 54321',
+      'website': 'www.healthcarepharm.com',
+      'repName': 'PharmD Mike Wilson',
+      'repDesignation': 'Chief Pharmacist',
+      'repContact': '+1234567825',
+      'repEmail': 'chief@healthcarepharm.com',
+      'password': 'password123',
+    },
+  ];
+
   @override
   void dispose() {
     _hospitalNameController.dispose();
@@ -78,8 +121,6 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
     _repDesignationController.dispose();
     _repContactController.dispose();
     _repEmailController.dispose();
-    _certificateFile = null;
-    _certificateFileName = null;
     _businessCertFile = null;
     _businessCertFileName = null;
     _healthDeptApprovalFile = null;
@@ -88,25 +129,6 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
     _pharmacyLicenseFileName = null;
     _selectedInstitutionType = null;
     super.dispose();
-  }
-
-  Future<void> _pickCertificate() async {
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
-      );
-      if (result != null) {
-        setState(() {
-          _certificateFile = File(result.files.single.path!);
-          _certificateFileName = result.files.single.name;
-        });
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error picking file: $e')));
-    }
   }
 
   Future<String?> _uploadFile(File file, String fileName) async {
@@ -150,30 +172,42 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
       );
       return;
     }
-    if (_businessCertFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please upload your business registration certificate'),
-        ),
-      );
-      return;
-    }
-    if ((_selectedInstitutionType == 'Hospital' ||
-            _selectedInstitutionType == 'Laboratory') &&
-        _healthDeptApprovalFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please upload Health Department Approval'),
-        ),
-      );
-      return;
-    }
-    if (_selectedInstitutionType == 'Pharmacy' &&
-        _pharmacyLicenseFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please upload Pharmacy License')),
-      );
-      return;
+
+    // Skip document upload requirements in testing mode
+    print('🧪 Testing Mode Check: ${TestingConfig.isTestingMode}');
+    print('📁 Skip Document Uploads: ${TestingConfig.skipDocumentUploads}');
+
+    if (!TestingConfig.skipDocumentUploads) {
+      print('📋 Checking document upload requirements...');
+      if (_businessCertFile == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Please upload your business registration certificate',
+            ),
+          ),
+        );
+        return;
+      }
+      if ((_selectedInstitutionType == 'Hospital' ||
+              _selectedInstitutionType == 'Laboratory') &&
+          _healthDeptApprovalFile == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please upload Health Department Approval'),
+          ),
+        );
+        return;
+      }
+      if (_selectedInstitutionType == 'Pharmacy' &&
+          _pharmacyLicenseFile == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please upload Pharmacy License')),
+        );
+        return;
+      }
+    } else {
+      print('🧪 TESTING MODE: Skipping document upload requirements');
     }
     if (!_acceptedTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -239,7 +273,22 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Registration successful!')),
         );
-        Navigator.pushReplacementNamed(context, '/home');
+
+        // In testing mode, redirect to login with pre-filled credentials
+        if (TestingConfig.isTestingMode) {
+          Navigator.pushReplacementNamed(
+            context,
+            '/login',
+            arguments: {
+              'email': _officialEmailController.text.trim(),
+              'password': _passwordController.text,
+              'message':
+                  '🧪 Testing Mode: Credentials auto-filled from registration',
+            },
+          );
+        } else {
+          Navigator.pushReplacementNamed(context, '/home');
+        }
       }
     } on FirebaseAuthException catch (e) {
       String errorMessage = 'Registration failed';
@@ -270,6 +319,51 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
     }
   }
 
+  void _fillSampleData() {
+    final random = Random();
+    final sampleData =
+        _sampleHospitals[random.nextInt(_sampleHospitals.length)];
+
+    setState(() {
+      // Institution Details
+      _institutionNameController.text = sampleData['institutionName'];
+      _selectedInstitutionType = sampleData['institutionType'];
+      _licenseNumberController.text = sampleData['licenseNumber'];
+
+      // Contact Information
+      _officialEmailController.text = sampleData['officialEmail'];
+      _hotlineController.text = sampleData['hotline'];
+      _institutionAddressController.text = sampleData['address'];
+      _websiteController.text = sampleData['website'];
+
+      // Authorized Representative
+      _repNameController.text = sampleData['repName'];
+      _repDesignationController.text = sampleData['repDesignation'];
+      _repContactController.text = sampleData['repContact'];
+      _repEmailController.text = sampleData['repEmail'];
+
+      // Password
+      _passwordController.text = sampleData['password'];
+      _confirmPasswordController.text = sampleData['password'];
+
+      // Accept terms for testing
+      _acceptedTerms = true;
+    });
+
+    // Show confirmation that testing mode is active
+    if (TestingConfig.skipDocumentUploads) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '🧪 Sample data filled! Testing mode: Document uploads bypassed',
+          ),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -287,7 +381,52 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center,
                 ),
+
+                // Testing mode indicator
+                if (TestingConfig.isTestingMode) ...[
+                  Container(
+                    margin: const EdgeInsets.only(top: 8, bottom: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.orange),
+                    ),
+                    child: const Text(
+                      '🧪 TESTING MODE - Document uploads bypassed',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 24),
+
+                // Debug button for testing
+                if (kDebugMode || TestingConfig.showDebugUI) ...[
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: ElevatedButton.icon(
+                      onPressed: _fillSampleData,
+                      icon: const Icon(Icons.auto_fix_high),
+                      label: const Text('Fill Sample Data (DEBUG)'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
+
                 // Institution Details
                 TextFormField(
                   controller: _institutionNameController,
@@ -458,6 +597,42 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
                 ),
                 const SizedBox(height: 24),
                 // Document Uploads
+                if (TestingConfig.isTestingMode) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      border: Border.all(color: Colors.green),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      '✅ TESTING MODE: Document uploads are OPTIONAL and will be bypassed during registration',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Text(
+                    'Document Uploads (Optional in Testing Mode)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.orange,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ] else ...[
+                  Text(
+                    'Required Document Uploads',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 ElevatedButton.icon(
                   icon: const Icon(Icons.upload_file),
                   label: Text(

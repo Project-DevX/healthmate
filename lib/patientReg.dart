@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart'; // Add this package for date formatting
+import 'dart:math'; // Import this for random number generation
+import 'config/testing_config.dart';
 
 class PatientRegistrationPage extends StatefulWidget {
   const PatientRegistrationPage({super.key});
@@ -31,6 +34,37 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
     'Female',
     'Other',
     'Prefer not to say',
+  ];
+
+  // Add these sample data sets
+  final List<Map<String, dynamic>> _samplePatients = [
+    {
+      'firstName': 'John',
+      'lastName': 'Doe',
+      'email': 'john.doe@example.com',
+      'password': 'password123',
+      'dateOfBirth': DateTime(1990, 5, 15),
+      'gender': 'Male',
+      'phone': '+1234567890',
+    },
+    {
+      'firstName': 'Jane',
+      'lastName': 'Smith',
+      'email': 'jane.smith@example.com',
+      'password': 'password123',
+      'dateOfBirth': DateTime(1985, 8, 22),
+      'gender': 'Female',
+      'phone': '+1234567891',
+    },
+    {
+      'firstName': 'Mike',
+      'lastName': 'Johnson',
+      'email': 'mike.johnson@example.com',
+      'password': 'password123',
+      'dateOfBirth': DateTime(1992, 12, 3),
+      'gender': 'Male',
+      'phone': '+1234567892',
+    },
   ];
 
   @override
@@ -161,8 +195,22 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
           const SnackBar(content: Text('Registration successful!')),
         );
 
-        // Navigate to home page after successful registration
-        Navigator.pushReplacementNamed(context, '/home');
+        // In testing mode, redirect to login with pre-filled credentials
+        if (TestingConfig.isTestingMode) {
+          Navigator.pushReplacementNamed(
+            context,
+            '/login',
+            arguments: {
+              'email': _emailController.text.trim(),
+              'password': _passwordController.text,
+              'message':
+                  '🧪 Testing Mode: Patient credentials auto-filled from registration',
+            },
+          );
+        } else {
+          // Navigate to home page after successful registration
+          Navigator.pushReplacementNamed(context, '/home');
+        }
       }
     } on FirebaseAuthException catch (e) {
       String errorMessage = 'Registration failed';
@@ -195,6 +243,23 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
     }
   }
 
+  void _fillSampleData() {
+    final random = Random();
+    final sampleData = _samplePatients[random.nextInt(_samplePatients.length)];
+
+    setState(() {
+      _firstNameController.text = sampleData['firstName'];
+      _lastNameController.text = sampleData['lastName'];
+      _emailController.text = sampleData['email'];
+      _passwordController.text = sampleData['password'];
+      _confirmPasswordController.text = sampleData['password'];
+      _dateOfBirth = sampleData['dateOfBirth'];
+      _selectedGender = sampleData['gender'];
+      _phoneController.text = sampleData['phone'];
+      _acceptedTerms = true; // Accept terms for testing
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -213,6 +278,24 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),
+
+                // Debug button for testing
+                if (kDebugMode || TestingConfig.showDebugUI) ...[
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: ElevatedButton.icon(
+                      onPressed: _fillSampleData,
+                      icon: const Icon(Icons.auto_fix_high),
+                      label: const Text('Fill Sample Data (DEBUG)'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
 
                 // First Name field
                 TextFormField(
@@ -424,6 +507,20 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
                     ),
                   ],
                 ),
+
+                // Add this debug button
+                if (kDebugMode || TestingConfig.showDebugUI) ...[
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _fillSampleData,
+                    icon: const Icon(Icons.auto_fix_high),
+                    label: const Text('Fill Sample Data (DEBUG)'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
