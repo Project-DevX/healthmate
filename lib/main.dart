@@ -7,6 +7,7 @@ import 'patientDashboard.dart'; // Import the patient dashboard
 import 'auth_wrapper.dart';
 import 'doctorReg.dart';
 import 'caregiverReg.dart';
+import 'hospitalReg.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,6 +49,10 @@ class MyApp extends StatelessWidget {
           return MaterialPageRoute(
             builder: (_) => const CaregiverRegistrationPage(),
           );
+        } else if (settings.name == '/hospitalRegister') {
+          return MaterialPageRoute(
+            builder: (_) => const HospitalRegistrationPage(),
+          );
         }
         // Handle unknown routes
         return MaterialPageRoute(builder: (_) => const AuthWrapper());
@@ -61,6 +66,7 @@ class MyApp extends StatelessWidget {
         '/patientDashboard': (context) => const PatientDashboard(),
         '/doctorRegister': (context) => const DoctorRegistrationPage(),
         '/caregiverRegister': (context) => const CaregiverRegistrationPage(),
+        '/hospitalRegister': (context) => const HospitalRegistrationPage(),
       },
     );
   }
