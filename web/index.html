@@ -19,42 +19,97 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="HealthMate - Your Medical Records Manager">
+
+  <!-- iOS meta tags & icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="HealthMate">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Add the new meta tag -->
+  <meta name="mobile-web-app-capable" content="yes">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
   <title>HealthMate</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* Loading indicator styles */
+    .loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background-color: #f5f5f5;
+    }
+    .loading-text {
+      margin-top: 20px;
+      font-family: Arial, sans-serif;
+      color: #666;
+    }
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 2s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
-  <!-- Firebase SDKs -->
+  <!-- Loading indicator -->
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div class="loading-text">Loading HealthMate...</div>
+  </div>
+
+  <!-- Firebase SDKs - Use the latest version -->
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-storage-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-functions-compat.js"></script>
 
+  <!-- Firebase Configuration -->
   <script>
-    // Your Firebase config
-    var firebaseConfig = {
-      // Your config from Firebase Console
+    // Replace these with your actual Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyC...", // Your actual API key from Firebase Console
+      authDomain: "your-project.firebaseapp.com",
+      projectId: "your-project-id",
+      storageBucket: "your-project.appspot.com",
+      messagingSenderId: "123456789",
+      appId: "1:123456789:web:abcdef123456"
     };
+    
+    // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
   </script>
 
+  <!-- Flutter Web Initialization -->
+  <script src="flutter.js" defer></script>
   <script>
     window.addEventListener('load', function(ev) {
-      // Download main.dart.js
+      const loading = document.getElementById('loading');
+      
+      // Load the Flutter app
       _flutter.loader.loadEntrypoint({
         serviceWorker: {
-          serviceWorkerVersion: serviceWorkerVersion,
+          serviceWorkerVersion: serviceWorkerVersion, // This variable is auto-generated
         },
         onEntrypointLoaded: function(engineInitializer) {
           engineInitializer.initializeEngine().then(function(appRunner) {
+            if (loading) {
+              loading.style.display = 'none';
+            }
             appRunner.runApp();
           });
         }

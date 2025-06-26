@@ -4,7 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
-import 'dart:io' as io;
+// Conditional import for File class
+import 'dart:io' if (dart.library.html) 'dart:html' as io;
+import 'dart:io' if (dart.library.html) 'web_file_stub.dart';
 
 class DocumentService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -23,7 +25,7 @@ class DocumentService {
         type: FileType.custom,
         allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
         allowMultiple: false,
-        withData: kIsWeb, // Important: Get file bytes for web
+        withData: true, // Always get bytes for web compatibility
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -31,17 +33,24 @@ class DocumentService {
 
         // Validate file size (max 10MB)
         if (file.size > 10 * 1024 * 1024) {
-          Navigator.pop(context); // Remove loading indicator
+          Navigator.pop(context);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('File size should be less than 10MB')),
           );
           return;
         }
 
+        // Ensure we have file bytes
+        if (file.bytes == null) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to read file data')),
+          );
+          return;
+        }
+
         String fileName = file.name;
         String fileExtension = fileName.split('.').last.toLowerCase();
-
-        // Generate unique filename
         String uniqueFileName =
             '${DateTime.now().millisecondsSinceEpoch}_$fileName';
 
@@ -52,44 +61,14 @@ class DocumentService {
             .child(userId)
             .child(uniqueFileName);
 
-        UploadTask uploadTask;
-
-        if (kIsWeb) {
-          // Web upload using bytes
-          if (file.bytes != null) {
-            uploadTask = ref.putData(
-              file.bytes!,
-              SettableMetadata(
-                contentType: _getContentType(fileExtension),
-                customMetadata: {
-                  'uploadedBy': userId,
-                  'originalName': fileName,
-                },
-              ),
-            );
-          } else {
-            Navigator.pop(context);
-            throw Exception('Failed to read file data');
-          }
-        } else {
-          // Mobile upload using file path
-          if (file.path != null) {
-            // Use dart:io File directly since we're not on web
-            uploadTask = ref.putFile(
-              io.File(file.path!),
-              SettableMetadata(
-                contentType: _getContentType(fileExtension),
-                customMetadata: {
-                  'uploadedBy': userId,
-                  'originalName': fileName,
-                },
-              ),
-            );
-          } else {
-            Navigator.pop(context);
-            throw Exception('File path not available');
-          }
-        }
+        // Upload using bytes (works for both web and mobile)
+        UploadTask uploadTask = ref.putData(
+          file.bytes!,
+          SettableMetadata(
+            contentType: _getContentType(fileExtension),
+            customMetadata: {'uploadedBy': userId, 'originalName': fileName},
+          ),
+        );
 
         // Monitor upload progress
         uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
@@ -115,7 +94,7 @@ class DocumentService {
               'storagePath': ref.fullPath,
             });
 
-        Navigator.pop(context); // Remove loading indicator
+        Navigator.pop(context);
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -124,10 +103,10 @@ class DocumentService {
           ),
         );
       } else {
-        Navigator.pop(context); // Remove loading indicator
+        Navigator.pop(context);
       }
     } catch (e) {
-      Navigator.pop(context); // Remove loading indicator
+      Navigator.pop(context);
       print('Error uploading document: $e');
 
       ScaffoldMessenger.of(context).showSnackBar(
