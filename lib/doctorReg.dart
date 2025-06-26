@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
+import 'dart:math';
+import 'config/testing_config.dart';
 
 class DoctorRegistrationPage extends StatefulWidget {
   const DoctorRegistrationPage({super.key});
@@ -39,6 +42,42 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
     'Female',
     'Other',
     'Prefer not to say',
+  ];
+
+  final List<Map<String, dynamic>> _sampleDoctors = [
+    {
+      'firstName': 'Dr. Sarah',
+      'lastName': 'Wilson',
+      'email': 'dr.sarah.wilson@hospital.com',
+      'password': 'password123',
+      'specialization': 'Cardiology',
+      'licenseNumber': 'MD123456',
+      'experience': '10',
+      'hospital': 'City General Hospital',
+      'phone': '+1234567800',
+    },
+    {
+      'firstName': 'Dr. Robert',
+      'lastName': 'Brown',
+      'email': 'dr.robert.brown@clinic.com',
+      'password': 'password123',
+      'specialization': 'Neurology',
+      'licenseNumber': 'MD789012',
+      'experience': '15',
+      'hospital': 'Metro Medical Center',
+      'phone': '+1234567801',
+    },
+    {
+      'firstName': 'Dr. Lisa',
+      'lastName': 'Davis',
+      'email': 'dr.lisa.davis@medical.com',
+      'password': 'password123',
+      'specialization': 'Pediatrics',
+      'licenseNumber': 'MD345678',
+      'experience': '8',
+      'hospital': 'Children\'s Hospital',
+      'phone': '+1234567802',
+    },
   ];
 
   @override
@@ -163,19 +202,35 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
       ).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
       return;
     }
-    if (_governmentIdFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please upload your government-issued ID'),
-        ),
+
+    // Skip document upload requirements in testing mode
+    print(
+      '🧪 Doctor Registration - Testing Mode: ${TestingConfig.isTestingMode}',
+    );
+    print(
+      '📁 Doctor Registration - Skip Document Uploads: ${TestingConfig.skipDocumentUploads}',
+    );
+
+    if (!TestingConfig.skipDocumentUploads) {
+      print(
+        '📋 Doctor Registration - Checking document upload requirements...',
       );
-      return;
-    }
-    if (_medicalLicenseFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please upload your medical license')),
-      );
-      return;
+      if (_governmentIdFile == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please upload your government-issued ID'),
+          ),
+        );
+        return;
+      }
+      if (_medicalLicenseFile == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please upload your medical license')),
+        );
+        return;
+      }
+    } else {
+      print('🧪 DOCTOR TESTING MODE: Skipping document upload requirements');
     }
     if (!_acceptedTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -248,7 +303,22 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Registration successful!')),
         );
-        Navigator.pushReplacementNamed(context, '/home');
+
+        // In testing mode, redirect to login with pre-filled credentials
+        if (TestingConfig.isTestingMode) {
+          Navigator.pushReplacementNamed(
+            context,
+            '/login',
+            arguments: {
+              'email': _emailController.text.trim(),
+              'password': _passwordController.text,
+              'message':
+                  '🧪 Testing Mode: Doctor credentials auto-filled from registration',
+            },
+          );
+        } else {
+          Navigator.pushReplacementNamed(context, '/home');
+        }
       }
     } on FirebaseAuthException catch (e) {
       String errorMessage = 'Registration failed';
@@ -276,6 +346,46 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  void _fillSampleData() {
+    final random = Random();
+    final sampleData = _sampleDoctors[random.nextInt(_sampleDoctors.length)];
+
+    setState(() {
+      _fullNameController.text =
+          '${sampleData['firstName']} ${sampleData['lastName']}';
+      _emailController.text = sampleData['email'];
+      _passwordController.text = sampleData['password'];
+      _confirmPasswordController.text = sampleData['password'];
+      _specializationController.text = sampleData['specialization'];
+      _licenseController.text = sampleData['licenseNumber'];
+      _experienceController.text = sampleData['experience'];
+      _affiliationController.text = sampleData['hospital'];
+      _phoneController.text = sampleData['phone'];
+
+      // Set additional required fields
+      _dateOfBirth = DateTime(
+        1980 + random.nextInt(20),
+        1 + random.nextInt(12),
+        1 + random.nextInt(28),
+      );
+      _selectedGender = _genderOptions[random.nextInt(_genderOptions.length)];
+      _acceptedTerms = true;
+    });
+
+    // Show confirmation that testing mode is active
+    if (TestingConfig.skipDocumentUploads) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '🧪 Sample data filled! Testing mode: Document uploads bypassed',
+          ),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 3),
+        ),
+      );
     }
   }
 
@@ -489,6 +599,29 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
                 ),
                 const SizedBox(height: 24),
 
+                // Document Upload Section with Testing Mode Indicator
+                if (TestingConfig.isTestingMode) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      border: Border.all(color: Colors.green),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      '✅ TESTING MODE: Document uploads are OPTIONAL and will be bypassed during registration',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+
                 // Government ID Upload
                 Card(
                   child: Padding(
@@ -658,6 +791,26 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+
+                // Sample Data button
+                // Debug button - only visible in debug mode
+                if (kDebugMode || TestingConfig.showDebugUI) ...[
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _fillSampleData,
+                    icon: const Icon(Icons.bug_report),
+                    label: const Text('Fill Sample Data (DEBUG)'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
