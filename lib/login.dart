@@ -100,6 +100,8 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
 
     try {
+      print('🔐 Starting authentication for email: ${_emailController.text.trim()}');
+      
       // Sign in with email and password
       final userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(
@@ -107,11 +109,14 @@ class _LoginPageState extends State<LoginPage> {
             password: _passwordController.text,
           );
 
+      print('✅ Firebase authentication successful for user: ${userCredential.user?.uid}');
+
       // If sign-in is successful, update the last login time
       if (userCredential.user != null) {
         await _updateLastLoginTime(userCredential.user!.uid);
 
         // Check user type and navigate accordingly
+        print('📋 Fetching user data from Firestore...');
         final userDoc = await FirebaseFirestore.instance
             .collection('users')
             .doc(userCredential.user!.uid)
@@ -121,6 +126,9 @@ class _LoginPageState extends State<LoginPage> {
           if (userDoc.exists) {
             final userData = userDoc.data();
             final userType = userData?['userType'] as String? ?? 'patient';
+            
+            print('👤 User type found: $userType');
+            print('📄 User data: $userData');
 
             // Save login state if remember me is checked
             await _saveLoginState(
@@ -130,12 +138,18 @@ class _LoginPageState extends State<LoginPage> {
             );
 
             if (userType == 'patient') {
+              print('🏥 Navigating to patient dashboard...');
               Navigator.pushReplacementNamed(context, '/patientDashboard');
+            } else if (userType == 'doctor') {
+              print('👨‍⚕️ Navigating to doctor dashboard...');
+              Navigator.pushReplacementNamed(context, '/doctorDashboard');
             } else {
+              print('🏠 Navigating to home page...');
               // Default route for other user types
               Navigator.pushReplacementNamed(context, '/home');
             }
           } else {
+            print('⚠️ User document not found in Firestore, creating default...');
             // If user document doesn't exist, go to default home
             await _saveLoginState(
               userCredential.user!.uid,
@@ -147,6 +161,7 @@ class _LoginPageState extends State<LoginPage> {
         }
       }
     } on FirebaseAuthException catch (e) {
+      print('❌ Firebase Auth Exception: ${e.code} - ${e.message}');
       String errorMessage = 'Authentication failed';
 
       if (e.code == 'user-not-found') {
@@ -165,6 +180,7 @@ class _LoginPageState extends State<LoginPage> {
         ).showSnackBar(SnackBar(content: Text(errorMessage)));
       }
     } catch (e) {
+      print('❌ General authentication error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Sign-in error: ${e.toString()}')),

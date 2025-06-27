@@ -31,6 +31,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
           if (userType == 'patient') {
             Navigator.pushReplacementNamed(context, '/patientDashboard');
+          } else if (userType == 'doctor') {
+            Navigator.pushReplacementNamed(context, '/doctorDashboard');
           } else {
             Navigator.pushReplacementNamed(context, '/home');
           }
