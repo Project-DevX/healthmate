@@ -7,11 +7,15 @@
  * See a full list of supported triggers at https://firebase.google.com/docs/functions
  */
 
-const {onRequest} = require("firebase-functions/v2/https");
-const logger = require("firebase-functions/logger");
-const functions = require("firebase-functions");
+const {onCall} = require("firebase-functions/v2/https");
+const {setGlobalOptions} = require("firebase-functions/v2");
+const {HttpsError} = require("firebase-functions/v2/https"); // Move this to top
+const functions = require("firebase-functions"); // Add this import for config access
 const admin = require("firebase-admin");
 const {GoogleGenerativeAI} = require("@google/generative-ai");
+
+// Set global options
+setGlobalOptions({region: "us-central1"}); // Change to your preferred region
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -19,24 +23,46 @@ admin.initializeApp();
 /**
  * Analyze medical records using Gemini AI
  */
-exports.analyzeMedicalRecords = functions.https.onCall(
-    async (data, context) => {
+exports.analyzeMedicalRecords = onCall(
+    {cors: true}, // Enable CORS
+    async (request) => {
+      const {auth, data} = request;
+      
+      console.log('=== AUTHENTICATION DEBUG V2 ===');
+      console.log('Request data:', data);
+      console.log('Auth exists:', !!auth);
+      console.log('Auth UID:', auth?.uid);
+      console.log('Auth token exists:', !!auth?.token);
+      console.log('================================');
+
       // Verify user authentication
-      if (!context.auth) {
-        throw new functions.https.HttpsError(
+      if (!auth) {
+        console.error('No authentication context found');
+        throw new HttpsError(
             "unauthenticated",
             "User must be logged in",
         );
       }
 
-      const {userId} = data;
+      if (!auth.uid) {
+        console.error('No UID in authentication context');
+        throw new HttpsError(
+            "unauthenticated",
+            "Invalid authentication token",
+        );
+      }
+
+      // Use the authenticated user's ID from context
+      const userId = auth.uid;
+      
+      console.log('✅ Authenticated user ID:', userId);
 
       try {
-        // Get the API key from Firebase config
-        const geminiApiKey = functions.config().gemini.api_key;
+        // Get the API key from Firebase config (fix this line)
+        const geminiApiKey = functions.config().gemini?.api_key;
 
         if (!geminiApiKey) {
-          throw new functions.https.HttpsError(
+          throw new HttpsError(
               "failed-precondition",
               "API key not configured",
           );
@@ -136,7 +162,7 @@ points where appropriate.
         return {summary};
       } catch (error) {
         console.error("Error analyzing medical records:", error);
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
             "internal",
             "Failed to analyze medical records",
             error.message,
@@ -146,24 +172,28 @@ points where appropriate.
 );
 
 /**
- * Get cached medical analysis
+ * Get cached medical analysis - Fix this function to use v2 API
  */
-exports.getMedicalAnalysis = functions.https.onCall(
-    async (data, context) => {
-      if (!context.auth) {
-        throw new functions.https.HttpsError(
+exports.getMedicalAnalysis = onCall(
+    {cors: true}, // Add options for consistency
+    async (request) => {
+      const {auth, data} = request;
+      
+      if (!auth) {
+        throw new HttpsError(
             "unauthenticated",
             "User must be logged in",
         );
       }
 
-      const {userId} = data;
+      // Use authenticated user's ID from context
+      const userId = auth.uid;
 
       try {
         const db = admin.firestore();
         const analysisDoc = await db
             .collection("users")
-            .doc(userId)
+            .doc(userId) // Using authenticated user's ID
             .collection("ai_analysis")
             .doc("latest")
             .get();
@@ -180,7 +210,7 @@ exports.getMedicalAnalysis = functions.https.onCall(
         };
       } catch (error) {
         console.error("Error getting medical analysis:", error);
-        throw new functions.https.HttpsError(
+        throw new HttpsError(
             "internal",
             "Failed to get medical analysis",
         );

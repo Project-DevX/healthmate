@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 import '../services/gemini_service.dart';
 
 class MedicalSummaryScreen extends StatefulWidget {
@@ -14,23 +16,61 @@ class _MedicalSummaryScreenState extends State<MedicalSummaryScreen> {
   final GeminiService _geminiService = GeminiService();
   bool _isLoading = true;
   String _summary = '';
+  StreamSubscription<User?>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
+    _setupAuthListener();
     _loadSummary();
+  }
+
+  void _setupAuthListener() {
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((
+      User? user,
+    ) {
+      if (user == null) {
+        // User signed out, navigate back or show error
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadSummary() async {
     setState(() => _isLoading = true);
 
     try {
-      final summary = await _geminiService.analyzeMedicalRecords(widget.userId);
+      // Double-check authentication
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() {
+          _summary = 'Authentication error: User not logged in';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      print('🔍 Current user: ${user.uid}');
+      print('🔍 Widget userId: ${widget.userId}');
+      print('🔍 User email: ${user.email}');
+
+      // Use the authenticated user's ID
+      final summary = await _geminiService.analyzeMedicalRecords(user.uid);
+
       setState(() {
         _summary = summary;
         _isLoading = false;
       });
     } catch (e) {
+      print('❌ Error in _loadSummary: $e');
       setState(() {
         _summary = 'Error loading summary: $e';
         _isLoading = false;
