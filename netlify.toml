@@ -1,0 +1,31 @@
+[build]
+  # Directory to deploy
+  publish = "build/web"
+  
+  # Build command
+  command = "flutter build web --release"
+
+[[redirects]]
+  # Handle Flutter web routing
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[build.environment]
+  # Flutter web environment
+  FLUTTER_WEB = "true"
+
+[[headers]]
+  # Security headers for web app
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  # Cache static assets
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
