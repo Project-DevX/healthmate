@@ -95,25 +95,17 @@
   </script>
 
   <!-- Flutter Web Initialization -->
-  <script src="flutter.js" defer></script>
+  <script src="flutter_bootstrap.js" async></script>
   <script>
     window.addEventListener('load', function(ev) {
       const loading = document.getElementById('loading');
       
-      // Use the modern Flutter loader API with null service worker version
-      _flutter.loader.load({
-        serviceWorkerSettings: {
-          serviceWorkerVersion: null,
-        },
-        onEntrypointLoaded: function(engineInitializer) {
-          engineInitializer.initializeEngine().then(function(appRunner) {
-            if (loading) {
-              loading.style.display = 'none';
-            }
-            appRunner.runApp();
-          });
-        }
-      });
+      // Hide loading indicator once Flutter app loads
+      if (loading) {
+        setTimeout(() => {
+          loading.style.display = 'none';
+        }, 2000); // Give Flutter some time to initialize
+      }
     });
   </script>
 </body>
