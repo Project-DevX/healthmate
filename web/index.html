@@ -80,14 +80,14 @@
 
   <!-- Firebase Configuration -->
   <script>
-    // Replace these with your actual Firebase configuration
+    // Firebase configuration for HealthMate
     const firebaseConfig = {
-      apiKey: "AIzaSyC...", // Your actual API key from Firebase Console
-      authDomain: "your-project.firebaseapp.com",
-      projectId: "your-project-id",
-      storageBucket: "your-project.appspot.com",
-      messagingSenderId: "123456789",
-      appId: "1:123456789:web:abcdef123456"
+      apiKey: "AIzaSyDG4nFqiPhrgKampsN-XbU5Br7VGUyft70",
+      authDomain: "healthmate-devx.firebaseapp.com",
+      projectId: "healthmate-devx",
+      storageBucket: "healthmate-devx.firebasestorage.app",
+      messagingSenderId: "535481523181",
+      appId: "1:535481523181:web:8bf39d4eed8bfca88c65e4"
     };
     
     // Initialize Firebase
@@ -100,10 +100,10 @@
     window.addEventListener('load', function(ev) {
       const loading = document.getElementById('loading');
       
-      // Load the Flutter app
-      _flutter.loader.loadEntrypoint({
-        serviceWorker: {
-          serviceWorkerVersion: serviceWorkerVersion, // This variable is auto-generated
+      // Use the modern Flutter loader API with null service worker version
+      _flutter.loader.load({
+        serviceWorkerSettings: {
+          serviceWorkerVersion: null,
         },
         onEntrypointLoaded: function(engineInitializer) {
           engineInitializer.initializeEngine().then(function(appRunner) {

@@ -1,0 +1,64 @@
+[build]
+  # Directory to deploy
+  publish = "build/web"
+  
+  # Install Flutter and build from source
+  command = """
+    # Create cache directory
+    mkdir -p /opt/buildhome/cache
+    
+    # Check if Flutter is cached, if not install it
+    if [ ! -d "/opt/buildhome/cache/flutter" ]; then
+      echo "Installing Flutter..."
+      git clone https://github.com/flutter/flutter.git -b stable --depth 1 /opt/buildhome/cache/flutter
+    else
+      echo "Using cached Flutter installation"
+    fi
+    
+    # Add Flutter to PATH
+    export PATH="/opt/buildhome/cache/flutter/bin:$PATH"
+    
+    # Configure Flutter for web
+    flutter config --enable-web --no-analytics
+    
+    # Check Flutter installation
+    flutter doctor --verbose
+    
+    # Clean any previous builds
+    flutter clean
+    
+    # Get dependencies
+    flutter pub get
+    
+    # Build for web
+    flutter build web --release --verbose
+  """
+
+[[redirects]]
+  # Handle Flutter web routing
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[build.environment]
+  # Flutter web environment
+  FLUTTER_WEB = "true"
+  # Set Flutter channel for faster builds
+  FLUTTER_CHANNEL = "stable"
+  # Cache Flutter SDK
+  FLUTTER_ROOT = "/opt/buildhome/cache/flutter"
+
+[[headers]]
+  # Security headers for web app
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  # Cache static assets
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
