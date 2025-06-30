@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'register.dart';
 import 'services/auth_service.dart';
 import 'config/testing_config.dart';
@@ -18,11 +18,6 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _rememberMe = false;
-
-  // Firebase instances
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   @override
   void initState() {
@@ -199,158 +194,114 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  Future<UserCredential?> _signInWithGoogle(BuildContext context) async {
-    print("STEP 0: Starting Google Sign-In process");
-    try {
-      // Step 1: Initialize Google Sign In
-      print("STEP 1: Initializing Google Sign-In");
-      final GoogleSignIn googleSignIn = GoogleSignIn();
-      print("STEP 1: Completed - GoogleSignIn instance created");
-
-      // Step 2: Start the sign-in flow
-      print("STEP 2: Starting sign-in flow");
-      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      print(
-        "STEP 2: Result - ${googleUser != null ? 'User account obtained' : 'User cancelled sign-in'}",
-      );
-
-      if (googleUser == null) {
-        print("STEP 2: FAILED - User cancelled the sign-in process");
-        return null;
-      }
-
-      // Step 3: Get authentication tokens
-      print("STEP 3: Getting authentication tokens");
-      try {
-        final GoogleSignInAuthentication googleAuth =
-            await googleUser.authentication;
-        print("STEP 3: Completed - Authentication tokens received");
-
-        // Step 4: Create Firebase credential
-        print("STEP 4: Creating Firebase credential");
-        final AuthCredential credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
-          idToken: googleAuth.idToken,
-        );
-        print("STEP 4: Completed - Firebase credential created");
-
-        // Step 5: Sign in with Firebase
-        print("STEP 5: Starting Firebase sign-in");
-        try {
-          final UserCredential userCredential = await FirebaseAuth.instance
-              .signInWithCredential(credential);
-          print("STEP 5: Completed - Firebase sign-in successful");
-          return userCredential;
-        } catch (firebaseError) {
-          print("STEP 5: FAILED - Firebase sign-in error: $firebaseError");
-          print("STEP 5: Error type: ${firebaseError.runtimeType}");
-          rethrow;
-        }
-      } catch (authError) {
-        print(
-          "STEP 3: FAILED - Getting authentication tokens error: $authError",
-        );
-        print("STEP 3: Error type: ${authError.runtimeType}");
-        rethrow;
-      }
-    } catch (e) {
-      print("GENERAL FAILURE: Google Sign-In process failed with error: $e");
-      print("GENERAL FAILURE: Error type: ${e.runtimeType}");
-      print("GENERAL FAILURE: Stack trace: ${StackTrace.current}");
-      rethrow;
-    }
-  }
-
-  Future<void> signInWithGoogleWorkaround(BuildContext context) async {
+  // Clean Google Sign-in implementation
+  Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Just use Google Sign-In directly
+      print('🔐 Starting Google Sign-in process...');
+
+      // Initialize Google Sign-In
       final GoogleSignIn googleSignIn = GoogleSignIn();
+
+      // Start the sign-in flow
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
 
       if (googleUser == null) {
-        // User cancelled
+        print('🚫 User cancelled Google Sign-in');
         setState(() => _isLoading = false);
         return;
       }
 
-      // 2. Get basic profile info from Google
-      final Map<String, dynamic> userData = {
-        'email': googleUser.email,
-        'displayName': googleUser.displayName,
-        'id': googleUser.id,
-        'photoUrl': googleUser.photoUrl,
-      };
+      print('✅ Google account obtained: ${googleUser.email}');
 
-      // 3. Store user info in shared preferences for persistence
-      // (You'll need to add shared_preferences package)
-      // final prefs = await SharedPreferences.getInstance();
-      // await prefs.setString('user_email', userData['email']);
-      // await prefs.setString('user_name', userData['displayName'] ?? '');
+      // Get authentication details
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
 
-      // 4. Optional: Store in Firestore directly without Firebase Auth
-      try {
-        await FirebaseFirestore.instance
+      // Create a new credential
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // Sign in to Firebase with the Google credential
+      final UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithCredential(credential);
+
+      if (userCredential.user != null) {
+        print('🔥 Firebase authentication successful');
+
+        // Update last login time
+        await _updateLastLoginTime(userCredential.user!.uid);
+
+        // Check if user exists in Firestore, if not create them as a patient
+        final userDoc = await FirebaseFirestore.instance
             .collection('users')
-            .doc(googleUser.id)
-            .set({
-              'email': googleUser.email,
-              'displayName': googleUser.displayName,
-              'userType': 'patient', // Google Sign-in users are always patients
-              'lastLogin': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
+            .doc(userCredential.user!.uid)
+            .get();
 
-        // Also save login state
+        if (!userDoc.exists) {
+          // New Google Sign-in user - create as patient
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userCredential.user!.uid)
+              .set({
+                'uid': userCredential.user!.uid,
+                'email': userCredential.user!.email,
+                'displayName': userCredential.user!.displayName ?? '',
+                'photoURL': userCredential.user!.photoURL ?? '',
+                'userType':
+                    'patient', // Google Sign-in users are always patients
+                'createdAt': FieldValue.serverTimestamp(),
+                'lastLogin': FieldValue.serverTimestamp(),
+                'accountComplete': true, // Google users have basic info
+              });
+          print('👤 New patient profile created for Google user');
+        }
+
+        // Save login state if remember me is checked
         await _saveLoginState(
-          googleUser.id,
-          googleUser.email,
+          userCredential.user!.uid,
+          userCredential.user!.email ?? '',
           'patient',
         );
 
-        print("User data saved to Firestore");
-      } catch (dbError) {
-        print("Firestore error (non-critical): $dbError");
-        // Continue anyway - this shouldn't block login
+        print('🏥 Navigating to patient dashboard...');
+
+        if (mounted) {
+          // Google Sign-in users always go to patient dashboard
+          Navigator.pushReplacementNamed(context, '/patientDashboard');
+        }
+      }
+    } on FirebaseAuthException catch (e) {
+      print('❌ Firebase Auth Exception: ${e.code} - ${e.message}');
+      String errorMessage = 'Google Sign-in failed';
+
+      if (e.code == 'account-exists-with-different-credential') {
+        errorMessage = 'An account already exists with this email address';
+      } else if (e.code == 'invalid-credential') {
+        errorMessage = 'Invalid Google credentials';
       }
 
-      // 5. Navigate to patient dashboard (Google Sign-in users are patients)
-      print("Login successful with Google: ${googleUser.email}");
-      Navigator.pushReplacementNamed(context, '/patientDashboard');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(errorMessage)));
+      }
     } catch (e) {
-      print("Google Sign-In error: $e");
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Sign-in failed')));
+      print('❌ General Google Sign-in error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Google Sign-in failed. Please try again.'),
+          ),
+        );
+      }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  // Save user data to Firestore
-  Future<void> _saveUserToDatabase(User user) async {
-    // Check if user already exists in the database
-    final userDoc = await _firestore.collection('users').doc(user.uid).get();
-
-    if (!userDoc.exists) {
-      // New user - add to database
-      await _firestore.collection('users').doc(user.uid).set({
-        'uid': user.uid,
-        'email': user.email,
-        'displayName': user.displayName ?? '',
-        'photoURL': user.photoURL ?? '',
-        'createdAt': FieldValue.serverTimestamp(),
-        'lastLogin': FieldValue.serverTimestamp(),
-        // You can add other default fields here
-        'userType': 'patient', // Default user type
-        'accountComplete':
-            false, // Flag to identify new accounts that need setup
-      });
-    } else {
-      // Existing user - just update the login timestamp
-      await _firestore.collection('users').doc(user.uid).update({
-        'lastLogin': FieldValue.serverTimestamp(),
-      });
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -580,21 +531,25 @@ class _LoginPageState extends State<LoginPage> {
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _isLoading
-                      ? null
-                      : () => signInWithGoogleWorkaround(context),
-                  icon: const Icon(
-                    Icons.g_translate,
-                    size: 24,
-                    color: Colors.red,
-                  ),
-                  label: const Text('Sign in with Google'),
+                child: OutlinedButton(
+                  onPressed: _isLoading ? null : _signInWithGoogle,
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
+                    side: const BorderSide(color: Colors.grey),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Image.asset('assets/glogo.png', height: 24, width: 24),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Sign in with Google',
+                        style: TextStyle(fontSize: 16, color: Colors.black87),
+                      ),
+                    ],
                   ),
                 ),
               ),
