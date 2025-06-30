@@ -9,8 +9,7 @@
 
 const {onCall} = require("firebase-functions/v2/https");
 const {setGlobalOptions} = require("firebase-functions/v2");
-const {HttpsError} = require("firebase-functions/v2/https"); // Move this to top
-const functions = require("firebase-functions"); // Add this import for config access
+const {HttpsError} = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const {GoogleGenerativeAI} = require("@google/generative-ai");
 
@@ -58,10 +57,10 @@ exports.analyzeMedicalRecords = onCall(
       console.log('✅ Authenticated user ID:', userId);
 
       try {
-        // Get the API key from Firebase config or environment variables
-        const geminiApiKey = functions.config().gemini?.api_key || process.env.GEMINI_API_KEY;
+        // Get the API key from environment variables
+        const geminiApiKey = process.env.GEMINI_API_KEY;
 
-        console.log('🔑 API key source:', functions.config().gemini?.api_key ? 'Firebase config' : 'Environment');
+        console.log('🔑 API key source: Environment');
         console.log('🔑 API key exists:', !!geminiApiKey);
 
         if (!geminiApiKey) {
@@ -74,7 +73,7 @@ exports.analyzeMedicalRecords = onCall(
 
         // Initialize Gemini AI
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-pro"});
+        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
 
         // Get user's medical documents from Firestore
         const db = admin.firestore();
@@ -218,6 +217,45 @@ exports.getMedicalAnalysis = onCall(
             "internal",
             "Failed to get medical analysis",
         );
+      }
+    },
+);
+
+/**
+ * Simple debug function to test authentication and API key configuration
+ */
+exports.debugFunction = onCall(
+    {cors: true},
+    async (request) => {
+      const {auth, data} = request;
+      
+      console.log('=== DEBUG FUNCTION CALLED ===');
+      console.log('Auth exists:', !!auth);
+      console.log('Auth UID:', auth?.uid);
+      
+      if (!auth) {
+        throw new HttpsError("unauthenticated", "User must be logged in");
+      }
+
+      try {
+        // Test API key access
+        const geminiApiKey = process.env.GEMINI_API_KEY;
+        
+        // Test Firestore access
+        const db = admin.firestore();
+        const userDoc = await db.collection("users").doc(auth.uid).get();
+        
+        return {
+          success: true,
+          userId: auth.uid,
+          userExists: userDoc.exists,
+          hasApiKey: !!geminiApiKey,
+          apiKeySource: 'Environment',
+          timestamp: new Date().toISOString()
+        };
+      } catch (error) {
+        console.error("Debug function error:", error);
+        throw new HttpsError("internal", `Debug error: ${error.message}`);
       }
     },
 );

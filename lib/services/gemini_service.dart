@@ -168,4 +168,24 @@ class GeminiService {
         .doc('latest')
         .set({'summary': summary, 'timestamp': FieldValue.serverTimestamp()});
   }
+
+  /// Debug function to test Cloud Functions connectivity and authentication
+  Future<Map<String, dynamic>> debugCloudFunction() async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        throw Exception('User not authenticated');
+      }
+
+      print('🔧 Testing debug function...');
+
+      final result = await _functions.httpsCallable('debugFunction').call({});
+
+      print('✅ Debug function result: ${result.data}');
+      return result.data;
+    } catch (e) {
+      print('❌ Debug function error: $e');
+      rethrow;
+    }
+  }
 }
