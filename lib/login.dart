@@ -154,15 +154,15 @@ class _LoginPageState extends State<LoginPage> {
             }
           } else {
             print(
-              '⚠️ User document not found in Firestore, creating default...',
+              '⚠️ User document not found in Firestore, creating default patient profile...',
             );
-            // If user document doesn't exist, go to default home
+            // If user document doesn't exist, create as patient and go to patient dashboard
             await _saveLoginState(
               userCredential.user!.uid,
               userCredential.user!.email ?? '',
               'patient',
             );
-            Navigator.pushReplacementNamed(context, '/home');
+            Navigator.pushReplacementNamed(context, '/patientDashboard');
           }
         }
       }
@@ -297,8 +297,16 @@ class _LoginPageState extends State<LoginPage> {
             .set({
               'email': googleUser.email,
               'displayName': googleUser.displayName,
+              'userType': 'patient', // Google Sign-in users are always patients
               'lastLogin': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));
+
+        // Also save login state
+        await _saveLoginState(
+          googleUser.id,
+          googleUser.email,
+          'patient',
+        );
 
         print("User data saved to Firestore");
       } catch (dbError) {
@@ -306,9 +314,9 @@ class _LoginPageState extends State<LoginPage> {
         // Continue anyway - this shouldn't block login
       }
 
-      // 5. Navigate to home screen
+      // 5. Navigate to patient dashboard (Google Sign-in users are patients)
       print("Login successful with Google: ${googleUser.email}");
-      Navigator.pushReplacementNamed(context, '/home');
+      Navigator.pushReplacementNamed(context, '/patientDashboard');
     } catch (e) {
       print("Google Sign-In error: $e");
       ScaffoldMessenger.of(
