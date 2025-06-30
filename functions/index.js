@@ -58,11 +58,14 @@ exports.analyzeMedicalRecords = onCall(
       console.log('✅ Authenticated user ID:', userId);
 
       try {
-        // Get the API key from environment variables (v2 way)
-        const geminiApiKey = process.env.GEMINI_API_KEY;
+        // Get the API key from Firebase config or environment variables
+        const geminiApiKey = functions.config().gemini?.api_key || process.env.GEMINI_API_KEY;
+
+        console.log('🔑 API key source:', functions.config().gemini?.api_key ? 'Firebase config' : 'Environment');
+        console.log('🔑 API key exists:', !!geminiApiKey);
 
         if (!geminiApiKey) {
-          console.error('❌ GEMINI_API_KEY environment variable not set');
+          console.error('❌ GEMINI_API_KEY not configured in Firebase config or environment');
           throw new HttpsError(
               "failed-precondition",
               "API key not configured",

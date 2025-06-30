@@ -58,13 +58,33 @@ class GeminiService {
       // Wait a moment to ensure authentication is fully processed
       await Future.delayed(const Duration(milliseconds: 500));
 
-      // Call the Cloud Function without userId parameter
-      // The function will use context.auth.uid
-      final result = await _functions
-          .httpsCallable('analyzeMedicalRecords')
-          .call({}); // Empty data object
+      // Retry logic for network issues
+      int retryCount = 0;
+      const maxRetries = 3;
 
-      return result.data['summary'] ?? 'No summary available';
+      while (retryCount < maxRetries) {
+        try {
+          // Call the Cloud Function without userId parameter
+          // The function will use context.auth.uid
+          final result = await _functions
+              .httpsCallable('analyzeMedicalRecords')
+              .call({}); // Empty data object
+
+          return result.data['summary'] ?? 'No summary available';
+        } catch (e) {
+          retryCount++;
+          print('❌ Attempt $retryCount failed: $e');
+
+          if (retryCount >= maxRetries) {
+            rethrow; // Throw the error after all retries
+          }
+
+          // Wait before retrying
+          await Future.delayed(Duration(seconds: retryCount * 2));
+        }
+      }
+
+      return 'Error generating medical summary. Please try again later.';
     } catch (e) {
       print('❌ Error analyzing medical records: $e');
       // Provide more specific error messages based on the error type
