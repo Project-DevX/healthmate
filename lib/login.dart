@@ -100,8 +100,10 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
 
     try {
-      print('🔐 Starting authentication for email: ${_emailController.text.trim()}');
-      
+      print(
+        '🔐 Starting authentication for email: ${_emailController.text.trim()}',
+      );
+
       // Sign in with email and password
       final userCredential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(
@@ -109,7 +111,9 @@ class _LoginPageState extends State<LoginPage> {
             password: _passwordController.text,
           );
 
-      print('✅ Firebase authentication successful for user: ${userCredential.user?.uid}');
+      print(
+        '✅ Firebase authentication successful for user: ${userCredential.user?.uid}',
+      );
 
       // If sign-in is successful, update the last login time
       if (userCredential.user != null) {
@@ -126,7 +130,7 @@ class _LoginPageState extends State<LoginPage> {
           if (userDoc.exists) {
             final userData = userDoc.data();
             final userType = userData?['userType'] as String? ?? 'patient';
-            
+
             print('👤 User type found: $userType');
             print('📄 User data: $userData');
 
@@ -149,7 +153,9 @@ class _LoginPageState extends State<LoginPage> {
               Navigator.pushReplacementNamed(context, '/home');
             }
           } else {
-            print('⚠️ User document not found in Firestore, creating default...');
+            print(
+              '⚠️ User document not found in Firestore, creating default...',
+            );
             // If user document doesn't exist, go to default home
             await _saveLoginState(
               userCredential.user!.uid,
