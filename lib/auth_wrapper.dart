@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../login.dart';
 import '../patientDashboard.dart';
-import '../main.dart';
 
 class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
@@ -34,7 +33,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
           } else if (userType == 'doctor') {
             Navigator.pushReplacementNamed(context, '/doctorDashboard');
           } else {
-            Navigator.pushReplacementNamed(context, '/home');
+            // Default to patient dashboard for any unknown user types
+            Navigator.pushReplacementNamed(context, '/patientDashboard');
           }
         } else {
           // User is not logged in, navigate to login screen
