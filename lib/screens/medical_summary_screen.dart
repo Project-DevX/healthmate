@@ -62,7 +62,21 @@ class _MedicalSummaryScreenState extends State<MedicalSummaryScreen> {
       print('🔍 Widget userId: ${widget.userId}');
       print('🔍 User email: ${user.email}');
 
-      // Use the authenticated user's ID
+      // First, test the debug function to ensure connectivity
+      try {
+        print('🔧 Testing debug function...');
+        final debugResult = await _geminiService.debugCloudFunction();
+        print('✅ Debug function result: $debugResult');
+      } catch (debugError) {
+        print('❌ Debug function failed: $debugError');
+        setState(() {
+          _summary = 'Debug test failed: $debugError';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // If debug passes, try the actual analysis
       final summary = await _geminiService.analyzeMedicalRecords(user.uid);
 
       setState(() {
