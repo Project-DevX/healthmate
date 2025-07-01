@@ -233,6 +233,10 @@ Be extremely thorough and include specific values, units, and reference ranges w
 Format the response in clear sections with bullet points for easy reading.
 
 If any text is unclear or partially obscured, indicate this in your response.
+ACT AS A DOCTOR AND MEDICAL ANALYST, focusing on accuracy and detail in your analysis.
+BE DETAILED AND PRECISE IN YOUR EXTRACTION.
+BE OBJECTIVE AND NEUTRAL IN YOUR ANALYSIS.
+MAKE THE VIEW LOOK NICE AND PROFESSIONAL+ READABLES.
 `;
 
             // Analyze the document with Gemini Vision

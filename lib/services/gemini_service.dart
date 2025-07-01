@@ -83,23 +83,25 @@ class GeminiService {
   }
 
   /// Request new analysis - only analyzes new documents and combines with existing summaries
-  Future<Map<String, dynamic>> analyzeMedicalRecords({bool forceReanalysis = false}) async {
+  Future<Map<String, dynamic>> analyzeMedicalRecords({
+    bool forceReanalysis = false,
+  }) async {
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) {
         throw Exception('User not authenticated');
       }
 
-      print('🔄 ${forceReanalysis ? "Force re-analyzing" : "Analyzing new"} medical records for user: ${currentUser.uid}');
+      print(
+        '🔄 ${forceReanalysis ? "Force re-analyzing" : "Analyzing new"} medical records for user: ${currentUser.uid}',
+      );
 
       // Wait a moment to ensure authentication is fully processed
       await Future.delayed(const Duration(milliseconds: 500));
 
       final result = await _functions
           .httpsCallable('analyzeMedicalRecords')
-          .call({
-            'forceReanalysis': forceReanalysis,
-          });
+          .call({'forceReanalysis': forceReanalysis});
 
       return {
         'summary': result.data['summary'] ?? 'No summary available',
@@ -111,7 +113,7 @@ class GeminiService {
       };
     } catch (e) {
       print('❌ Error analyzing medical records: $e');
-      
+
       // Provide more specific error messages based on the error type
       String errorMessage;
       if (e.toString().contains('unauthenticated')) {
@@ -119,9 +121,10 @@ class GeminiService {
       } else if (e.toString().contains('failed-precondition')) {
         errorMessage = 'Medical analysis service is currently unavailable.';
       } else {
-        errorMessage = 'Error generating medical summary. Please try again later.';
+        errorMessage =
+            'Error generating medical summary. Please try again later.';
       }
-      
+
       return {
         'summary': errorMessage,
         'documentsAnalyzed': 0,
@@ -165,7 +168,9 @@ class GeminiService {
   @deprecated
   Future<void> storeAnalysisResult(String userId, String summary) async {
     // This is now handled automatically by the Firebase Function
-    print('⚠️ storeAnalysisResult is deprecated - handled automatically by Firebase Function');
+    print(
+      '⚠️ storeAnalysisResult is deprecated - handled automatically by Firebase Function',
+    );
   }
 
   /// Debug function to test Cloud Functions connectivity and authentication
