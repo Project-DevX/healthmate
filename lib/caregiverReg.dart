@@ -47,7 +47,7 @@ class _CaregiverRegistrationPageState extends State<CaregiverRegistrationPage> {
     {
       'firstName': 'Mary',
       'lastName': 'Johnson',
-      'email': 'mary.johnson@care.com',
+      'email': 'mary.johnson.care@gmail.com',
       'password': 'password123',
       'relationship': 'Spouse',
       'patientCode': 'PAT001',
@@ -56,7 +56,7 @@ class _CaregiverRegistrationPageState extends State<CaregiverRegistrationPage> {
     {
       'firstName': 'David',
       'lastName': 'Miller',
-      'email': 'david.miller@family.com',
+      'email': 'david.miller.family@gmail.com',
       'password': 'password123',
       'relationship': 'Son',
       'patientCode': 'PAT002',
@@ -65,7 +65,7 @@ class _CaregiverRegistrationPageState extends State<CaregiverRegistrationPage> {
     {
       'firstName': 'Susan',
       'lastName': 'Garcia',
-      'email': 'susan.garcia@caregiver.com',
+      'email': 'susan.garcia.caregiver@gmail.com',
       'password': 'password123',
       'relationship': 'Daughter',
       'patientCode': 'PAT003',

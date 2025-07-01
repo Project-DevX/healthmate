@@ -48,7 +48,7 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
     {
       'firstName': 'Dr. Sarah',
       'lastName': 'Wilson',
-      'email': 'dr.sarah.wilson@hospital.com',
+      'email': 'dr.sarah.wilson@gmail.com',
       'password': 'password123',
       'specialization': 'Cardiology',
       'licenseNumber': 'MD123456',
@@ -59,7 +59,7 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
     {
       'firstName': 'Dr. Robert',
       'lastName': 'Brown',
-      'email': 'dr.robert.brown@clinic.com',
+      'email': 'dr.robert.brown@gmail.com',
       'password': 'password123',
       'specialization': 'Neurology',
       'licenseNumber': 'MD789012',
@@ -70,7 +70,7 @@ class _DoctorRegistrationPageState extends State<DoctorRegistrationPage> {
     {
       'firstName': 'Dr. Lisa',
       'lastName': 'Davis',
-      'email': 'dr.lisa.davis@medical.com',
+      'email': 'dr.lisa.davis@gmail.com',
       'password': 'password123',
       'specialization': 'Pediatrics',
       'licenseNumber': 'MD345678',
