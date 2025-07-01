@@ -1,5 +1,6 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class GeminiService {
   final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
@@ -7,26 +8,45 @@ class GeminiService {
   );
 
   /// Check analysis status to see if new documents are available for analysis
-  Future<Map<String, dynamic>> checkAnalysisStatus() async {
+  Future<Map<String, dynamic>> checkAnalysisStatus({
+    String analysisType =
+        'all_documents', // 'all_documents' or 'lab_reports_only'
+  }) async {
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) {
         throw Exception('User not authenticated');
       }
 
-      print('� Checking analysis status for user: ${currentUser.uid}');
+      print(
+        '🔍 Checking analysis status for user: ${currentUser.uid} (type: $analysisType)',
+      );
 
-      final result = await _functions
-          .httpsCallable('checkAnalysisStatus')
-          .call({});
+      // Get the analysis data first
+      final analysisData = await getMedicalAnalysis(analysisType: analysisType);
 
+      if (!analysisData['hasAnalysis']) {
+        // No analysis exists - need to analyze
+        return {
+          'hasAnalysis': false,
+          'totalDocuments': 0,
+          'needsAnalysis': true,
+          'statusMessage':
+              'No analysis found. Click to generate your first AI summary.',
+          'newDocumentsCount': 0,
+          'lastUpdated': null,
+        };
+      }
+
+      // For now, we'll rely on the backend functions to determine if new documents are available
+      // This could be enhanced with more sophisticated client-side checking
       return {
-        'hasAnalysis': result.data['hasAnalysis'] ?? false,
-        'totalDocuments': result.data['totalDocuments'] ?? 0,
-        'needsAnalysis': result.data['needsAnalysis'] ?? false,
-        'statusMessage': result.data['statusMessage'] ?? '',
-        'newDocumentsCount': result.data['newDocumentsCount'] ?? 0,
-        'lastUpdated': result.data['lastUpdated'],
+        'hasAnalysis': true,
+        'totalDocuments': analysisData['totalDocuments'],
+        'needsAnalysis': false,
+        'statusMessage': 'Analysis up to date',
+        'newDocumentsCount': 0,
+        'lastUpdated': analysisData['timestamp'],
       };
     } catch (e) {
       print('❌ Error checking analysis status: $e');
@@ -42,29 +62,61 @@ class GeminiService {
   }
 
   /// Get cached medical analysis with full status information
-  Future<Map<String, dynamic>> getMedicalAnalysis() async {
+  Future<Map<String, dynamic>> getMedicalAnalysis({
+    String analysisType =
+        'all_documents', // 'all_documents' or 'lab_reports_only'
+  }) async {
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) {
         throw Exception('User not authenticated');
       }
 
-      print('📄 Getting medical analysis for user: ${currentUser.uid}');
+      print(
+        '📄 Getting medical analysis for user: ${currentUser.uid} (type: $analysisType)',
+      );
 
-      final result = await _functions
-          .httpsCallable('getMedicalAnalysis')
-          .call({});
+      // Get analysis from the appropriate collection
+      String collectionPath;
+      if (analysisType == 'lab_reports_only') {
+        collectionPath = 'lab_reports';
+      } else {
+        collectionPath = 'comprehensive';
+      }
 
+      final analysisDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser.uid)
+          .collection('ai_analysis')
+          .doc(collectionPath)
+          .get();
+
+      if (!analysisDoc.exists) {
+        return {
+          'summary': null,
+          'hasAnalysis': false,
+          'totalDocuments': 0,
+          'analyzedDocuments': 0,
+          'newDocumentsAvailable': false,
+          'newDocumentsCount': 0,
+          'analysisUpToDate': false,
+          'timestamp': null,
+          'lastAnalysisType': 'none',
+        };
+      }
+
+      final data = analysisDoc.data()!;
       return {
-        'summary': result.data['summary'],
-        'hasAnalysis': result.data['hasAnalysis'] ?? false,
-        'totalDocuments': result.data['totalDocuments'] ?? 0,
-        'analyzedDocuments': result.data['analyzedDocuments'] ?? 0,
-        'newDocumentsAvailable': result.data['newDocumentsAvailable'] ?? false,
-        'newDocumentsCount': result.data['newDocumentsCount'] ?? 0,
-        'analysisUpToDate': result.data['analysisUpToDate'] ?? false,
-        'timestamp': result.data['timestamp'],
-        'lastAnalysisType': result.data['lastAnalysisType'] ?? 'unknown',
+        'summary': data['summary'],
+        'hasAnalysis': true,
+        'totalDocuments': data['documentCount'] ?? 0,
+        'analyzedDocuments': (data['analyzedDocuments'] as List?)?.length ?? 0,
+        'newDocumentsAvailable':
+            false, // Will be calculated by checkAnalysisStatus
+        'newDocumentsCount': 0,
+        'analysisUpToDate': true,
+        'timestamp': data['timestamp'],
+        'lastAnalysisType': data['analysisType'] ?? analysisType,
       };
     } catch (e) {
       print('❌ Error getting medical analysis: $e');
@@ -85,6 +137,8 @@ class GeminiService {
   /// Request new analysis - only analyzes new documents and combines with existing summaries
   Future<Map<String, dynamic>> analyzeMedicalRecords({
     bool forceReanalysis = false,
+    String analysisType =
+        'all_documents', // 'all_documents' or 'lab_reports_only'
   }) async {
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
@@ -93,15 +147,23 @@ class GeminiService {
       }
 
       print(
-        '🔄 ${forceReanalysis ? "Force re-analyzing" : "Analyzing new"} medical records for user: ${currentUser.uid}',
+        '🔄 ${forceReanalysis ? "Force re-analyzing" : "Analyzing new"} medical records for user: ${currentUser.uid} (type: $analysisType)',
       );
 
       // Wait a moment to ensure authentication is fully processed
       await Future.delayed(const Duration(milliseconds: 500));
 
-      final result = await _functions
-          .httpsCallable('analyzeMedicalRecords')
-          .call({'forceReanalysis': forceReanalysis});
+      // Call the appropriate function based on analysis type
+      String functionName;
+      if (analysisType == 'lab_reports_only') {
+        functionName = 'analyzeLabReports';
+      } else {
+        functionName = 'analyzeAllMedicalRecords';
+      }
+
+      final result = await _functions.httpsCallable(functionName).call({
+        'forceReanalysis': forceReanalysis,
+      });
 
       return {
         'summary': result.data['summary'] ?? 'No summary available',

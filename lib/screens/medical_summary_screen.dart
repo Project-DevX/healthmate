@@ -6,11 +6,14 @@ import '../services/gemini_service.dart';
 class MedicalSummaryScreen extends StatefulWidget {
   final String userId;
   final bool autoTriggerAnalysis;
+  final String analysisType;
 
   const MedicalSummaryScreen({
     super.key,
     required this.userId,
     this.autoTriggerAnalysis = false,
+    this.analysisType =
+        'all_documents', // 'all_documents' or 'lab_reports_only'
   });
 
   @override
@@ -86,7 +89,9 @@ class _MedicalSummaryScreenState extends State<MedicalSummaryScreen> {
       }
 
       // Check analysis status first
-      final statusData = await _geminiService.checkAnalysisStatus();
+      final statusData = await _geminiService.checkAnalysisStatus(
+        analysisType: widget.analysisType,
+      );
 
       if (!statusData['hasAnalysis']) {
         // No existing analysis
@@ -111,7 +116,9 @@ class _MedicalSummaryScreenState extends State<MedicalSummaryScreen> {
         }
       } else {
         // We have existing analysis - get it and check for updates
-        final analysisData = await _geminiService.getMedicalAnalysis();
+        final analysisData = await _geminiService.getMedicalAnalysis(
+          analysisType: widget.analysisType,
+        );
 
         if (analysisData['newDocumentsAvailable']) {
           // There are new documents - show the cached summary but indicate update is available
@@ -167,7 +174,9 @@ class _MedicalSummaryScreenState extends State<MedicalSummaryScreen> {
       }
 
       // Request new analysis (will only analyze new documents and combine with existing)
-      final result = await _geminiService.analyzeMedicalRecords();
+      final result = await _geminiService.analyzeMedicalRecords(
+        analysisType: widget.analysisType,
+      );
 
       setState(() {
         _summary = result['summary'];
@@ -229,6 +238,7 @@ class _MedicalSummaryScreenState extends State<MedicalSummaryScreen> {
       // Request complete re-analysis of all documents
       final result = await _geminiService.analyzeMedicalRecords(
         forceReanalysis: true,
+        analysisType: widget.analysisType,
       );
 
       setState(() {
@@ -273,19 +283,26 @@ class _MedicalSummaryScreenState extends State<MedicalSummaryScreen> {
       print('🚀 Auto-triggering analysis...');
 
       // Check status first
-      final statusData = await _geminiService.checkAnalysisStatus();
+      final statusData = await _geminiService.checkAnalysisStatus(
+        analysisType: widget.analysisType,
+      );
 
       if (statusData['needsAnalysis']) {
         // Show analysis is starting
+        final analysisTypeText = widget.analysisType == 'lab_reports_only'
+            ? 'lab reports only'
+            : 'all medical documents';
         setState(() {
           _summary =
-              '🔄 Analyzing your medical documents...\n\n'
+              '🔄 Analyzing your $analysisTypeText...\n\n'
               'This may take a moment as we process ${statusData['totalDocuments']} document(s) using AI-powered analysis.\n\n'
               'Please wait...';
         });
 
         // Trigger analysis
-        final result = await _geminiService.analyzeMedicalRecords();
+        final result = await _geminiService.analyzeMedicalRecords(
+          analysisType: widget.analysisType,
+        );
 
         setState(() {
           _summary = result['summary'];
@@ -325,7 +342,11 @@ class _MedicalSummaryScreenState extends State<MedicalSummaryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Medical Summary'),
+        title: Text(
+          widget.analysisType == 'lab_reports_only'
+              ? 'Lab Reports Summary'
+              : 'Medical Summary',
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.auto_awesome),
@@ -360,6 +381,70 @@ class _MedicalSummaryScreenState extends State<MedicalSummaryScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Analysis Type Header
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: widget.analysisType == 'lab_reports_only'
+                          ? Colors.blue.shade50
+                          : Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: widget.analysisType == 'lab_reports_only'
+                            ? Colors.blue.shade200
+                            : Colors.green.shade200,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          widget.analysisType == 'lab_reports_only'
+                              ? Icons.science
+                              : Icons.folder_shared,
+                          color: widget.analysisType == 'lab_reports_only'
+                              ? Colors.blue.shade700
+                              : Colors.green.shade700,
+                          size: 28,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.analysisType == 'lab_reports_only'
+                                    ? 'Lab Reports Analysis'
+                                    : 'Comprehensive Medical Analysis',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color:
+                                      widget.analysisType == 'lab_reports_only'
+                                      ? Colors.blue.shade700
+                                      : Colors.green.shade700,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                widget.analysisType == 'lab_reports_only'
+                                    ? 'AI analysis focused only on laboratory test results and reports'
+                                    : 'AI analysis of all medical documents including lab reports, prescriptions, and doctor notes',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color:
+                                      widget.analysisType == 'lab_reports_only'
+                                      ? Colors.blue.shade600
+                                      : Colors.green.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
                   const Text(
                     'AI Medical Summary',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
