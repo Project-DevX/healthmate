@@ -115,6 +115,46 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   }
 
   void _viewMedicalSummary() async {
+    // Show analysis type selection dialog
+    final selectedAnalysisType = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Choose Analysis Type'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Select what documents to include in your AI summary:'),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.science, color: Colors.blue),
+              title: const Text('Lab Reports Only'),
+              subtitle: const Text(
+                'Generate summary using only lab reports and test results',
+              ),
+              onTap: () => Navigator.of(context).pop('lab_reports_only'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_shared, color: Colors.green),
+              title: const Text('All Documents'),
+              subtitle: const Text(
+                'Generate comprehensive summary using all medical documents',
+              ),
+              onTap: () => Navigator.of(context).pop('all_documents'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    // If user cancelled, return
+    if (selectedAnalysisType == null) return;
+
     // Show loading indicator
     showDialog(
       context: context,
@@ -124,7 +164,9 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
 
     try {
       // Check if there are new documents that need analysis
-      final statusData = await _geminiService.checkAnalysisStatus();
+      final statusData = await _geminiService.checkAnalysisStatus(
+        analysisType: selectedAnalysisType,
+      );
 
       // Close loading dialog
       Navigator.of(context).pop();
@@ -137,6 +179,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
             builder: (context) => MedicalSummaryScreen(
               userId: widget.userId,
               autoTriggerAnalysis: true,
+              analysisType: selectedAnalysisType,
             ),
           ),
         );
@@ -145,7 +188,10 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => MedicalSummaryScreen(userId: widget.userId),
+            builder: (context) => MedicalSummaryScreen(
+              userId: widget.userId,
+              analysisType: selectedAnalysisType,
+            ),
           ),
         );
       }
