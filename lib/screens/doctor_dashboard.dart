@@ -240,14 +240,6 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
               onPressed: () => _showNotificationsDialog(),
             ),
             IconButton(
-              icon: Icon(isDarkMode ? Icons.dark_mode : Icons.light_mode),
-              onPressed: () {
-                setState(() {
-                  isDarkMode = !isDarkMode;
-                });
-              },
-            ),
-            IconButton(
               icon: const Icon(Icons.settings),
               onPressed: () => _showSettingsDialog(),
             ),
@@ -712,6 +704,16 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            SwitchListTile(
+              value: isDarkMode,
+              onChanged: (val) {
+                setState(() {
+                  isDarkMode = val;
+                });
+                Navigator.pop(context);
+              },
+              title: const Text('Dark Mode'),
+            ),
             ...moduleVisibility.keys.map((module) {
               return CheckboxListTile(
                 title: Text(module),
