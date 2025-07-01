@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'services/auth_service.dart';
 import 'services/document_service.dart';
+import 'services/gemini_service.dart';
 import 'screens/medical_records_screen.dart';
 import 'screens/medical_summary_screen.dart';
 
@@ -503,15 +504,58 @@ class DashboardContent extends StatelessWidget {
                 Icons.auto_awesome,
                 'AI Summary',
                 Colors.purple,
-                () {
+                () async {
                   if (userId != null) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            MedicalSummaryScreen(userId: userId),
+                    // Show loading indicator
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => const Center(
+                        child: CircularProgressIndicator(),
                       ),
                     );
+
+                    try {
+                      // Import and create GeminiService
+                      final GeminiService geminiService = GeminiService();
+                      
+                      // Check if there are new documents that need analysis
+                      final statusData = await geminiService.checkAnalysisStatus();
+                      
+                      // Close loading dialog
+                      Navigator.of(context).pop();
+                      
+                      if (statusData['needsAnalysis']) {
+                        // There are new documents - trigger analysis before showing summary
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => MedicalSummaryScreen(
+                              userId: userId,
+                              autoTriggerAnalysis: true,
+                            ),
+                          ),
+                        );
+                      } else {
+                        // No new documents - just show the summary
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => MedicalSummaryScreen(userId: userId),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      // Close loading dialog if still open
+                      Navigator.of(context).pop();
+                      
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error checking analysis status: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
