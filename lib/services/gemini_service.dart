@@ -1,172 +1,171 @@
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class GeminiService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  // Try different regions - check which one your functions are deployed to
   final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(
     region: 'us-central1',
   );
-  // If that doesn't work, try: 'us-east1', 'europe-west1', 'asia-northeast1'
 
-  /// Request analysis of medical documents for a user
-  Future<String> analyzeMedicalRecords(String userId) async {
+  /// Check analysis status to see if new documents are available for analysis
+  Future<Map<String, dynamic>> checkAnalysisStatus() async {
     try {
-      // Verify user is authenticated
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) {
         throw Exception('User not authenticated');
       }
 
-      print('🔐 Authenticated user: ${currentUser.uid}');
-      print('🔐 User email: ${currentUser.email}');
+      print('� Checking analysis status for user: ${currentUser.uid}');
 
-      // Check if the user's token is valid
-      try {
-        final idToken = await currentUser.getIdToken(true); // Force refresh
-        print('🔐 Token obtained: ${idToken != null && idToken.isNotEmpty}');
-      } catch (tokenError) {
-        print('❌ Token error: $tokenError');
-        throw Exception('Authentication token error: $tokenError');
+      final result = await _functions
+          .httpsCallable('checkAnalysisStatus')
+          .call({});
+
+      return {
+        'hasAnalysis': result.data['hasAnalysis'] ?? false,
+        'totalDocuments': result.data['totalDocuments'] ?? 0,
+        'needsAnalysis': result.data['needsAnalysis'] ?? false,
+        'statusMessage': result.data['statusMessage'] ?? '',
+        'newDocumentsCount': result.data['newDocumentsCount'] ?? 0,
+        'lastUpdated': result.data['lastUpdated'],
+      };
+    } catch (e) {
+      print('❌ Error checking analysis status: $e');
+      return {
+        'hasAnalysis': false,
+        'totalDocuments': 0,
+        'needsAnalysis': false,
+        'statusMessage': 'Error checking status',
+        'newDocumentsCount': 0,
+        'lastUpdated': null,
+      };
+    }
+  }
+
+  /// Get cached medical analysis with full status information
+  Future<Map<String, dynamic>> getMedicalAnalysis() async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        throw Exception('User not authenticated');
       }
 
-      // Check cache first using the authenticated user's ID
-      final analysisDoc = await _firestore
-          .collection('users')
-          .doc(currentUser.uid)
-          .collection('ai_analysis')
-          .doc('latest')
-          .get();
+      print('📄 Getting medical analysis for user: ${currentUser.uid}');
 
-      // If analysis exists and is recent, return it
-      if (analysisDoc.exists) {
-        final data = analysisDoc.data();
-        final timestamp = data?['timestamp'] as Timestamp?;
+      final result = await _functions
+          .httpsCallable('getMedicalAnalysis')
+          .call({});
 
-        if (timestamp != null) {
-          final analysisAge = DateTime.now().difference(timestamp.toDate());
-          if (analysisAge.inHours < 24) {
-            print('✅ Using cached analysis');
-            return data?['summary'] as String? ?? 'No summary available';
-          }
-        }
+      return {
+        'summary': result.data['summary'],
+        'hasAnalysis': result.data['hasAnalysis'] ?? false,
+        'totalDocuments': result.data['totalDocuments'] ?? 0,
+        'analyzedDocuments': result.data['analyzedDocuments'] ?? 0,
+        'newDocumentsAvailable': result.data['newDocumentsAvailable'] ?? false,
+        'newDocumentsCount': result.data['newDocumentsCount'] ?? 0,
+        'analysisUpToDate': result.data['analysisUpToDate'] ?? false,
+        'timestamp': result.data['timestamp'],
+        'lastAnalysisType': result.data['lastAnalysisType'] ?? 'unknown',
+      };
+    } catch (e) {
+      print('❌ Error getting medical analysis: $e');
+      return {
+        'summary': null,
+        'hasAnalysis': false,
+        'totalDocuments': 0,
+        'analyzedDocuments': 0,
+        'newDocumentsAvailable': false,
+        'newDocumentsCount': 0,
+        'analysisUpToDate': false,
+        'timestamp': null,
+        'lastAnalysisType': 'error',
+      };
+    }
+  }
+
+  /// Request new analysis - only analyzes new documents and combines with existing summaries
+  Future<Map<String, dynamic>> analyzeMedicalRecords({bool forceReanalysis = false}) async {
+    try {
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser == null) {
+        throw Exception('User not authenticated');
       }
 
-      print('🔄 Generating new analysis...');
+      print('🔄 ${forceReanalysis ? "Force re-analyzing" : "Analyzing new"} medical records for user: ${currentUser.uid}');
 
       // Wait a moment to ensure authentication is fully processed
       await Future.delayed(const Duration(milliseconds: 500));
 
-      // Retry logic for network issues
-      int retryCount = 0;
-      const maxRetries = 3;
+      final result = await _functions
+          .httpsCallable('analyzeMedicalRecords')
+          .call({
+            'forceReanalysis': forceReanalysis,
+          });
 
-      while (retryCount < maxRetries) {
-        try {
-          // Call the Cloud Function without userId parameter
-          // The function will use context.auth.uid
-          final result = await _functions
-              .httpsCallable('analyzeMedicalRecords')
-              .call({}); // Empty data object
-
-          return result.data['summary'] ?? 'No summary available';
-        } catch (e) {
-          retryCount++;
-          print('❌ Attempt $retryCount failed: $e');
-
-          if (retryCount >= maxRetries) {
-            rethrow; // Throw the error after all retries
-          }
-
-          // Wait before retrying
-          await Future.delayed(Duration(seconds: retryCount * 2));
-        }
-      }
-
-      return 'Error generating medical summary. Please try again later.';
+      return {
+        'summary': result.data['summary'] ?? 'No summary available',
+        'documentsAnalyzed': result.data['documentsAnalyzed'] ?? 0,
+        'newDocumentsAnalyzed': result.data['newDocumentsAnalyzed'] ?? 0,
+        'lastUpdated': result.data['lastUpdated'],
+        'isCached': result.data['isCached'] ?? false,
+        'analysisType': result.data['analysisType'] ?? 'unknown',
+      };
     } catch (e) {
       print('❌ Error analyzing medical records: $e');
+      
       // Provide more specific error messages based on the error type
+      String errorMessage;
       if (e.toString().contains('unauthenticated')) {
-        return 'Please log in to analyze your medical records.';
+        errorMessage = 'Please log in to analyze your medical records.';
       } else if (e.toString().contains('failed-precondition')) {
-        return 'Medical analysis service is currently unavailable.';
+        errorMessage = 'Medical analysis service is currently unavailable.';
+      } else {
+        errorMessage = 'Error generating medical summary. Please try again later.';
       }
-      return 'Error generating medical summary. Please try again later.';
+      
+      return {
+        'summary': errorMessage,
+        'documentsAnalyzed': 0,
+        'newDocumentsAnalyzed': 0,
+        'lastUpdated': null,
+        'isCached': false,
+        'analysisType': 'error',
+      };
     }
+  }
+
+  /// Legacy method for backward compatibility - now uses the new system
+  Future<String> analyzeMedicalRecordsLegacy(String userId) async {
+    final result = await analyzeMedicalRecords();
+    return result['summary'] as String;
   }
 
   /// Get cached medical analysis without triggering new analysis
+  @deprecated
   Future<String?> getCachedAnalysis(String userId) async {
-    try {
-      final result = await _functions
-          .httpsCallable('getMedicalAnalysis')
-          .call({});
-      return result.data['summary'];
-    } catch (e) {
-      print('Error getting cached analysis: $e');
-      return null;
-    }
+    final result = await getMedicalAnalysis();
+    return result['summary'] as String?;
   }
 
   /// Check if analysis is available and recent
+  @deprecated
   Future<bool> hasRecentAnalysis(String userId) async {
-    try {
-      final analysisDoc = await _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('ai_analysis')
-          .doc('latest')
-          .get();
-
-      if (!analysisDoc.exists) return false;
-
-      final data = analysisDoc.data();
-      final timestamp = data?['timestamp'] as Timestamp?;
-
-      if (timestamp != null) {
-        final analysisAge = DateTime.now().difference(timestamp.toDate());
-        return analysisAge.inHours < 24;
-      }
-
-      return false;
-    } catch (e) {
-      print('Error checking analysis status: $e');
-      return false;
-    }
+    final result = await getMedicalAnalysis();
+    return result['analysisUpToDate'] as bool;
   }
 
-  /// Force refresh analysis (bypass cache)
+  /// Force refresh analysis (bypass cache) - now does full reanalysis
+  @deprecated
   Future<String> refreshAnalysis(String userId) async {
-    try {
-      // Call the Cloud Function directly without checking cache
-      final result = await _functions
-          .httpsCallable('analyzeMedicalRecords')
-          .call({}); // Empty data object
-
-      return result.data['summary'] ?? 'No summary available';
-    } catch (e) {
-      print('Error refreshing medical analysis: $e');
-      if (e.toString().contains('unauthenticated')) {
-        return 'Please log in to analyze your medical records.';
-      } else if (e.toString().contains('failed-precondition')) {
-        return 'Medical analysis service is currently unavailable.';
-      }
-      return 'Error generating medical summary. Please try again later.';
-    }
+    final result = await analyzeMedicalRecords(forceReanalysis: true);
+    return result['summary'] as String;
   }
 
   /// Store the analysis result in Firestore for future reference
   /// Note: This method is now handled by the Cloud Function automatically
   @deprecated
   Future<void> storeAnalysisResult(String userId, String summary) async {
-    await _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('ai_analysis')
-        .doc('latest')
-        .set({'summary': summary, 'timestamp': FieldValue.serverTimestamp()});
+    // This is now handled automatically by the Firebase Function
+    print('⚠️ storeAnalysisResult is deprecated - handled automatically by Firebase Function');
   }
 
   /// Debug function to test Cloud Functions connectivity and authentication
