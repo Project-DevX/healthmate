@@ -41,7 +41,7 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
     {
       'firstName': 'John',
       'lastName': 'Doe',
-      'email': 'john.doe@example.com',
+      'email': 'john.doe.patient@gmail.com',
       'password': 'password123',
       'dateOfBirth': DateTime(1990, 5, 15),
       'gender': 'Male',
@@ -50,7 +50,7 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
     {
       'firstName': 'Jane',
       'lastName': 'Smith',
-      'email': 'jane.smith@example.com',
+      'email': 'jane.smith.patient@gmail.com',
       'password': 'password123',
       'dateOfBirth': DateTime(1985, 8, 22),
       'gender': 'Female',
@@ -59,7 +59,7 @@ class _PatientRegistrationPageState extends State<PatientRegistrationPage> {
     {
       'firstName': 'Mike',
       'lastName': 'Johnson',
-      'email': 'mike.johnson@example.com',
+      'email': 'mike.johnson.patient@gmail.com',
       'password': 'password123',
       'dateOfBirth': DateTime(1992, 12, 3),
       'gender': 'Male',

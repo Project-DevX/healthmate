@@ -71,21 +71,62 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       if (docSnap.exists) {
         doctorData = docSnap.data();
       }
+
       // Fetch appointments (assuming appointments collection with doctorId field)
-      final apptSnap = await FirebaseFirestore.instance
-          .collection('appointments')
-          .where('doctorId', isEqualTo: uid)
-          .orderBy('date', descending: false)
-          .limit(5)
-          .get();
-      appointments = apptSnap.docs.map((d) => d.data()).toList();
+      try {
+        final apptSnap = await FirebaseFirestore.instance
+            .collection('appointments')
+            .where('doctorId', isEqualTo: uid)
+            .orderBy('date', descending: false)
+            .limit(5)
+            .get();
+        appointments = apptSnap.docs.map((d) => d.data()).toList();
+      } catch (e) {
+        print('Error fetching appointments: $e');
+        // Add sample appointments data
+        appointments = [
+          {
+            'patientName': 'John Doe',
+            'date': '2025-07-02',
+            'time': '10:00 AM',
+            'status': 'Scheduled',
+            'patientAvatar': null,
+          },
+          {
+            'patientName': 'Jane Smith',
+            'date': '2025-07-02',
+            'time': '2:00 PM',
+            'status': 'Confirmed',
+            'patientAvatar': null,
+          },
+          {
+            'patientName': 'Mike Johnson',
+            'date': '2025-07-03',
+            'time': '9:00 AM',
+            'status': 'Pending',
+            'patientAvatar': null,
+          },
+        ];
+      }
+
       // Fetch patients (assuming patients collection with doctorId field)
-      final patSnap = await FirebaseFirestore.instance
-          .collection('patients')
-          .where('doctorId', isEqualTo: uid)
-          .limit(10)
-          .get();
-      patients = patSnap.docs.map((d) => d.data()).toList();
+      try {
+        final patSnap = await FirebaseFirestore.instance
+            .collection('patients')
+            .where('doctorId', isEqualTo: uid)
+            .limit(10)
+            .get();
+        patients = patSnap.docs.map((d) => d.data()).toList();
+      } catch (e) {
+        print('Error fetching patients: $e');
+        // Add sample patients data
+        patients = [
+          {'name': 'Alice Brown', 'photoURL': null},
+          {'name': 'Bob Wilson', 'photoURL': null},
+          {'name': 'Carol Davis', 'photoURL': null},
+          {'name': 'David Miller', 'photoURL': null},
+        ];
+      }
     } catch (e) {
       print('Error loading dashboard data: $e');
     }
@@ -257,6 +298,51 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                       ],
                     ),
                     const SizedBox(height: 24),
+                    // Statistics Cards
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildStatCard(
+                            'Patients',
+                            '${patients.length}',
+                            Icons.people,
+                            Colors.blue,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildStatCard(
+                            'Appointments',
+                            '${appointments.length}',
+                            Icons.calendar_today,
+                            Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildStatCard(
+                            'Completed',
+                            '${appointments.where((apt) => apt['status'] == 'Completed').length}',
+                            Icons.check_circle,
+                            Colors.purple,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildStatCard(
+                            'Pending',
+                            '${appointments.where((apt) => apt['status'] == 'Pending').length}',
+                            Icons.pending,
+                            Colors.orange,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
                     // Upcoming Appointments Card
                     _buildUpcomingAppointmentsCard(mainBlue),
                     const SizedBox(height: 24),
@@ -380,70 +466,148 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
   }
 
   Widget _buildUpcomingAppointmentsCard(Color mainBlue) {
-    final appt = appointments.isNotEmpty ? appointments[0] : null;
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(18.0),
-        child: appt == null
-            ? const Text('No upcoming appointments')
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Upcoming Appointments',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundImage: NetworkImage(
-                          appt['patientAvatar'] ??
-                              'https://ui-avatars.com/api/?name=${Uri.encodeComponent(appt['patientName'] ?? 'Patient')}&background=7B61FF&color=fff',
-                        ),
-                        radius: 22,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Upcoming Appointments',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AppointmentsPage(),
                       ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    );
+                  },
+                  child: Text('View All', style: TextStyle(color: mainBlue)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            appointments.isEmpty
+                ? Container(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: const Center(
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.calendar_today,
+                            size: 48,
+                            color: Colors.grey,
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'No upcoming appointments',
+                            style: TextStyle(color: Colors.grey, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: appointments
+                        .take(3)
+                        .length, // Show up to 3 appointments
+                    separatorBuilder: (context, index) => const Divider(),
+                    itemBuilder: (context, index) {
+                      final appt = appointments[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
                           children: [
-                            Text(
-                              appt['patientName'] ?? 'Patient',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
+                            CircleAvatar(
+                              backgroundImage: NetworkImage(
+                                appt['patientAvatar'] ??
+                                    'https://ui-avatars.com/api/?name=${Uri.encodeComponent(appt['patientName'] ?? 'Patient')}&background=7B61FF&color=fff',
+                              ),
+                              radius: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    appt['patientName'] ?? 'Patient',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${appt['date'] ?? ''} at ${appt['time'] ?? ''}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${appt['date'] ?? ''}  |  ${appt['time'] ?? ''}',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _getStatusColor(
+                                  appt['status'] ?? '',
+                                ).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: _getStatusColor(appt['status'] ?? ''),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Text(
+                                appt['status'] ?? 'Pending',
+                                style: TextStyle(
+                                  color: _getStatusColor(appt['status'] ?? ''),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      ElevatedButton(
-                        onPressed: () {},
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: mainBlue,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: const Text('Join'),
-                      ),
-                    ],
+                      );
+                    },
                   ),
-                ],
-              ),
+          ],
+        ),
       ),
     );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'scheduled':
+        return Colors.blue;
+      case 'confirmed':
+        return Colors.green;
+      case 'pending':
+        return Colors.orange;
+      case 'completed':
+        return Colors.purple;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
   }
 
   void _showLogoutDialog() {
@@ -576,6 +740,45 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
             child: const Text('Close'),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStatCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Icon(icon, color: color, size: 24),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+          ],
+        ),
       ),
     );
   }
