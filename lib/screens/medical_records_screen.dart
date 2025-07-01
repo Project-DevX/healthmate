@@ -117,11 +117,35 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
 
     try {
       final geminiService = GeminiService();
-      final summary = await geminiService.analyzeMedicalRecords(widget.userId);
+      
+      // Show progress message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Analyzing documents... This may take a moment.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      
+      // Use the new analysis method
+      final result = await geminiService.analyzeMedicalRecords();
 
       setState(() => _isAnalyzing = false);
 
       if (mounted) {
+        // Show success message
+        final message = result['analysisType'] == 'incremental_update' 
+          ? 'Analysis updated with ${result['newDocumentsAnalyzed']} new document(s)'
+          : 'Analysis completed for ${result['documentsAnalyzed']} document(s)';
+          
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+
+        // Navigate to summary screen
         Navigator.push(
           context,
           MaterialPageRoute(
