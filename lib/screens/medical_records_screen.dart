@@ -16,6 +16,7 @@ class MedicalRecordsScreen extends StatefulWidget {
 
 class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   final DocumentService _documentService = DocumentService();
+  final GeminiService _geminiService = GeminiService();
   bool _isLoading = true;
   bool _isAnalyzing = false;
   List<DocumentInfo> _documents = [];
@@ -165,12 +166,53 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   }
 
   void _viewMedicalSummary() async {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => MedicalSummaryScreen(userId: widget.userId),
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
       ),
     );
+
+    try {
+      // Check if there are new documents that need analysis
+      final statusData = await _geminiService.checkAnalysisStatus();
+      
+      // Close loading dialog
+      Navigator.of(context).pop();
+      
+      if (statusData['needsAnalysis']) {
+        // There are new documents - trigger analysis before showing summary
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MedicalSummaryScreen(
+              userId: widget.userId,
+              autoTriggerAnalysis: true,
+            ),
+          ),
+        );
+      } else {
+        // No new documents - just show the summary
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MedicalSummaryScreen(userId: widget.userId),
+          ),
+        );
+      }
+    } catch (e) {
+      // Close loading dialog if still open
+      Navigator.of(context).pop();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error checking analysis status: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
