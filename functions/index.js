@@ -119,7 +119,8 @@ exports.analyzeMedicalRecords = onCall(
           const docInfo = {
             id: doc.id,
             fileName: docData.fileName,
-            filePath: docData.filePath,
+            storagePath: docData.storagePath,
+            downloadUrl: docData.downloadUrl,
             uploadDate: docData.uploadDate,
             ...docData
           };
@@ -160,9 +161,10 @@ exports.analyzeMedicalRecords = onCall(
 
         for (const docInfo of newDocuments) {
           const fileName = docInfo.fileName;
-          const filePath = docInfo.filePath;
+          const storagePath = docInfo.storagePath;
           
           console.log(`🔍 Analyzing NEW document: ${fileName}`);
+          console.log(`📁 Storage path: ${storagePath}`);
 
           try {
             // Check if it's an image file that Gemini can process
@@ -179,8 +181,20 @@ exports.analyzeMedicalRecords = onCall(
               continue;
             }
 
+            // Check if we have a valid storage path
+            if (!storagePath) {
+              console.log(`❌ No storage path found for document: ${fileName}`);
+              newDocumentAnalyses.push({
+                documentId: docInfo.id,
+                fileName: fileName,
+                uploadDate: docInfo.uploadDate.toDate().toLocaleDateString(),
+                analysis: `Error: Storage path not found for document ${fileName}. Cannot analyze.`
+              });
+              continue;
+            }
+
             // Download the file from Firebase Storage
-            const file = bucket.file(filePath);
+            const file = bucket.file(storagePath);
             const [fileBuffer] = await file.download();
             
             // Convert to base64 for Gemini API
