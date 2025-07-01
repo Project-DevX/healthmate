@@ -608,10 +608,226 @@ exports.debugFunction = onCall(
     },
 );
 
-// Create and deploy your first functions
-// https://firebase.google.com/docs/functions/get-started
+/**
+ * Classify medical document using Gemini AI
+ */
+exports.classifyMedicalDocument = onCall(
+    {cors: true},
+    async (request) => {
+      const {auth, data} = request;
+      
+      if (!auth) {
+        throw new HttpsError("unauthenticated", "User must be logged in");
+      }
 
-// exports.helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+      const userId = auth.uid;
+      const {fileName, storagePath} = data;
+      
+      console.log(`🔍 Classifying document: ${fileName} for user: ${userId}`);
+
+      try {
+        const geminiApiKey = process.env.GEMINI_API_KEY;
+        
+        if (!geminiApiKey) {
+          throw new HttpsError("failed-precondition", "API key not configured");
+        }
+
+        // Initialize Gemini AI
+        const genAI = new GoogleGenerativeAI(geminiApiKey);
+        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+
+        // First, try to classify based on filename
+        let classification = classifyByFileName(fileName);
+        
+        if (classification.category === 'other' && classification.confidence < 0.7) {
+          // If filename classification is uncertain, analyze content
+          classification = await classifyByContent(model, storagePath, fileName);
+        }
+
+        console.log(`✅ Document classified as: ${classification.category} (confidence: ${classification.confidence})`);
+
+        return {
+          success: true,
+          category: classification.category,
+          confidence: classification.confidence,
+          reasoning: classification.reasoning,
+          suggestedSubfolder: classification.suggestedSubfolder
+        };
+
+      } catch (error) {
+        console.error("Error classifying document:", error);
+        throw new HttpsError("internal", "Failed to classify document", error.message);
+      }
+    }
+);
+
+/**
+ * Classify document based on filename patterns
+ */
+function classifyByFileName(fileName) {
+  const lowerFileName = fileName.toLowerCase();
+  
+  // Lab Reports patterns
+  const labPatterns = [
+    /lab|laboratory|blood|test|result|report|cbc|lipid|glucose|cholesterol|hemoglobin|urine|pathology|biopsy|culture|screening/i,
+    /\b(hba1c|tsh|fbc|lft|rft|esr|crp|psa|cea|afp)\b/i,
+    /panel|profile|workup|analysis|assay/i
+  ];
+  
+  // Prescription patterns
+  const prescriptionPatterns = [
+    /prescription|rx|medication|medicine|drug|tablet|capsule|dosage|pharmacy|prescribed/i,
+    /\b(mg|ml|dose|bid|tid|qid|prn|po|iv|im)\b/i,
+    /pill|syrup|injection|cream|ointment/i
+  ];
+  
+  // Doctor Notes patterns
+  const doctorNotesPatterns = [
+    /consultation|visit|note|progress|discharge|summary|assessment|diagnosis|treatment|plan/i,
+    /doctor|physician|specialist|clinic|hospital|follow.*up|checkup/i,
+    /examination|eval|consult|referral|recommendation/i
+  ];
+
+  // Check each category
+  if (labPatterns.some(pattern => pattern.test(lowerFileName))) {
+    return {
+      category: 'lab_reports',
+      confidence: 0.8,
+      reasoning: 'Filename suggests laboratory/test results',
+      suggestedSubfolder: detectLabSubfolder(lowerFileName)
+    };
+  }
+  
+  if (prescriptionPatterns.some(pattern => pattern.test(lowerFileName))) {
+    return {
+      category: 'prescriptions',
+      confidence: 0.8,
+      reasoning: 'Filename suggests prescription/medication',
+      suggestedSubfolder: 'medications'
+    };
+  }
+  
+  if (doctorNotesPatterns.some(pattern => pattern.test(lowerFileName))) {
+    return {
+      category: 'doctor_notes',
+      confidence: 0.8,
+      reasoning: 'Filename suggests medical consultation/notes',
+      suggestedSubfolder: detectNotesSubfolder(lowerFileName)
+    };
+  }
+  
+  return {
+    category: 'other',
+    confidence: 0.3,
+    reasoning: 'Filename does not clearly indicate document type',
+    suggestedSubfolder: 'general'
+  };
+}
+
+/**
+ * Classify document by analyzing content with Gemini
+ */
+async function classifyByContent(model, storagePath, fileName) {
+  try {
+    // Download the file from Firebase Storage
+    const bucket = admin.storage().bucket();
+    const file = bucket.file(storagePath);
+    const [fileBuffer] = await file.download();
+    
+    // Convert to base64 for Gemini API
+    const base64Data = fileBuffer.toString('base64');
+    
+    // Determine the MIME type
+    let mimeType = 'image/jpeg';
+    if (fileName.toLowerCase().endsWith('.png')) {
+      mimeType = 'image/png';
+    } else if (fileName.toLowerCase().endsWith('.pdf')) {
+      // For PDFs, we'll treat as image for now since Gemini Vision works well with PDF images
+      mimeType = 'application/pdf';
+    }
+
+    const classificationPrompt = `
+Analyze this medical document and classify it into ONE of these categories:
+
+1. **LAB_REPORTS**: Laboratory test results, blood tests, urine tests, pathology reports, biopsy results, diagnostic test results
+2. **PRESCRIPTIONS**: Medication prescriptions, drug lists, pharmacy documents, treatment medications
+3. **DOCTOR_NOTES**: Consultation notes, discharge summaries, progress notes, examination reports, diagnostic assessments, treatment plans
+4. **OTHER**: Insurance documents, appointment schedules, medical certificates, general medical correspondence
+
+Look for these specific indicators:
+- **Lab Reports**: Test names, numerical values with reference ranges, laboratory letterhead, pathology results, blood chemistry panels
+- **Prescriptions**: Drug names, dosages (mg, ml), frequency (BID, TID), pharmacy information, "Rx" symbols
+- **Doctor Notes**: Physician observations, diagnosis codes, treatment plans, consultation summaries, medical assessments
+- **Other**: Administrative content, insurance forms, certificates, non-clinical documents
+
+Return ONLY a JSON object in this exact format:
+{
+  "category": "LAB_REPORTS|PRESCRIPTIONS|DOCTOR_NOTES|OTHER",
+  "confidence": 0.9,
+  "reasoning": "Brief explanation of classification decision",
+  "suggestedSubfolder": "specific subfolder name",
+  "keyIndicators": ["indicator1", "indicator2", "indicator3"]
+}
+
+Be precise and confident in your classification. Focus on the PRIMARY purpose of the document.
+`;
+
+    const result = await model.generateContent([
+      classificationPrompt,
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType: mimeType
+        }
+      }
+    ]);
+
+    const responseText = result.response.text();
+    const classification = JSON.parse(responseText.replace(/```json|```/g, ''));
+    
+    // Normalize category name
+    classification.category = classification.category.toLowerCase();
+    
+    return classification;
+
+  } catch (error) {
+    console.error("Error in content classification:", error);
+    return {
+      category: 'other',
+      confidence: 0.2,
+      reasoning: 'Content analysis failed, defaulting to other',
+      suggestedSubfolder: 'general'
+    };
+  }
+}
+
+/**
+ * Detect specific lab subfolder based on filename
+ */
+function detectLabSubfolder(fileName) {
+  if (/blood|hematology|cbc|hemoglobin|platelet/i.test(fileName)) return 'blood_tests';
+  if (/lipid|cholesterol|triglyceride/i.test(fileName)) return 'lipid_profile';
+  if (/glucose|sugar|diabetes|hba1c/i.test(fileName)) return 'diabetes_tests';
+  if (/thyroid|tsh|t3|t4/i.test(fileName)) return 'thyroid_tests';
+  if (/liver|lft|alt|ast|bilirubin/i.test(fileName)) return 'liver_function';
+  if (/kidney|rft|creatinine|urea|gfr/i.test(fileName)) return 'kidney_function';
+  if (/urine|urinalysis/i.test(fileName)) return 'urine_tests';
+  if (/culture|micro|bacteria/i.test(fileName)) return 'microbiology';
+  if (/pathology|biopsy|histology/i.test(fileName)) return 'pathology';
+  return 'general_tests';
+}
+
+/**
+ * Detect specific notes subfolder based on filename
+ */
+function detectNotesSubfolder(fileName) {
+  if (/discharge|summary/i.test(fileName)) return 'discharge_summaries';
+  if (/consultation|visit/i.test(fileName)) return 'consultations';
+  if (/progress|follow.*up/i.test(fileName)) return 'progress_notes';
+  if (/examination|physical/i.test(fileName)) return 'examinations';
+  if (/diagnosis|assessment/i.test(fileName)) return 'diagnoses';
+  if (/treatment|plan/i.test(fileName)) return 'treatment_plans';
+  return 'general_notes';
+}
+
+// ...existing code...
