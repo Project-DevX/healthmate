@@ -510,21 +510,21 @@ class DashboardContent extends StatelessWidget {
                     showDialog(
                       context: context,
                       barrierDismissible: false,
-                      builder: (context) => const Center(
-                        child: CircularProgressIndicator(),
-                      ),
+                      builder: (context) =>
+                          const Center(child: CircularProgressIndicator()),
                     );
 
                     try {
                       // Import and create GeminiService
                       final GeminiService geminiService = GeminiService();
-                      
+
                       // Check if there are new documents that need analysis
-                      final statusData = await geminiService.checkAnalysisStatus();
-                      
+                      final statusData = await geminiService
+                          .checkAnalysisStatus();
+
                       // Close loading dialog
                       Navigator.of(context).pop();
-                      
+
                       if (statusData['needsAnalysis']) {
                         // There are new documents - trigger analysis before showing summary
                         Navigator.push(
@@ -541,14 +541,15 @@ class DashboardContent extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => MedicalSummaryScreen(userId: userId),
+                            builder: (context) =>
+                                MedicalSummaryScreen(userId: userId),
                           ),
                         );
                       }
                     } catch (e) {
                       // Close loading dialog if still open
                       Navigator.of(context).pop();
-                      
+
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Error checking analysis status: $e'),

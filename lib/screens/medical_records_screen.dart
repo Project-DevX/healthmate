@@ -118,7 +118,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
 
     try {
       final geminiService = GeminiService();
-      
+
       // Show progress message
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -126,7 +126,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
           duration: Duration(seconds: 3),
         ),
       );
-      
+
       // Use the new analysis method
       final result = await geminiService.analyzeMedicalRecords();
 
@@ -134,10 +134,10 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
 
       if (mounted) {
         // Show success message
-        final message = result['analysisType'] == 'incremental_update' 
-          ? 'Analysis updated with ${result['newDocumentsAnalyzed']} new document(s)'
-          : 'Analysis completed for ${result['documentsAnalyzed']} document(s)';
-          
+        final message = result['analysisType'] == 'incremental_update'
+            ? 'Analysis updated with ${result['newDocumentsAnalyzed']} new document(s)'
+            : 'Analysis completed for ${result['documentsAnalyzed']} document(s)';
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(message),
@@ -170,18 +170,16 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
+      builder: (context) => const Center(child: CircularProgressIndicator()),
     );
 
     try {
       // Check if there are new documents that need analysis
       final statusData = await _geminiService.checkAnalysisStatus();
-      
+
       // Close loading dialog
       Navigator.of(context).pop();
-      
+
       if (statusData['needsAnalysis']) {
         // There are new documents - trigger analysis before showing summary
         Navigator.push(
@@ -205,7 +203,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     } catch (e) {
       // Close loading dialog if still open
       Navigator.of(context).pop();
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error checking analysis status: $e'),
