@@ -142,10 +142,15 @@ class _LoginPageState extends State<LoginPage> {
             } else if (userType == 'doctor') {
               print('👨‍⚕️ Navigating to doctor dashboard...');
               Navigator.pushReplacementNamed(context, '/doctorDashboard');
+            } else if (userType == 'caregiver') {
+              print('🧑‍🦳 Navigating to caregiver dashboard...');
+              Navigator.pushReplacementNamed(context, '/caregiverDashboard');
+            } else if (userType == 'hospital') {
+              print('🏥 Navigating to hospital dashboard...');
+              Navigator.pushReplacementNamed(context, '/hospitalDashboard');
             } else {
-              print('🏠 Navigating to home page...');
-              // Default route for other user types
-              Navigator.pushReplacementNamed(context, '/home');
+              print('❓ Unknown user type, returning to login.');
+              Navigator.pushReplacementNamed(context, '/login');
             }
           } else {
             print(
