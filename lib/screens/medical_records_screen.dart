@@ -18,8 +18,16 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   final DocumentService _documentService = DocumentService();
   final GeminiService _geminiService = GeminiService();
   bool _isLoading = true;
-  bool _isAnalyzing = false;
   List<DocumentInfo> _documents = [];
+  String _selectedCategory = 'All';
+
+  final List<Map<String, dynamic>> _categories = [
+    {'name': 'All', 'icon': Icons.folder, 'color': Colors.grey},
+    {'name': 'Lab Reports', 'icon': Icons.science, 'color': Colors.blue},
+    {'name': 'Prescriptions', 'icon': Icons.medication, 'color': Colors.green},
+    {'name': 'Doctor Notes', 'icon': Icons.note_alt, 'color': Colors.orange},
+    {'name': 'Other', 'icon': Icons.description, 'color': Colors.purple},
+  ];
 
   @override
   void initState() {
@@ -106,66 +114,47 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
-  void _analyzeDocuments() async {
-    if (_documents.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No medical records found to analyze')),
-      );
-      return;
-    }
-
-    setState(() => _isAnalyzing = true);
-
-    try {
-      final geminiService = GeminiService();
-
-      // Show progress message
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Analyzing documents... This may take a moment.'),
-          duration: Duration(seconds: 3),
-        ),
-      );
-
-      // Use the new analysis method
-      final result = await geminiService.analyzeMedicalRecords();
-
-      setState(() => _isAnalyzing = false);
-
-      if (mounted) {
-        // Show success message
-        final message = result['analysisType'] == 'incremental_update'
-            ? 'Analysis updated with ${result['newDocumentsAnalyzed']} new document(s)'
-            : 'Analysis completed for ${result['documentsAnalyzed']} document(s)';
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-
-        // Navigate to summary screen
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => MedicalSummaryScreen(userId: widget.userId),
-          ),
-        );
-      }
-    } catch (e) {
-      setState(() => _isAnalyzing = false);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error analyzing documents: $e')),
-        );
-      }
-    }
-  }
-
   void _viewMedicalSummary() async {
+    // Show analysis type selection dialog
+    final selectedAnalysisType = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Choose Analysis Type'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Select what documents to include in your AI summary:'),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: const Icon(Icons.science, color: Colors.blue),
+              title: const Text('Lab Reports Only'),
+              subtitle: const Text(
+                'Generate summary using only lab reports and test results',
+              ),
+              onTap: () => Navigator.of(context).pop('lab_reports_only'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_shared, color: Colors.green),
+              title: const Text('All Documents'),
+              subtitle: const Text(
+                'Generate comprehensive summary using all medical documents',
+              ),
+              onTap: () => Navigator.of(context).pop('all_documents'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+
+    // If user cancelled, return
+    if (selectedAnalysisType == null) return;
+
     // Show loading indicator
     showDialog(
       context: context,
@@ -175,7 +164,9 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
 
     try {
       // Check if there are new documents that need analysis
-      final statusData = await _geminiService.checkAnalysisStatus();
+      final statusData = await _geminiService.checkAnalysisStatus(
+        analysisType: selectedAnalysisType,
+      );
 
       // Close loading dialog
       Navigator.of(context).pop();
@@ -188,6 +179,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
             builder: (context) => MedicalSummaryScreen(
               userId: widget.userId,
               autoTriggerAnalysis: true,
+              analysisType: selectedAnalysisType,
             ),
           ),
         );
@@ -196,7 +188,10 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => MedicalSummaryScreen(userId: widget.userId),
+            builder: (context) => MedicalSummaryScreen(
+              userId: widget.userId,
+              analysisType: selectedAnalysisType,
+            ),
           ),
         );
       }
@@ -210,6 +205,221 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  List<DocumentInfo> get _filteredDocuments {
+    if (_selectedCategory == 'All') return _documents;
+
+    String categoryFilter;
+    switch (_selectedCategory) {
+      case 'Lab Reports':
+        categoryFilter = 'lab_reports';
+        break;
+      case 'Prescriptions':
+        categoryFilter = 'prescriptions';
+        break;
+      case 'Doctor Notes':
+        categoryFilter = 'doctor_notes';
+        break;
+      case 'Other':
+        categoryFilter = 'other';
+        break;
+      default:
+        return _documents;
+    }
+
+    return _documents.where((doc) => doc.category == categoryFilter).toList();
+  }
+
+  int _getCategoryCount(String categoryName) {
+    if (categoryName == 'All') return _documents.length;
+
+    String categoryFilter;
+    switch (categoryName) {
+      case 'Lab Reports':
+        categoryFilter = 'lab_reports';
+        break;
+      case 'Prescriptions':
+        categoryFilter = 'prescriptions';
+        break;
+      case 'Doctor Notes':
+        categoryFilter = 'doctor_notes';
+        break;
+      case 'Other':
+        categoryFilter = 'other';
+        break;
+      default:
+        return 0;
+    }
+
+    return _documents.where((doc) => doc.category == categoryFilter).length;
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.folder_open, size: 64, color: Colors.grey.shade400),
+          const SizedBox(height: 16),
+          Text(
+            _selectedCategory == 'All'
+                ? 'No medical records found'
+                : 'No ${_selectedCategory.toLowerCase()} found',
+            style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Upload your first medical document',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDocumentCard(DocumentInfo document) {
+    final categoryInfo = _categories.firstWhere(
+      (cat) => _getCategoryNameFromType(document.category) == cat['name'],
+      orElse: () => _categories.last, // Default to 'Other'
+    );
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        leading: _getFileIcon(document.fileType),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                document.fileName,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: categoryInfo['color'].withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    categoryInfo['icon'],
+                    size: 14,
+                    color: categoryInfo['color'],
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _getCategoryDisplayName(document.category),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: categoryInfo['color'],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.folder_outlined, size: 14, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(
+                  document.subfolder,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[600],
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const Spacer(),
+                if (document.classificationConfidence > 0.7)
+                  Icon(Icons.check_circle, size: 14, color: Colors.green)
+                else if (document.classificationConfidence > 0.4)
+                  Icon(Icons.help_outline, size: 14, color: Colors.orange)
+                else
+                  Icon(Icons.error_outline, size: 14, color: Colors.red),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Size: ${_formatFileSize(document.fileSize)}',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            Text(
+              'Uploaded: ${DateFormat('MMM d, yyyy').format(document.uploadDate)}',
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            if (document.classificationReasoning.isNotEmpty)
+              Text(
+                'AI: ${document.classificationReasoning}',
+                style: TextStyle(
+                  color: Colors.grey[500],
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.open_in_new),
+              onPressed: () => _openDocument(document.downloadUrl),
+              tooltip: 'Open document',
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: () => _deleteDocument(document),
+              tooltip: 'Delete document',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getCategoryNameFromType(String categoryType) {
+    switch (categoryType) {
+      case 'lab_reports':
+        return 'Lab Reports';
+      case 'prescriptions':
+        return 'Prescriptions';
+      case 'doctor_notes':
+        return 'Doctor Notes';
+      default:
+        return 'Other';
+    }
+  }
+
+  String _getCategoryDisplayName(String categoryType) {
+    switch (categoryType) {
+      case 'lab_reports':
+        return 'Lab';
+      case 'prescriptions':
+        return 'Rx';
+      case 'doctor_notes':
+        return 'Notes';
+      default:
+        return 'Other';
     }
   }
 
@@ -229,17 +439,101 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
       ),
       body: Column(
         children: [
-          // Add a prominent summary button at the top
+          // Category Filter Section
+          Container(
+            height: 120,
+            padding: const EdgeInsets.all(16),
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _categories.length,
+              itemBuilder: (context, index) {
+                final category = _categories[index];
+                final isSelected = _selectedCategory == category['name'];
+                final count = _getCategoryCount(category['name']);
+
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedCategory = category['name'];
+                    });
+                  },
+                  child: Container(
+                    width: 100,
+                    margin: const EdgeInsets.only(right: 12),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? category['color'].withOpacity(0.2)
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected
+                            ? category['color']
+                            : Colors.grey.shade300,
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          category['icon'],
+                          size: 32,
+                          color: isSelected
+                              ? category['color']
+                              : Colors.grey.shade600,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          category['name'],
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color: isSelected
+                                ? category['color']
+                                : Colors.grey.shade700,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: category['color'].withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            count.toString(),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: category['color'],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // Add a prominent summary button
           if (_documents.isNotEmpty)
             Container(
               width: double.infinity,
-              margin: const EdgeInsets.all(16),
+              margin: const EdgeInsets.symmetric(horizontal: 16),
               child: ElevatedButton.icon(
                 onPressed: _viewMedicalSummary,
                 icon: const Icon(Icons.auto_awesome),
                 label: const Text('View AI Medical Summary'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
+                  backgroundColor: Colors.teal,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
@@ -248,71 +542,21 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                 ),
               ),
             ),
-          // Existing content
+
+          const SizedBox(height: 16),
+
+          // Documents List
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _documents.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.folder_open,
-                          size: 64,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'No medical records found',
-                          style: TextStyle(fontSize: 18),
-                        ),
-                      ],
-                    ),
-                  )
+                : _filteredDocuments.isEmpty
+                ? _buildEmptyState()
                 : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _documents.length,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: _filteredDocuments.length,
                     itemBuilder: (context, index) {
-                      final doc = _documents[index];
-                      final formattedDate = DateFormat(
-                        'MMM d, yyyy',
-                      ).format(doc.uploadDate);
-
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 2,
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(12),
-                          leading: _getFileIcon(doc.fileType),
-                          title: Text(
-                            doc.fileName,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text(
-                            '${_formatFileSize(doc.fileSize)} • $formattedDate',
-                            style: TextStyle(color: Colors.grey.shade600),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.open_in_new),
-                                onPressed: () => _openDocument(doc.downloadUrl),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline),
-                                color: Colors.red,
-                                onPressed: () => _deleteDocument(doc),
-                              ),
-                            ],
-                          ),
-                          onTap: () => _openDocument(doc.downloadUrl),
-                        ),
-                      );
+                      final doc = _filteredDocuments[index];
+                      return _buildDocumentCard(doc);
                     },
                   ),
           ),

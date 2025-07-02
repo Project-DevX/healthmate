@@ -1,12 +1,8 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
-import 'dart:typed_data';
-// Conditional import for File class
-import 'dart:io' if (dart.library.html) 'dart:html' as io;
-import 'dart:io' if (dart.library.html) 'web_file_stub.dart';
 
 class DocumentService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -80,6 +76,25 @@ class DocumentService {
         TaskSnapshot snapshot = await uploadTask;
         String downloadUrl = await snapshot.ref.getDownloadURL();
 
+        // Classify document using AI
+        String category = 'other';
+        String subfolder = 'general';
+        double confidence = 0.0;
+        String reasoning = 'No classification attempted';
+
+        try {
+          final classificationResult = await _classifyDocument(
+            fileName,
+            ref.fullPath,
+          );
+          category = classificationResult['category'] ?? 'other';
+          subfolder = classificationResult['suggestedSubfolder'] ?? 'general';
+          confidence = (classificationResult['confidence'] ?? 0.0).toDouble();
+          reasoning = classificationResult['reasoning'] ?? 'AI classification';
+        } catch (e) {
+          print('Classification error: $e');
+        }
+
         // Save document metadata to Firestore
         await _firestore
             .collection('users')
@@ -92,6 +107,10 @@ class DocumentService {
               'downloadUrl': downloadUrl,
               'uploadDate': FieldValue.serverTimestamp(),
               'storagePath': ref.fullPath,
+              'category': category,
+              'subfolder': subfolder,
+              'classificationConfidence': confidence,
+              'classificationReasoning': reasoning,
             });
 
         Navigator.pop(context);
@@ -133,6 +152,32 @@ class DocumentService {
         return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
       default:
         return 'application/octet-stream';
+    }
+  }
+
+  // Classify document using Firebase Functions
+  Future<Map<String, dynamic>> _classifyDocument(
+    String fileName,
+    String storagePath,
+  ) async {
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'classifyMedicalDocument',
+      );
+      final result = await callable.call({
+        'fileName': fileName,
+        'storagePath': storagePath,
+      });
+
+      return Map<String, dynamic>.from(result.data);
+    } catch (e) {
+      print('Error classifying document: $e');
+      return {
+        'category': 'other',
+        'suggestedSubfolder': 'general',
+        'confidence': 0.0,
+        'reasoning': 'Classification failed: $e',
+      };
     }
   }
 
@@ -230,6 +275,10 @@ class DocumentInfo {
   final DateTime uploadDate;
   final String downloadUrl;
   final String storagePath;
+  final String category;
+  final String subfolder;
+  final double classificationConfidence;
+  final String classificationReasoning;
 
   DocumentInfo({
     required this.id,
@@ -240,6 +289,10 @@ class DocumentInfo {
     required this.uploadDate,
     required this.downloadUrl,
     required this.storagePath,
+    this.category = 'other',
+    this.subfolder = 'general',
+    this.classificationConfidence = 0.0,
+    this.classificationReasoning = 'No classification',
   });
 
   factory DocumentInfo.fromFirestore(DocumentSnapshot doc) {
@@ -255,6 +308,12 @@ class DocumentInfo {
       uploadDate: timestamp?.toDate() ?? DateTime.now(),
       downloadUrl: data['downloadUrl'] ?? '',
       storagePath: data['storagePath'] ?? '',
+      category: data['category'] ?? 'other',
+      subfolder: data['subfolder'] ?? 'general',
+      classificationConfidence: (data['classificationConfidence'] ?? 0.0)
+          .toDouble(),
+      classificationReasoning:
+          data['classificationReasoning'] ?? 'No classification',
     );
   }
 }

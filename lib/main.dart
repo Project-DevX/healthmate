@@ -9,6 +9,8 @@ import 'doctorReg.dart';
 import 'caregiverReg.dart';
 import 'hospitalReg.dart';
 import 'screens/doctor_dashboard.dart';
+import 'screens/hospital_dashboard.dart';
+import 'screens/caregiver_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,10 +38,6 @@ class MyApp extends StatelessWidget {
           return MaterialPageRoute(builder: (_) => const AuthWrapper());
         } else if (settings.name == '/login') {
           return MaterialPageRoute(builder: (_) => const LoginPage());
-        } else if (settings.name == '/home') {
-          return MaterialPageRoute(
-            builder: (_) => const MyHomePage(title: 'Flutter Demo Home Page'),
-          );
         } else if (settings.name == '/patientDashboard') {
           return MaterialPageRoute(builder: (_) => const PatientDashboard());
         } else if (settings.name == '/doctorRegister') {
@@ -56,6 +54,10 @@ class MyApp extends StatelessWidget {
           );
         } else if (settings.name == '/doctorDashboard') {
           return MaterialPageRoute(builder: (_) => const DoctorDashboard());
+        } else if (settings.name == '/hospitalDashboard') {
+          return MaterialPageRoute(builder: (_) => const HospitalDashboard());
+        } else if (settings.name == '/caregiverDashboard') {
+          return MaterialPageRoute(builder: (_) => const CaregiverDashboard());
         }
         // Handle unknown routes
         return MaterialPageRoute(builder: (_) => const AuthWrapper());
@@ -64,59 +66,15 @@ class MyApp extends StatelessWidget {
       routes: {
         '/': (context) => const AuthWrapper(),
         '/login': (context) => const LoginPage(),
-        '/home': (context) => const MyHomePage(title: 'Flutter Demo Home Page'),
         '/register': (context) => const RegisterPage(),
         '/patientDashboard': (context) => const PatientDashboard(),
         '/doctorRegister': (context) => const DoctorRegistrationPage(),
         '/caregiverRegister': (context) => const CaregiverRegistrationPage(),
         '/hospitalRegister': (context) => const HospitalRegistrationPage(),
         '/doctorDashboard': (context) => const DoctorDashboard(),
+        '/hospitalDashboard': (context) => const HospitalDashboard(),
+        '/caregiverDashboard': (context) => const CaregiverDashboard(),
       },
-    );
-  }
-}
-
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      _counter++;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.title),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
     );
   }
 }
