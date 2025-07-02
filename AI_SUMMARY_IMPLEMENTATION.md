@@ -96,6 +96,13 @@ Summary returned to frontend
 
 ## Technical Architecture
 
+### AI Model
+The system uses **Gemini 2.5 Flash-Lite Preview (0617)** for:
+- Document classification and categorization
+- Medical text extraction from images
+- Comprehensive medical analysis and summarization
+- Lab report analysis and insights
+
 ### Document Storage
 ```
 Firestore: /medical_records/{userId}/documents/{docId}

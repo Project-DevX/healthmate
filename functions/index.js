@@ -20,6 +20,8 @@ setGlobalOptions({region: "us-central1"}); // Change to your preferred region
 // Initialize Firebase Admin
 admin.initializeApp();
 
+// Updated to use Gemini 2.5 Flash-Lite Preview for better performance
+
 /**
 
  * Debug function to test Cloud Functions connectivity
@@ -75,7 +77,7 @@ exports.classifyMedicalDocument = onCall(
         }
 
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+        const model = genAI.getGenerativeModel({model: "gemini-2.5-flash-lite-preview-0617"});
         const bucket = admin.storage().bucket();
 
         // Check if file exists and is an image
@@ -197,7 +199,7 @@ exports.analyzeLabReports = onCall(
         }
 
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+        const model = genAI.getGenerativeModel({model: "gemini-2.5-flash-lite-preview-0617"});
         const db = admin.firestore();
 
         // Get existing lab analysis
@@ -376,7 +378,7 @@ exports.analyzeAllMedicalRecords = onCall(
         }
 
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+        const model = genAI.getGenerativeModel({model: "gemini-2.5-flash-lite-preview-0617"});
         const db = admin.firestore();
 
         // Get existing comprehensive analysis
@@ -577,7 +579,7 @@ exports.classifyMedicalDocument = onCall(
         }
 
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+        const model = genAI.getGenerativeModel({model: "gemini-2.5-flash-lite-preview-0617"});
         const bucket = admin.storage().bucket();
 
         // Check if file exists and is an image
@@ -726,15 +728,7 @@ function getDefaultSubfolder(category) {
  * Helper function to analyze documents with Gemini Vision
  */
 
-          analysisType: 'lab_reports_only'
-        };
 
-      } catch (error) {
-        console.error("Error analyzing lab reports:", error);
-        throw new HttpsError("internal", "Failed to analyze lab reports", error.message);
-      }
-    }
-);
 
 /**
  * Analyze ALL medical documents using Gemini AI
@@ -761,7 +755,7 @@ exports.analyzeAllMedicalRecords = onCall(
         }
 
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+        const model = genAI.getGenerativeModel({model: "gemini-2.5-flash-lite-preview-0617"});
         const db = admin.firestore();
 
         // Get existing comprehensive analysis
