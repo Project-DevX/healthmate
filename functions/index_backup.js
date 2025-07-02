@@ -36,7 +36,7 @@ exports.debugFunction = onCall(
       message: "Debug function working correctly",
       timestamp: new Date().toISOString(),
       userId: auth.uid,
-      geminiApiKey: functions.config().gemini?.api_key ? "Present" : "Missing"
+      geminiApiKey: process.env.GEMINI_API_KEY ? "Present" : "Missing"
     };
   }
 );
@@ -64,7 +64,7 @@ exports.classifyMedicalDocument = onCall(
       }
 
       try {
-        const geminiApiKey = functions.config().gemini?.api_key;
+        const geminiApiKey = process.env.GEMINI_API_KEY;
         if (!geminiApiKey) {
           console.warn('⚠️ Gemini API key not configured, using filename-based classification');
           return classifyByFilename(fileName);
@@ -181,43 +181,30 @@ exports.analyzeLabReports = onCall(
       }
 
       const userId = auth.uid;
-      const forceReanalysis = data?.forceReanalysis || false; // Allow forcing re-analysis of all documents
+      const forceReanalysis = data?.forceReanalysis || false;
       
-      console.log('✅ Authenticated user ID:', userId);
-      console.log('🔄 Force reanalysis:', forceReanalysis);
-
       try {
-        const geminiApiKey = functions.config().gemini?.api_key;
+        const geminiApiKey = process.env.GEMINI_API_KEY;
         if (!geminiApiKey) {
-          console.error('❌ GEMINI_API_KEY not configured in Firebase config or environment');
-          throw new HttpsError(
-              "failed-precondition",
-              "API key not configured",
-          );
+          throw new HttpsError("failed-precondition", "API key not configured");
         }
 
-        // Initialize Gemini AI
         const genAI = new GoogleGenerativeAI(geminiApiKey);
         const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
-
-        // Get user's medical documents from Firestore
         const db = admin.firestore();
-        
-        // Check if there's an existing analysis
+
+        // Get existing lab analysis
         const existingAnalysisDoc = await db
             .collection("users")
             .doc(userId)
             .collection("ai_analysis")
-            .doc("latest")
+            .doc("lab_reports")
             .get();
 
         const existingAnalysis = existingAnalysisDoc.exists ? existingAnalysisDoc.data() : null;
         const analyzedDocumentIds = existingAnalysis?.analyzedDocuments || [];
-        
-        console.log('📊 Existing analysis found:', !!existingAnalysis);
-        console.log('� Previously analyzed documents:', analyzedDocumentIds.length);
 
-        // Get all documents
+        // Get LAB REPORTS only from new document structure
         const documentsSnapshot = await db
             .collection("medical_records")
             .doc(userId)
@@ -375,7 +362,7 @@ exports.analyzeAllMedicalRecords = onCall(
       const forceReanalysis = data?.forceReanalysis || false;
       
       try {
-        const geminiApiKey = functions.config().gemini?.api_key;
+        const geminiApiKey = process.env.GEMINI_API_KEY;
         if (!geminiApiKey) {
           throw new HttpsError("failed-precondition", "API key not configured");
         }
@@ -388,20 +375,32 @@ exports.analyzeAllMedicalRecords = onCall(
         const existingAnalysisDoc = await db
             .collection("users")
             .doc(userId)
+            .collection("ai_analysis")
+            .doc("comprehensive")
+            .get();
+
+        const existingAnalysis = existingAnalysisDoc.exists ? existingAnalysisDoc.data() : null;
+        const analyzedDocumentIds = existingAnalysis?.analyzedDocuments || [];
+
+        // Get ALL documents from new structure
+        const documentsSnapshot = await db
+            .collection("medical_records")
+            .doc(userId)
             .collection("documents")
             .orderBy("uploadDate", "desc")
             .get();
 
         if (documentsSnapshot.empty) {
           return {
-            summary: "No medical records found for analysis. Please upload some medical documents first.",
+            summary: "No medical documents found for analysis. Please upload some medical records first.",
             documentsAnalyzed: 0,
             newDocumentsAnalyzed: 0,
-            isCached: false
+            isCached: false,
+            analysisType: 'comprehensive'
           };
         }
 
-        // Separate new documents from already analyzed ones
+        // Process all documents
         const allDocuments = [];
         const newDocuments = [];
 
@@ -410,15 +409,15 @@ exports.analyzeAllMedicalRecords = onCall(
           const docInfo = {
             id: doc.id,
             fileName: docData.fileName,
-            storagePath: docData.storagePath,
+            storagePath: docData.filePath, // Updated field name
             downloadUrl: docData.downloadUrl,
             uploadDate: docData.uploadDate,
+            category: docData.category,
             ...docData
           };
           
           allDocuments.push(docInfo);
           
-          // If force reanalysis, treat all as new; otherwise only include unanalyzed documents
           const wasAnalyzed = analyzedDocumentIds.includes(doc.id);
           if (forceReanalysis || !wasAnalyzed) {
             newDocuments.push(docInfo);
@@ -428,248 +427,129 @@ exports.analyzeAllMedicalRecords = onCall(
         console.log(`📄 Total documents: ${allDocuments.length}`);
         console.log(`🆕 New documents to analyze: ${newDocuments.length}`);
 
-        // If no new documents and we have existing analysis, return cached result
+        // Return cached if no new documents
         if (newDocuments.length === 0 && existingAnalysis && !forceReanalysis) {
-          console.log('✅ No new documents found, returning cached analysis');
           return {
             summary: existingAnalysis.summary,
             lastUpdated: existingAnalysis.timestamp.toDate().toISOString(),
             documentsAnalyzed: analyzedDocumentIds.length,
             newDocumentsAnalyzed: 0,
-            isCached: true
+            isCached: true,
+            analysisType: 'comprehensive'
           };
         }
 
-        // Get user profile data for context
+        // Get user profile for context
         const userDoc = await db.collection("users").doc(userId).get();
         const userData = userDoc.data() || {};
 
-        // Process NEW documents with Gemini Vision to extract text content
-        const newDocumentAnalyses = [];
-        const bucket = admin.storage().bucket();
+        // Analyze new documents
+        const newDocumentAnalyses = await analyzeDocuments(newDocuments, model, 'comprehensive');
 
-        console.log(`📄 Processing ${newDocuments.length} NEW documents with vision analysis...`);
+        // Group documents by category for better organization
+        const documentsByCategory = groupDocumentsByCategory(newDocumentAnalyses);
 
-        for (const docInfo of newDocuments) {
-          const fileName = docInfo.fileName;
-          const storagePath = docInfo.storagePath;
-          
-          console.log(`🔍 Analyzing NEW document: ${fileName}`);
-          console.log(`📁 Storage path: ${storagePath}`);
-
-          try {
-            // Check if it's an image file that Gemini can process
-            const isImage = /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(fileName);
-            
-            if (!isImage) {
-              console.log(`⚠️ Skipping non-image file: ${fileName}`);
-              newDocumentAnalyses.push({
-                documentId: docInfo.id,
-                fileName: fileName,
-                uploadDate: docInfo.uploadDate.toDate().toLocaleDateString(),
-                analysis: `Document type not supported for text extraction: ${fileName}. Only image files (JPG, PNG, etc.) can be analyzed for text content.`
-              });
-              continue;
-            }
-
-            // Check if we have a valid storage path
-            if (!storagePath) {
-              console.log(`❌ No storage path found for document: ${fileName}`);
-              newDocumentAnalyses.push({
-                documentId: docInfo.id,
-                fileName: fileName,
-                uploadDate: docInfo.uploadDate.toDate().toLocaleDateString(),
-                analysis: `Error: Storage path not found for document ${fileName}. Cannot analyze.`
-              });
-              continue;
-            }
-
-            // Download the file from Firebase Storage
-            const file = bucket.file(storagePath);
-            const [fileBuffer] = await file.download();
-            
-            // Convert to base64 for Gemini API
-            const base64Data = fileBuffer.toString('base64');
-            
-            // Determine the MIME type
-            let mimeType = 'image/jpeg';
-            if (fileName.toLowerCase().endsWith('.png')) {
-              mimeType = 'image/png';
-            } else if (fileName.toLowerCase().endsWith('.gif')) {
-              mimeType = 'image/gif';
-            } else if (fileName.toLowerCase().endsWith('.webp')) {
-              mimeType = 'image/webp';
-            }
-
-            // Create a detailed prompt for medical document OCR and analysis
-            const visionPrompt = `
-Please carefully analyze this medical document image and extract ALL visible text and information. Focus on:
-
-1. **Document Type**: What type of medical document is this? (lab report, prescription, discharge summary, etc.)
-2. **Patient Information**: Any patient details visible (name, ID, demographics)
-3. **Medical Tests & Results**: 
-   - Lab values and their reference ranges
-   - Abnormal results (mark as HIGH/LOW if indicated)
-   - Test names and measurements
-4. **Diagnoses & Conditions**: Any medical conditions, diagnoses, or health issues mentioned
-5. **Medications**: Any medications listed with dosages, frequencies
-6. **Vital Signs**: Blood pressure, heart rate, temperature, etc.
-7. **Dates & Times**: All dates mentioned in the document
-8. **Healthcare Providers**: Doctor names, hospital/clinic information
-9. **Clinical Notes**: Any doctor's observations or recommendations
-10. **Reference Values**: Normal ranges for lab tests
-
-Please extract and transcribe ALL readable text, numbers, and medical information from this image. 
-Be extremely thorough and include specific values, units, and reference ranges where visible.
-Format the response in clear sections with bullet points for easy reading.
-
-If any text is unclear or partially obscured, indicate this in your response.
-ACT AS A DOCTOR AND MEDICAL ANALYST, focusing on accuracy and detail in your analysis.
-BE DETAILED AND PRECISE IN YOUR EXTRACTION.
-BE OBJECTIVE AND NEUTRAL IN YOUR ANALYSIS.
-MAKE THE VIEW LOOK NICE AND PROFESSIONAL+ READABLES.
-`;
-
-            // Analyze the document with Gemini Vision
-            const visionResult = await model.generateContent([
-              visionPrompt,
-              {
-                inlineData: {
-                  data: base64Data,
-                  mimeType: mimeType
-                }
-              }
-            ]);
-
-            const analysis = visionResult.response.text();
-            
-            newDocumentAnalyses.push({
-              documentId: docInfo.id,
-              fileName: fileName,
-              uploadDate: docInfo.uploadDate.toDate().toLocaleDateString(),
-              analysis: analysis
-            });
-
-            console.log(`✅ Successfully analyzed image content for: ${fileName}`);
-
-          } catch (error) {
-            console.error(`❌ Error analyzing ${fileName}:`, error);
-            newDocumentAnalyses.push({
-              documentId: docInfo.id,
-              fileName: fileName,
-              uploadDate: docInfo.uploadDate.toDate().toLocaleDateString(),
-              analysis: `Error extracting text from image: ${error.message}. The image may be corrupted or in an unsupported format.`
-            });
-          }
-        }
-
-        // Create date of birth text
+        // Create comprehensive summary prompt
         const dobText = userData.dateOfBirth ?
           new Date(userData.dateOfBirth.seconds * 1000).toLocaleDateString() :
           "Not specified";
 
-        // Prepare the summary prompt
-        let summaryPrompt;
-        
-        if (existingAnalysis && !forceReanalysis && newDocumentAnalyses.length > 0) {
-          // Combine new analysis with existing summary
-          summaryPrompt = `
-You are updating an existing medical summary with new document analysis. Here is the context:
+        const comprehensiveSummaryPrompt = `
+Create a COMPREHENSIVE MEDICAL SUMMARY based on ALL medical document types:
 
-**EXISTING MEDICAL SUMMARY:**
+**PATIENT INFORMATION:**
+- Gender: ${userData.gender || "Not specified"}
+- Age: ${userData.age || "Not specified"}
+- Date of Birth: ${dobText}
+
+${existingAnalysis && !forceReanalysis ? `
+**EXISTING COMPREHENSIVE SUMMARY:**
 ${existingAnalysis.summary}
 
-**NEW DOCUMENT ANALYSES TO INTEGRATE:**
-${newDocumentAnalyses.map((doc, index) => 
-  `\n--- NEW Document ${index + 1}: ${doc.fileName} (${doc.uploadDate}) ---\n${doc.analysis}\n`
-).join('\n')}
+**NEW DOCUMENTS TO INTEGRATE:**
+` : '**ALL DOCUMENT ANALYSES:**'}
 
-**PATIENT INFORMATION:**
-- Gender: ${userData.gender || "Not specified"}
-- Age: ${userData.age || "Not specified"}
-- Date of Birth: ${dobText}
+**LAB REPORTS:**
+${documentsByCategory.labReports.map((doc, i) => 
+  `${i + 1}. ${doc.fileName} (${doc.uploadDate})\n${doc.analysis}\n`
+).join('\n') || 'No lab reports found.'}
 
-Please create an UPDATED comprehensive medical summary that:
-1. **Preserves all important information** from the existing summary
-2. **Integrates the new document findings** seamlessly
-3. **Updates timelines** with new dates and events
-4. **Highlights any new conditions, medications, or test results**
-5. **Maintains the same structure** as the original summary
-6. **Notes what information is new** in this update
+**PRESCRIPTIONS:**
+${documentsByCategory.prescriptions.map((doc, i) => 
+  `${i + 1}. ${doc.fileName} (${doc.uploadDate})\n${doc.analysis}\n`
+).join('\n') || 'No prescriptions found.'}
 
-Structure the response with clear headings:
-- Document Overview (updated count)
-- Key Medical Findings (including new findings)
-- Test Results Summary (with new results integrated)
-- Medications & Treatments (updated)
-- Clinical Timeline (chronologically updated)
-- Health Recommendations (updated based on new findings)
-- Risk Factors (updated assessment)
+**DOCTOR NOTES:**
+${documentsByCategory.doctorNotes.map((doc, i) => 
+  `${i + 1}. ${doc.fileName} (${doc.uploadDate})\n${doc.analysis}\n`
+).join('\n') || 'No doctor notes found.'}
 
-Mark new findings with "**NEW:**" where appropriate for easy identification.
-          `;
-        } else {
-          // Create fresh summary (either no existing analysis or force reanalysis)
-          summaryPrompt = `
-Based on the following detailed medical document analyses extracted from images, create a comprehensive medical summary:
+**OTHER DOCUMENTS:**
+${documentsByCategory.other.map((doc, i) => 
+  `${i + 1}. ${doc.fileName} (${doc.uploadDate})\n${doc.analysis}\n`
+).join('\n') || 'No other documents found.'}
 
-**PATIENT INFORMATION:**
-- Gender: ${userData.gender || "Not specified"}
-- Age: ${userData.age || "Not specified"}
-- Date of Birth: ${dobText}
+Create a COMPREHENSIVE medical summary with:
 
-**DOCUMENT ANALYSES:**
-${newDocumentAnalyses.map((doc, index) => 
-  `\n--- Document ${index + 1}: ${doc.fileName} (${doc.uploadDate}) ---\n${doc.analysis}\n`
-).join('\n')}
+1. **Document Overview**: Complete inventory of all medical records
+2. **Medical History Summary**: 
+   - Diagnoses and conditions from all sources
+   - Treatment history and outcomes
+   - Surgical and procedural history
+3. **Laboratory Results Integration**:
+   - Key lab findings with trends
+   - Abnormal values and their clinical context
+4. **Medications & Treatment Plans**:
+   - Current and past medications
+   - Dosages, frequencies, and treatment duration
+   - Treatment response and adjustments
+5. **Clinical Timeline**: 
+   - Comprehensive chronological medical events
+   - Disease progression and treatment milestones
+6. **Healthcare Team & Facilities**:
+   - Involved healthcare providers
+   - Hospitals and clinics visited
+7. **Health Status Assessment**:
+   - Current health status based on all available data
+   - Risk factors and potential concerns
+8. **Integrated Recommendations**:
+   - Care coordination suggestions
+   - Monitoring and follow-up recommendations
 
-Based on the extracted content above, please provide a comprehensive medical summary with:
+Integrate information from ALL document types for a complete picture.
+Mark new findings with "**NEW:**" if updating existing summary.
+`;
 
-1. **Document Overview**: Summary of all documents analyzed
-2. **Key Medical Findings**: 
-   - Laboratory abnormalities (with specific values and reference ranges)
-   - Diagnoses and medical conditions identified
-   - Critical or concerning findings
-3. **Test Results Summary**:
-   - Organize lab results by category (blood chemistry, hematology, etc.)
-   - Highlight abnormal values
-   - Include reference ranges where available
-4. **Medications & Treatments**: Any medications or treatments mentioned
-5. **Clinical Timeline**: Chronological order of medical events and test dates
-6. **Health Recommendations**: Based on the findings, suggest potential follow-up actions
-7. **Risk Factors**: Identify any concerning patterns or risk factors
-
-Please be specific and include actual values, dates, and medical terminology from the extracted text.
-Format with clear headings and bullet points for readability.
-          `;
-        }
-
-        // Generate comprehensive summary using Gemini
-        const result = await model.generateContent(summaryPrompt);
+        const result = await model.generateContent(comprehensiveSummaryPrompt);
         const summary = result.response.text();
 
-        // Update the list of analyzed documents
+        // Update analyzed documents list
         const updatedAnalyzedDocuments = [...new Set([
           ...analyzedDocumentIds,
           ...newDocumentAnalyses.map(doc => doc.documentId)
         ])];
 
-        // Store the updated analysis result in Firestore
+        // Store comprehensive analysis
         await db
             .collection("users")
             .doc(userId)
             .collection("ai_analysis")
-            .doc("latest")
+            .doc("comprehensive")
             .set({
               summary: summary,
               timestamp: admin.firestore.FieldValue.serverTimestamp(),
               documentCount: allDocuments.length,
               analyzedDocuments: updatedAnalyzedDocuments,
+              analysisType: 'comprehensive',
+              documentCategories: {
+                labReports: documentsByCategory.labReports.length,
+                prescriptions: documentsByCategory.prescriptions.length,
+                doctorNotes: documentsByCategory.doctorNotes.length,
+                other: documentsByCategory.other.length
+              },
               lastAnalysisType: forceReanalysis ? 'full_reanalysis' : 
                                (existingAnalysis ? 'incremental_update' : 'initial_analysis')
             });
-
-        console.log(`✅ Analysis complete. Total docs: ${allDocuments.length}, New docs analyzed: ${newDocumentAnalyses.length}`);
 
         return {
           summary: summary,
@@ -709,7 +589,7 @@ exports.debugFunction = onCall(
       message: "Debug function working correctly",
       timestamp: new Date().toISOString(),
       userId: auth.uid,
-      geminiApiKey: functions.config().gemini?.api_key ? "Present" : "Missing"
+      geminiApiKey: process.env.GEMINI_API_KEY ? "Present" : "Missing"
     };
   }
 );
@@ -737,7 +617,7 @@ exports.classifyMedicalDocument = onCall(
       }
 
       try {
-        const geminiApiKey = functions.config().gemini?.api_key;
+        const geminiApiKey = process.env.GEMINI_API_KEY;
         if (!geminiApiKey) {
           console.warn('⚠️ Gemini API key not configured, using filename-based classification');
           return classifyByFilename(fileName);
