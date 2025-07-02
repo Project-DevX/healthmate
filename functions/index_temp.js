@@ -36,7 +36,7 @@ exports.debugFunction = onCall(
       message: "Debug function working correctly",
       timestamp: new Date().toISOString(),
       userId: auth.uid,
-      geminiApiKey: functions.config().gemini?.api_key ? "Present" : "Missing"
+      geminiApiKey: process.env.GEMINI_API_KEY ? "Present" : "Missing"
     };
   }
 );
@@ -64,14 +64,14 @@ exports.classifyMedicalDocument = onCall(
       }
 
       try {
-        const geminiApiKey = functions.config().gemini?.api_key;
+        const geminiApiKey = process.env.GEMINI_API_KEY;
         if (!geminiApiKey) {
           console.warn('⚠️ Gemini API key not configured, using filename-based classification');
-          return intelligentClassifyByFilename(fileName);
+          return classifyByFilename(fileName);
         }
 
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-2.5-flash-lite-preview-0617"});
+        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
         const bucket = admin.storage().bucket();
 
         // Check if file exists and is an image
@@ -80,7 +80,7 @@ exports.classifyMedicalDocument = onCall(
         
         if (!exists) {
           console.error(`❌ File not found: ${storagePath}`);
-          return intelligentClassifyByFilename(fileName);
+          return classifyByFilename(fileName);
         }
 
         // Check if it's an image file for AI analysis
@@ -88,7 +88,7 @@ exports.classifyMedicalDocument = onCall(
         
         if (!isImage) {
           console.log(`📄 Non-image file, using filename classification: ${fileName}`);
-          return intelligentClassifyByFilename(fileName);
+          return classifyByFilename(fileName);
         }
 
         // Download and analyze the image
@@ -154,13 +154,13 @@ Focus on identifying:
 
         // Fallback to filename classification if AI fails
         console.log('⚠️ AI classification failed, falling back to filename analysis');
-        return intelligentClassifyByFilename(fileName);
+        return classifyByFilename(fileName);
 
       } catch (error) {
         console.error('❌ Error in document classification:', error);
         
         // Fallback to filename classification
-        return intelligentClassifyByFilename(fileName);
+        return classifyByFilename(fileName);
       }
     }
 );
@@ -184,13 +184,13 @@ exports.analyzeLabReports = onCall(
       const forceReanalysis = data?.forceReanalysis || false;
       
       try {
-        const geminiApiKey = functions.config().gemini?.api_key;
+        const geminiApiKey = process.env.GEMINI_API_KEY;
         if (!geminiApiKey) {
           throw new HttpsError("failed-precondition", "API key not configured");
         }
 
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-2.5-flash-lite-preview-0617"});
+        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
         const db = admin.firestore();
 
         // Get existing lab analysis
@@ -362,13 +362,13 @@ exports.analyzeAllMedicalRecords = onCall(
       const forceReanalysis = data?.forceReanalysis || false;
       
       try {
-        const geminiApiKey = functions.config().gemini?.api_key;
+        const geminiApiKey = process.env.GEMINI_API_KEY;
         if (!geminiApiKey) {
           throw new HttpsError("failed-precondition", "API key not configured");
         }
 
         const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-2.5-flash-lite-preview-0617"});
+        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
         const db = admin.firestore();
 
         // Get existing comprehensive analysis
@@ -574,121 +574,149 @@ Mark new findings with "**NEW:**" if updating existing summary.
 );
 
 /**
- * Intelligent fallback classification with enhanced medical keyword analysis
+ * Debug function to test Cloud Functions connectivity
  */
-function intelligentClassifyByFilename(fileName) {
-  console.log(`🎯 Using intelligent classification for: ${fileName}`);
-  
-  const nameLower = fileName.toLowerCase();
-  const fileExtension = fileName.split('.').pop().toLowerCase();
-  
-  // Enhanced filename analysis with comprehensive medical keywords
-  const medicalKeywords = {
-    lab_reports: [
-      'lab', 'test', 'blood', 'report', 'result', 'analysis', 'pathology',
-      'biopsy', 'culture', 'panel', 'screening', 'assay', 'chemistry',
-      'hematology', 'urinalysis', 'microbiology', 'serology', 'toxicology',
-      'glucose', 'cholesterol', 'hemoglobin', 'platelet', 'white', 'red', 'cell',
-      'cbc', 'comprehensive', 'metabolic', 'lipid', 'liver', 'kidney', 'thyroid'
-    ],
-    prescriptions: [
-      'prescription', 'medicine', 'drug', 'pharmacy', 'rx', 'medication',
-      'pills', 'tablet', 'capsule', 'dosage', 'mg', 'ml', 'dose',
-      'antibiotic', 'insulin', 'aspirin', 'ibuprofen', 'acetaminophen',
-      'prescribed', 'refill', 'generic', 'brand', 'cvs', 'walgreens', 'rite aid'
-    ],
-    doctor_notes: [
-      'doctor', 'consultation', 'visit', 'note', 'clinical', 'medical',
-      'diagnosis', 'treatment', 'examination', 'assessment', 'history',
-      'symptoms', 'patient', 'hospital', 'clinic', 'physician', 'nurse',
-      'discharge', 'admission', 'follow-up', 'referral', 'progress', 'summary'
-    ]
-  };
-  
-  // Calculate keyword scores for each category
-  const scores = {};
-  let maxScore = 0;
-  let bestCategory = 'other';
-  
-  for (const [category, keywords] of Object.entries(medicalKeywords)) {
-    scores[category] = 0;
+exports.debugFunction = onCall(
+  {cors: true},
+  async (request) => {
+    const {auth} = request;
     
-    keywords.forEach(keyword => {
-      if (nameLower.includes(keyword)) {
-        // Give higher weight to longer medical terms
-        const weight = keyword.length > 4 ? 2 : 1;
-        scores[category] += weight;
-      }
-    });
-    
-    if (scores[category] > maxScore) {
-      maxScore = scores[category];
-      bestCategory = category;
+    if (!auth) {
+      throw new HttpsError("unauthenticated", "User must be logged in");
     }
+    
+    return {
+      message: "Debug function working correctly",
+      timestamp: new Date().toISOString(),
+      userId: auth.uid,
+      geminiApiKey: process.env.GEMINI_API_KEY ? "Present" : "Missing"
+    };
   }
-  
-  // File extension-based intelligent defaults
-  let extensionHint = '';
-  let extensionConfidenceBoost = 0;
-  
-  switch (fileExtension) {
-    case 'pdf':
-      extensionHint = 'PDF document - analyzing for medical content';
-      extensionConfidenceBoost = 0.1;
-      // If no keywords found, make educated guess based on common patterns
-      if (bestCategory === 'other' && maxScore === 0) {
-        bestCategory = 'doctor_notes'; // PDFs are often clinical documents
-        maxScore = 1;
+);
+
+/**
+ * Classify medical documents using Gemini AI
+ */
+exports.classifyMedicalDocument = onCall(
+    {cors: true},
+    async (request) => {
+      const {auth, data} = request;
+      
+      console.log('=== CLASSIFY MEDICAL DOCUMENT ===');
+      console.log('Auth UID:', auth?.uid);
+      console.log('Data:', data);
+
+      if (!auth) {
+        throw new HttpsError("unauthenticated", "User must be logged in");
       }
-      break;
-    case 'jpg':
-    case 'jpeg':
-    case 'png':
-      extensionHint = 'Image file - likely scanned medical document';
-      extensionConfidenceBoost = 0.15;
-      // Images are often lab results or scanned reports
-      if (bestCategory === 'other' && maxScore === 0) {
-        bestCategory = 'lab_reports';
-        maxScore = 1;
+
+      const {fileName, storagePath} = data;
+      
+      if (!fileName || !storagePath) {
+        throw new HttpsError("invalid-argument", "fileName and storagePath are required");
       }
-      break;
-    case 'doc':
-    case 'docx':
-      extensionHint = 'Word document - likely clinical notes or reports';
-      extensionConfidenceBoost = 0.1;
-      if (bestCategory === 'other' && maxScore === 0) {
-        bestCategory = 'doctor_notes';
-        maxScore = 1;
-      }
-      break;
-  }
-  
-  // Calculate confidence based on keyword matches and file type
-  let confidence = Math.min(0.8, (maxScore * 0.12) + extensionConfidenceBoost);
-  
-  // Ensure reasonable confidence for all medical files
-  if (confidence < 0.25) {
-    confidence = 0.25;
-  }
-  
-  // Create detailed reasoning
-  let reasoning = '';
-  if (maxScore > 0) {
-    reasoning = `Intelligent analysis: Found ${maxScore} medical keywords suggesting ${bestCategory}.`;
-  } else {
-    reasoning = `Smart fallback: No clear keywords found, classified as ${bestCategory} based on file type patterns.`;
-  }
-  reasoning += ` ${extensionHint}`;
-  
-  console.log(`📊 Classification result: ${bestCategory} (confidence: ${confidence.toFixed(2)}, score: ${maxScore})`);
-  
-  return {
-    category: bestCategory,
-    confidence: confidence,
-    suggestedSubfolder: getDefaultSubfolder(bestCategory),
-    reasoning: reasoning
-  };
+
+      try {
+        const geminiApiKey = process.env.GEMINI_API_KEY;
+        if (!geminiApiKey) {
+          console.warn('⚠️ Gemini API key not configured, using filename-based classification');
+          return classifyByFilename(fileName);
+        }
+
+        const genAI = new GoogleGenerativeAI(geminiApiKey);
+        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+        const bucket = admin.storage().bucket();
+
+        // Check if file exists and is an image
+        const file = bucket.file(storagePath);
+        const [exists] = await file.exists();
+        
+        if (!exists) {
+          console.error(`❌ File not found: ${storagePath}`);
+          return classifyByFilename(fileName);
+        }
+
+        // Check if it's an image file for AI analysis
+        const isImage = /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(fileName);
+        
+        if (!isImage) {
+          console.log(`📄 Non-image file, using filename classification: ${fileName}`);
+          return classifyByFilename(fileName);
+        }
+
+        // Download and analyze the image
+        const [fileBuffer] = await file.download();
+        const base64Data = fileBuffer.toString('base64');
+        
+        let mimeType = 'image/jpeg';
+        if (fileName.toLowerCase().endsWith('.png')) mimeType = 'image/png';
+        else if (fileName.toLowerCase().endsWith('.gif')) mimeType = 'image/gif';
+        else if (fileName.toLowerCase().endsWith('.webp')) mimeType = 'image/webp';
+
+        const classificationPrompt = `
+Analyze this medical document image and classify it into one of these categories:
+- lab_reports: Laboratory test results, blood work, pathology reports
+- prescriptions: Medication prescriptions, pharmacy receipts
+- doctor_notes: Doctor consultation notes, clinical observations, medical certificates
+- other: Insurance documents, appointment cards, general medical documents
+
+Return ONLY a JSON object with this exact structure:
+{
+  "category": "one of: lab_reports, prescriptions, doctor_notes, other",
+  "confidence": 0.0-1.0,
+  "suggestedSubfolder": "descriptive folder name",
+  "reasoning": "brief explanation of classification"
 }
+
+Focus on identifying:
+1. Lab values, test results, reference ranges → lab_reports
+2. Drug names, dosages, pharmacy stamps → prescriptions  
+3. Doctor signatures, clinical notes, diagnoses → doctor_notes
+4. Insurance info, appointment details → other
+`;
+
+        const result = await model.generateContent([
+          classificationPrompt,
+          {
+            inlineData: {
+              data: base64Data,
+              mimeType: mimeType
+            }
+          }
+        ]);
+
+        const response = result.response.text();
+        console.log('🤖 Gemini classification response:', response);
+
+        // Try to parse the JSON response
+        try {
+          const classification = JSON.parse(response);
+          
+          // Validate the response structure
+          if (classification.category && typeof classification.confidence === 'number') {
+            return {
+              category: classification.category,
+              confidence: Math.max(0, Math.min(1, classification.confidence)),
+              suggestedSubfolder: classification.suggestedSubfolder || getDefaultSubfolder(classification.category),
+              reasoning: classification.reasoning || 'AI classification'
+            };
+          }
+        } catch (parseError) {
+          console.error('❌ Failed to parse Gemini response as JSON:', parseError);
+        }
+
+        // Fallback to filename classification if AI fails
+        console.log('⚠️ AI classification failed, falling back to filename analysis');
+        return classifyByFilename(fileName);
+
+      } catch (error) {
+        console.error('❌ Error in document classification:', error);
+        
+        // Fallback to filename classification
+        return classifyByFilename(fileName);
+      }
+    }
+);
 
 /**
  * Classify document based on filename when AI is not available
@@ -944,4 +972,55 @@ function groupDocumentsByCategory(documentAnalyses) {
   });
 
   return categories;
+}
+
+/**
+ * Classify document based on filename when AI is not available
+ */
+function classifyByFilename(fileName) {
+  const nameLower = fileName.toLowerCase();
+  
+  let category = 'other';
+  let confidence = 0.3; // Lower confidence for filename-based classification
+  let suggestedSubfolder = 'general';
+  let reasoning = 'Filename-based classification';
+
+  if (nameLower.includes('lab') || nameLower.includes('test') || nameLower.includes('blood') || 
+      nameLower.includes('report') || nameLower.includes('result')) {
+    category = 'lab_reports';
+    suggestedSubfolder = 'lab_tests';
+    confidence = 0.6;
+    reasoning = 'Filename suggests lab report';
+  } else if (nameLower.includes('prescription') || nameLower.includes('medicine') || 
+             nameLower.includes('drug') || nameLower.includes('pharmacy') || nameLower.includes('rx')) {
+    category = 'prescriptions';
+    suggestedSubfolder = 'medications';
+    confidence = 0.6;
+    reasoning = 'Filename suggests prescription';
+  } else if (nameLower.includes('doctor') || nameLower.includes('consultation') || 
+             nameLower.includes('visit') || nameLower.includes('note') || nameLower.includes('clinical')) {
+    category = 'doctor_notes';
+    suggestedSubfolder = 'consultations';
+    confidence = 0.6;
+    reasoning = 'Filename suggests doctor note';
+  }
+
+  return {
+    category,
+    confidence,
+    suggestedSubfolder,
+    reasoning
+  };
+}
+
+/**
+ * Get default subfolder for a category
+ */
+function getDefaultSubfolder(category) {
+  switch (category) {
+    case 'lab_reports': return 'lab_tests';
+    case 'prescriptions': return 'medications';
+    case 'doctor_notes': return 'consultations';
+    default: return 'general';
+  }
 }

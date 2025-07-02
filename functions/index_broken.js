@@ -20,7 +20,10 @@ setGlobalOptions({region: "us-central1"}); // Change to your preferred region
 // Initialize Firebase Admin
 admin.initializeApp();
 
+// Updated to use Gemini 2.5 Flash-Lite Preview for better performance
+
 /**
+
  * Debug function to test Cloud Functions connectivity
  */
 exports.debugFunction = onCall(
@@ -45,10 +48,13 @@ exports.debugFunction = onCall(
  * Classify medical documents using Gemini AI
  */
 exports.classifyMedicalDocument = onCall(
+
+
     {cors: true},
     async (request) => {
       const {auth, data} = request;
       
+
       console.log('=== CLASSIFY MEDICAL DOCUMENT ===');
       console.log('Auth UID:', auth?.uid);
       console.log('Data:', data);
@@ -67,7 +73,7 @@ exports.classifyMedicalDocument = onCall(
         const geminiApiKey = functions.config().gemini?.api_key;
         if (!geminiApiKey) {
           console.warn('⚠️ Gemini API key not configured, using filename-based classification');
-          return intelligentClassifyByFilename(fileName);
+          return classifyByFilename(fileName);
         }
 
         const genAI = new GoogleGenerativeAI(geminiApiKey);
@@ -80,7 +86,7 @@ exports.classifyMedicalDocument = onCall(
         
         if (!exists) {
           console.error(`❌ File not found: ${storagePath}`);
-          return intelligentClassifyByFilename(fileName);
+          return classifyByFilename(fileName);
         }
 
         // Check if it's an image file for AI analysis
@@ -88,7 +94,7 @@ exports.classifyMedicalDocument = onCall(
         
         if (!isImage) {
           console.log(`📄 Non-image file, using filename classification: ${fileName}`);
-          return intelligentClassifyByFilename(fileName);
+          return classifyByFilename(fileName);
         }
 
         // Download and analyze the image
@@ -101,25 +107,27 @@ exports.classifyMedicalDocument = onCall(
         else if (fileName.toLowerCase().endsWith('.webp')) mimeType = 'image/webp';
 
         const classificationPrompt = `
-Analyze this medical document image and classify it into one of these categories:
-- lab_reports: Laboratory test results, blood work, pathology reports
-- prescriptions: Medication prescriptions, pharmacy receipts
-- doctor_notes: Doctor consultation notes, clinical observations, medical certificates
-- other: Insurance documents, appointment cards, general medical documents
+Analyze this medical document image carefully and classify it into one of these categories:
+- lab_reports: Laboratory test results, blood work, pathology reports, diagnostic tests
+- prescriptions: Medication prescriptions, pharmacy receipts, drug prescriptions
+- doctor_notes: Doctor consultation notes, clinical observations, medical certificates, discharge summaries
+- other: Insurance documents, appointment cards, medical bills, general medical documents
+
+Look for these specific indicators:
+1. Lab values, test results, reference ranges, laboratory letterheads → lab_reports
+2. Drug names, dosages, pharmacy stamps, "Rx" symbols → prescriptions  
+3. Doctor signatures, clinical notes, diagnoses, hospital letterheads → doctor_notes
+4. Insurance info, billing, appointment details → other
 
 Return ONLY a JSON object with this exact structure:
 {
   "category": "one of: lab_reports, prescriptions, doctor_notes, other",
   "confidence": 0.0-1.0,
   "suggestedSubfolder": "descriptive folder name",
-  "reasoning": "brief explanation of classification"
+  "reasoning": "detailed explanation of classification based on visual content"
 }
 
-Focus on identifying:
-1. Lab values, test results, reference ranges → lab_reports
-2. Drug names, dosages, pharmacy stamps → prescriptions  
-3. Doctor signatures, clinical notes, diagnoses → doctor_notes
-4. Insurance info, appointment details → other
+Be thorough in your analysis and avoid defaulting to "other" unless clearly appropriate.
 `;
 
         const result = await model.generateContent([
@@ -133,215 +141,232 @@ Focus on identifying:
         ]);
 
         const response = result.response.text();
-        console.log('🤖 Gemini classification response:', response);
+        console.log('🤖 Gemini image classification response:', response);
 
         // Try to parse the JSON response
         try {
           const classification = JSON.parse(response);
           
-          // Validate the response structure
           if (classification.category && typeof classification.confidence === 'number') {
             return {
-              category: classification.category,
-              confidence: Math.max(0, Math.min(1, classification.confidence)),
-              suggestedSubfolder: classification.suggestedSubfolder || getDefaultSubfolder(classification.category),
-              reasoning: classification.reasoning || 'AI classification'
+              success: true,
+              result: {
+                category: classification.category,
+                confidence: Math.max(0, Math.min(1, classification.confidence)),
+                suggestedSubfolder: classification.suggestedSubfolder || getDefaultSubfolder(classification.category),
+                reasoning: classification.reasoning || 'AI image classification'
+              }
             };
           }
         } catch (parseError) {
-          console.error('❌ Failed to parse Gemini response as JSON:', parseError);
+          console.error('❌ Failed to parse image classification JSON:', parseError);
         }
-
-        // Fallback to filename classification if AI fails
-        console.log('⚠️ AI classification failed, falling back to filename analysis');
-        return intelligentClassifyByFilename(fileName);
-
-      } catch (error) {
-        console.error('❌ Error in document classification:', error);
-        
-        // Fallback to filename classification
-        return intelligentClassifyByFilename(fileName);
+    } else {
+      // For non-image files, try to extract text content and analyze
+      console.log(`📄 Attempting text-based analysis for: ${fileName}`);
+      
+      // Try to extract meaningful content for text-based classification
+      const textClassification = await analyzeFileContent(file, fileName, model);
+      if (textClassification.success) {
+        return textClassification;
       }
     }
-);
+    
+    return { success: false };
+  } catch (error) {
+    console.error('❌ Error in AI classification attempt:', error);
+    return { success: false };
+  }
+}
 
 /**
- * Analyze ONLY lab reports using Gemini AI
+ * Analyze file content for text-based documents
  */
-exports.analyzeLabReports = onCall(
-    {cors: true},
-    async (request) => {
-      const {auth, data} = request;
+async function analyzeFileContent(file, fileName, model) {
+  try {
+    const fileExtension = fileName.split('.').pop().toLowerCase();
+    
+    // For PDF files, we can attempt to use Gemini's document understanding
+    if (fileExtension === 'pdf') {
+      console.log(`📋 Attempting PDF analysis for: ${fileName}`);
       
-      console.log('=== ANALYZE LAB REPORTS ===');
-      console.log('Auth UID:', auth?.uid);
-
-      if (!auth) {
-        throw new HttpsError("unauthenticated", "User must be logged in");
-      }
-
-      const userId = auth.uid;
-      const forceReanalysis = data?.forceReanalysis || false;
+      const [fileBuffer] = await file.download();
+      const base64Data = fileBuffer.toString('base64');
       
-      try {
-        const geminiApiKey = functions.config().gemini?.api_key;
-        if (!geminiApiKey) {
-          throw new HttpsError("failed-precondition", "API key not configured");
-        }
+      const pdfPrompt = `
+This is a PDF medical document. Analyze its content and classify it into one of these categories:
+- lab_reports: Laboratory test results, blood work, pathology reports, diagnostic tests
+- prescriptions: Medication prescriptions, pharmacy receipts, drug prescriptions  
+- doctor_notes: Doctor consultation notes, clinical observations, medical certificates, discharge summaries
+- other: Insurance documents, appointment cards, medical bills, general medical documents
 
-        const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-2.5-flash-lite-preview-0617"});
-        const db = admin.firestore();
+Look for medical indicators and content patterns to make an accurate classification.
+Avoid defaulting to "other" - analyze the content thoroughly.
 
-        // Get existing lab analysis
-        const existingAnalysisDoc = await db
-            .collection("users")
-            .doc(userId)
-            .collection("ai_analysis")
-            .doc("lab_reports")
-            .get();
-
-        const existingAnalysis = existingAnalysisDoc.exists ? existingAnalysisDoc.data() : null;
-        const analyzedDocumentIds = existingAnalysis?.analyzedDocuments || [];
-
-        // Get LAB REPORTS only from new document structure
-        const documentsSnapshot = await db
-            .collection("medical_records")
-            .doc(userId)
-            .collection("documents")
-            .where("category", "in", ["Lab Reports", "lab_reports", "Lab Report"])
-            .orderBy("uploadDate", "desc")
-            .get();
-
-        if (documentsSnapshot.empty) {
-          return {
-            summary: "No lab reports found for analysis. Please upload some lab test results first.",
-            documentsAnalyzed: 0,
-            newDocumentsAnalyzed: 0,
-            isCached: false,
-            analysisType: 'lab_reports_only'
-          };
-        }
-
-        // Process lab reports
-        const allLabReports = [];
-        const newLabReports = [];
-
-        documentsSnapshot.forEach((doc) => {
-          const docData = doc.data();
-          const docInfo = {
-            id: doc.id,
-            fileName: docData.fileName,
-            storagePath: docData.filePath, // Updated field name
-            downloadUrl: docData.downloadUrl,
-            uploadDate: docData.uploadDate,
-            category: docData.category,
-            ...docData
-          };
-          
-          allLabReports.push(docInfo);
-          
-          const wasAnalyzed = analyzedDocumentIds.includes(doc.id);
-          if (forceReanalysis || !wasAnalyzed) {
-            newLabReports.push(docInfo);
-          }
-        });
-
-        console.log(`📄 Total lab reports: ${allLabReports.length}`);
-        console.log(`🆕 New lab reports to analyze: ${newLabReports.length}`);
-
-        // Return cached if no new lab reports
-        if (newLabReports.length === 0 && existingAnalysis && !forceReanalysis) {
-          return {
-            summary: existingAnalysis.summary,
-            lastUpdated: existingAnalysis.timestamp.toDate().toISOString(),
-            documentsAnalyzed: analyzedDocumentIds.length,
-            newDocumentsAnalyzed: 0,
-            isCached: true,
-            analysisType: 'lab_reports_only'
-          };
-        }
-
-        // Analyze new lab reports
-        const newLabAnalyses = await analyzeDocuments(newLabReports, model, 'lab_reports');
-
-        // Generate lab-focused summary
-        const labSummaryPrompt = `
-Based on the following LAB REPORT analyses, create a comprehensive LABORATORY RESULTS SUMMARY:
-
-${existingAnalysis && !forceReanalysis ? `
-**EXISTING LAB SUMMARY:**
-${existingAnalysis.summary}
-
-**NEW LAB REPORTS TO INTEGRATE:**
-` : '**LAB REPORT ANALYSES:**'}
-
-${newLabAnalyses.map((doc, index) => 
-  `\n--- Lab Report ${index + 1}: ${doc.fileName} (${doc.uploadDate}) ---\n${doc.analysis}\n`
-).join('\n')}
-
-Create a focused LAB RESULTS SUMMARY with:
-
-1. **Laboratory Test Overview**: Summary of all tests performed
-2. **Key Laboratory Findings**: 
-   - Abnormal values with reference ranges
-   - Critical or concerning lab results
-   - Trending patterns in repeat tests
-3. **Test Results by Category**:
-   - Blood Chemistry (glucose, lipids, liver function, kidney function)
-   - Hematology (CBC, blood counts)
-   - Hormones (thyroid, diabetes markers)
-   - Specialty Tests (cardiac markers, tumor markers, etc.)
-4. **Abnormal Results Summary**: All out-of-range values with clinical significance
-5. **Laboratory Timeline**: Chronological progression of test results
-6. **Health Risk Assessment**: Based on lab findings
-7. **Recommended Follow-up**: Suggested additional tests or monitoring
-
-Focus ONLY on laboratory data. Include specific values, units, and reference ranges.
-Mark new findings with "**NEW:**" if updating existing summary.
-Be precise with medical terminology and lab values.
+Return ONLY a JSON object:
+{
+  "category": "one of: lab_reports, prescriptions, doctor_notes, other",
+  "confidence": 0.0-1.0,
+  "suggestedSubfolder": "descriptive folder name", 
+  "reasoning": "detailed explanation based on document content"
+}
 `;
 
-        const result = await model.generateContent(labSummaryPrompt);
-        const summary = result.response.text();
+      const result = await model.generateContent([
+        pdfPrompt,
+        {
+          inlineData: {
+            data: base64Data,
+            mimeType: 'application/pdf'
+          }
+        }
+      ]);
 
-        // Update analyzed documents list
-        const updatedAnalyzedDocuments = [...new Set([
-          ...analyzedDocumentIds,
-          ...newLabAnalyses.map(doc => doc.documentId)
-        ])];
+      const response = result.response.text();
+      console.log('🤖 PDF classification response:', response);
 
-        // Store lab analysis
-        await db
-            .collection("users")
-            .doc(userId)
-            .collection("ai_analysis")
-            .doc("lab_reports")
-            .set({
-              summary: summary,
-              timestamp: admin.firestore.FieldValue.serverTimestamp(),
-              documentCount: allLabReports.length,
-              analyzedDocuments: updatedAnalyzedDocuments,
-              analysisType: 'lab_reports_only',
-              lastAnalysisType: forceReanalysis ? 'full_reanalysis' : 
-                               (existingAnalysis ? 'incremental_update' : 'initial_analysis')
-            });
-
-        return {
-          summary: summary,
-          documentsAnalyzed: allLabReports.length,
-          newDocumentsAnalyzed: newLabAnalyses.length,
-          lastUpdated: new Date().toISOString(),
-          isCached: false,
-          analysisType: 'lab_reports_only'
-        };
-
-      } catch (error) {
-        console.error("Error analyzing lab reports:", error);
-        throw new HttpsError("internal", "Failed to analyze lab reports", error.message);
+      try {
+        const classification = JSON.parse(response);
+        
+        if (classification.category && typeof classification.confidence === 'number') {
+          return {
+            success: true,
+            result: {
+              category: classification.category,
+              confidence: Math.max(0, Math.min(1, classification.confidence)),
+              suggestedSubfolder: classification.suggestedSubfolder || getDefaultSubfolder(classification.category),
+              reasoning: classification.reasoning || 'AI PDF content classification'
+            }
+          };
+        }
+      } catch (parseError) {
+        console.error('❌ Failed to parse PDF classification JSON:', parseError);
       }
     }
-);
+    
+    return { success: false };
+  } catch (error) {
+    console.error('❌ Error in file content analysis:', error);
+    return { success: false };
+  }
+}
+
+/**
+ * Intelligent fallback classification when AI fails
+ */
+async function intelligentFallbackClassification(fileName) {
+  console.log(`🎯 Using intelligent fallback classification for: ${fileName}`);
+  
+  const nameLower = fileName.toLowerCase();
+  const fileExtension = fileName.split('.').pop().toLowerCase();
+  
+  // Enhanced filename analysis with medical keywords
+  const medicalKeywords = {
+    lab_reports: [
+      'lab', 'test', 'blood', 'report', 'result', 'analysis', 'pathology',
+      'biopsy', 'culture', 'panel', 'screening', 'assay', 'chemistry',
+      'hematology', 'urinalysis', 'microbiology', 'serology', 'toxicology',
+      'glucose', 'cholesterol', 'hemoglobin', 'platelet', 'white', 'red', 'cell'
+    ],
+    prescriptions: [
+      'prescription', 'medicine', 'drug', 'pharmacy', 'rx', 'medication',
+      'pills', 'tablet', 'capsule', 'dosage', 'mg', 'ml', 'dose',
+      'antibiotic', 'insulin', 'aspirin', 'ibuprofen', 'acetaminophen',
+      'prescribed', 'refill', 'generic', 'brand'
+    ],
+    doctor_notes: [
+      'doctor', 'consultation', 'visit', 'note', 'clinical', 'medical',
+      'diagnosis', 'treatment', 'examination', 'assessment', 'history',
+      'symptoms', 'patient', 'hospital', 'clinic', 'physician', 'nurse',
+      'discharge', 'admission', 'follow-up', 'referral', 'progress'
+    ]
+  };
+  
+  // Calculate keyword scores for each category
+  const scores = {};
+  let maxScore = 0;
+  let bestCategory = 'other';
+  
+  for (const [category, keywords] of Object.entries(medicalKeywords)) {
+    scores[category] = 0;
+    
+    keywords.forEach(keyword => {
+      if (nameLower.includes(keyword)) {
+        // Give higher weight to exact matches and medical terms
+        const weight = keyword.length > 4 ? 2 : 1;
+        scores[category] += weight;
+      }
+    });
+    
+    if (scores[category] > maxScore) {
+      maxScore = scores[category];
+      bestCategory = category;
+    }
+  }
+  
+  // File extension-based hints
+  let extensionHint = '';
+  let extensionConfidenceBoost = 0;
+  
+  switch (fileExtension) {
+    case 'pdf':
+      extensionHint = 'PDF document - could be any medical document type';
+      extensionConfidenceBoost = 0.1;
+      break;
+    case 'jpg':
+    case 'jpeg':
+    case 'png':
+      extensionHint = 'Image file - likely scanned medical document';
+      extensionConfidenceBoost = 0.1;
+      break;
+    case 'doc':
+    case 'docx':
+      extensionHint = 'Word document - likely clinical notes or reports';
+      if (bestCategory === 'other' && maxScore === 0) {
+        bestCategory = 'doctor_notes';
+        maxScore = 1;
+      }
+      extensionConfidenceBoost = 0.1;
+      break;
+  }
+  
+  // Calculate confidence based on keyword matches
+  let confidence = Math.min(0.8, (maxScore * 0.15) + extensionConfidenceBoost);
+  
+  // If no clear category is found but it's clearly a medical file, make educated guess
+  if (bestCategory === 'other' && maxScore === 0) {
+    // Use file extension and common patterns to make educated guesses
+    if (fileExtension === 'pdf' || fileExtension.includes('doc')) {
+      bestCategory = 'doctor_notes';
+      confidence = 0.3;
+    } else if (['jpg', 'jpeg', 'png'].includes(fileExtension)) {
+      bestCategory = 'lab_reports'; // Images are often lab results or scanned reports
+      confidence = 0.25;
+    }
+  }
+  
+  // Ensure minimum confidence for medical files
+  if (confidence < 0.2) {
+    confidence = 0.2;
+  }
+  
+  const reasoning = `Intelligent fallback: ${maxScore > 0 ? 
+    `Found ${maxScore} medical keywords suggesting ${bestCategory}` : 
+    `No clear keywords found, classified as ${bestCategory} based on file type`}. ${extensionHint}`;
+  
+  return {
+    category: bestCategory,
+    confidence: confidence,
+    suggestedSubfolder: getDefaultSubfolder(bestCategory),
+    reasoning: reasoning
+  };
+}
+
+/**
+ * Helper function to analyze documents with Gemini Vision
+ */
+
+
 
 /**
  * Analyze ALL medical documents using Gemini AI
@@ -362,7 +387,7 @@ exports.analyzeAllMedicalRecords = onCall(
       const forceReanalysis = data?.forceReanalysis || false;
       
       try {
-        const geminiApiKey = functions.config().gemini?.api_key;
+        const geminiApiKey = process.env.GEMINI_API_KEY;
         if (!geminiApiKey) {
           throw new HttpsError("failed-precondition", "API key not configured");
         }
@@ -574,176 +599,9 @@ Mark new findings with "**NEW:**" if updating existing summary.
 );
 
 /**
- * Intelligent fallback classification with enhanced medical keyword analysis
- */
-function intelligentClassifyByFilename(fileName) {
-  console.log(`🎯 Using intelligent classification for: ${fileName}`);
-  
-  const nameLower = fileName.toLowerCase();
-  const fileExtension = fileName.split('.').pop().toLowerCase();
-  
-  // Enhanced filename analysis with comprehensive medical keywords
-  const medicalKeywords = {
-    lab_reports: [
-      'lab', 'test', 'blood', 'report', 'result', 'analysis', 'pathology',
-      'biopsy', 'culture', 'panel', 'screening', 'assay', 'chemistry',
-      'hematology', 'urinalysis', 'microbiology', 'serology', 'toxicology',
-      'glucose', 'cholesterol', 'hemoglobin', 'platelet', 'white', 'red', 'cell',
-      'cbc', 'comprehensive', 'metabolic', 'lipid', 'liver', 'kidney', 'thyroid'
-    ],
-    prescriptions: [
-      'prescription', 'medicine', 'drug', 'pharmacy', 'rx', 'medication',
-      'pills', 'tablet', 'capsule', 'dosage', 'mg', 'ml', 'dose',
-      'antibiotic', 'insulin', 'aspirin', 'ibuprofen', 'acetaminophen',
-      'prescribed', 'refill', 'generic', 'brand', 'cvs', 'walgreens', 'rite aid'
-    ],
-    doctor_notes: [
-      'doctor', 'consultation', 'visit', 'note', 'clinical', 'medical',
-      'diagnosis', 'treatment', 'examination', 'assessment', 'history',
-      'symptoms', 'patient', 'hospital', 'clinic', 'physician', 'nurse',
-      'discharge', 'admission', 'follow-up', 'referral', 'progress', 'summary'
-    ]
-  };
-  
-  // Calculate keyword scores for each category
-  const scores = {};
-  let maxScore = 0;
-  let bestCategory = 'other';
-  
-  for (const [category, keywords] of Object.entries(medicalKeywords)) {
-    scores[category] = 0;
-    
-    keywords.forEach(keyword => {
-      if (nameLower.includes(keyword)) {
-        // Give higher weight to longer medical terms
-        const weight = keyword.length > 4 ? 2 : 1;
-        scores[category] += weight;
-      }
-    });
-    
-    if (scores[category] > maxScore) {
-      maxScore = scores[category];
-      bestCategory = category;
-    }
-  }
-  
-  // File extension-based intelligent defaults
-  let extensionHint = '';
-  let extensionConfidenceBoost = 0;
-  
-  switch (fileExtension) {
-    case 'pdf':
-      extensionHint = 'PDF document - analyzing for medical content';
-      extensionConfidenceBoost = 0.1;
-      // If no keywords found, make educated guess based on common patterns
-      if (bestCategory === 'other' && maxScore === 0) {
-        bestCategory = 'doctor_notes'; // PDFs are often clinical documents
-        maxScore = 1;
-      }
-      break;
-    case 'jpg':
-    case 'jpeg':
-    case 'png':
-      extensionHint = 'Image file - likely scanned medical document';
-      extensionConfidenceBoost = 0.15;
-      // Images are often lab results or scanned reports
-      if (bestCategory === 'other' && maxScore === 0) {
-        bestCategory = 'lab_reports';
-        maxScore = 1;
-      }
-      break;
-    case 'doc':
-    case 'docx':
-      extensionHint = 'Word document - likely clinical notes or reports';
-      extensionConfidenceBoost = 0.1;
-      if (bestCategory === 'other' && maxScore === 0) {
-        bestCategory = 'doctor_notes';
-        maxScore = 1;
-      }
-      break;
-  }
-  
-  // Calculate confidence based on keyword matches and file type
-  let confidence = Math.min(0.8, (maxScore * 0.12) + extensionConfidenceBoost);
-  
-  // Ensure reasonable confidence for all medical files
-  if (confidence < 0.25) {
-    confidence = 0.25;
-  }
-  
-  // Create detailed reasoning
-  let reasoning = '';
-  if (maxScore > 0) {
-    reasoning = `Intelligent analysis: Found ${maxScore} medical keywords suggesting ${bestCategory}.`;
-  } else {
-    reasoning = `Smart fallback: No clear keywords found, classified as ${bestCategory} based on file type patterns.`;
-  }
-  reasoning += ` ${extensionHint}`;
-  
-  console.log(`📊 Classification result: ${bestCategory} (confidence: ${confidence.toFixed(2)}, score: ${maxScore})`);
-  
-  return {
-    category: bestCategory,
-    confidence: confidence,
-    suggestedSubfolder: getDefaultSubfolder(bestCategory),
-    reasoning: reasoning
-  };
-}
-
-/**
- * Classify document based on filename when AI is not available
- */
-function classifyByFilename(fileName) {
-  const nameLower = fileName.toLowerCase();
-  
-  let category = 'other';
-  let confidence = 0.3; // Lower confidence for filename-based classification
-  let suggestedSubfolder = 'general';
-  let reasoning = 'Filename-based classification';
-
-  if (nameLower.includes('lab') || nameLower.includes('test') || nameLower.includes('blood') || 
-      nameLower.includes('report') || nameLower.includes('result')) {
-    category = 'lab_reports';
-    suggestedSubfolder = 'lab_tests';
-    confidence = 0.6;
-    reasoning = 'Filename suggests lab report';
-  } else if (nameLower.includes('prescription') || nameLower.includes('medicine') || 
-             nameLower.includes('drug') || nameLower.includes('pharmacy') || nameLower.includes('rx')) {
-    category = 'prescriptions';
-    suggestedSubfolder = 'medications';
-    confidence = 0.6;
-    reasoning = 'Filename suggests prescription';
-  } else if (nameLower.includes('doctor') || nameLower.includes('consultation') || 
-             nameLower.includes('visit') || nameLower.includes('note') || nameLower.includes('clinical')) {
-    category = 'doctor_notes';
-    suggestedSubfolder = 'consultations';
-    confidence = 0.6;
-    reasoning = 'Filename suggests doctor note';
-  }
-
-  return {
-    category,
-    confidence,
-    suggestedSubfolder,
-    reasoning
-  };
-}
-
-/**
- * Get default subfolder for a category
- */
-function getDefaultSubfolder(category) {
-  switch (category) {
-    case 'lab_reports': return 'lab_tests';
-    case 'prescriptions': return 'medications';
-    case 'doctor_notes': return 'consultations';
-    default: return 'general';
-  }
-}
-
-/**
  * Helper function to analyze documents with Gemini Vision
  */
+
 async function analyzeDocuments(documents, model, analysisType) {
   const documentAnalyses = [];
   const bucket = admin.storage().bucket();
@@ -803,6 +661,7 @@ async function analyzeDocuments(documents, model, analysisType) {
         }
       ]);
 
+
       const analysis = visionResult.response.text();
       
       documentAnalyses.push({
@@ -829,6 +688,7 @@ async function analyzeDocuments(documents, model, analysisType) {
 
   return documentAnalyses;
 }
+
 
 /**
  * Create category-specific analysis prompts
@@ -944,4 +804,56 @@ function groupDocumentsByCategory(documentAnalyses) {
   });
 
   return categories;
+}
+
+
+/**
+ * Classify document based on filename when AI is not available
+ */
+function classifyByFilename(fileName) {
+  const nameLower = fileName.toLowerCase();
+  
+  let category = 'other';
+  let confidence = 0.3; // Lower confidence for filename-based classification
+  let suggestedSubfolder = 'general';
+  let reasoning = 'Filename-based classification';
+
+  if (nameLower.includes('lab') || nameLower.includes('test') || nameLower.includes('blood') || 
+      nameLower.includes('report') || nameLower.includes('result')) {
+    category = 'lab_reports';
+    suggestedSubfolder = 'lab_tests';
+    confidence = 0.6;
+    reasoning = 'Filename suggests lab report';
+  } else if (nameLower.includes('prescription') || nameLower.includes('medicine') || 
+             nameLower.includes('drug') || nameLower.includes('pharmacy') || nameLower.includes('rx')) {
+    category = 'prescriptions';
+    suggestedSubfolder = 'medications';
+    confidence = 0.6;
+    reasoning = 'Filename suggests prescription';
+  } else if (nameLower.includes('doctor') || nameLower.includes('consultation') || 
+             nameLower.includes('visit') || nameLower.includes('note') || nameLower.includes('clinical')) {
+    category = 'doctor_notes';
+    suggestedSubfolder = 'consultations';
+    confidence = 0.6;
+    reasoning = 'Filename suggests doctor note';
+  }
+
+  return {
+    category,
+    confidence,
+    suggestedSubfolder,
+    reasoning
+  };
+}
+
+/**
+ * Get default subfolder for a category
+ */
+function getDefaultSubfolder(category) {
+  switch (category) {
+    case 'lab_reports': return 'lab_tests';
+    case 'prescriptions': return 'medications';
+    case 'doctor_notes': return 'consultations';
+    default: return 'general';
+  }
 }
