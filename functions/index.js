@@ -10,9 +10,12 @@
 const {onCall} = require("firebase-functions/v2/https");
 const {setGlobalOptions} = require("firebase-functions/v2");
 const {HttpsError} = require("firebase-functions/v2/https");
+const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const {GoogleGenerativeAI} = require("@google/generative-ai");
-const functions = require("firebase-functions");
+
+// Define secrets
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
 // Set global options
 setGlobalOptions({region: "us-central1"}); // Change to your preferred region
@@ -24,7 +27,7 @@ admin.initializeApp();
  * Debug function to test Cloud Functions connectivity
  */
 exports.debugFunction = onCall(
-  {cors: true},
+  {cors: true, secrets: [geminiApiKey]},
   async (request) => {
     const {auth} = request;
     
@@ -36,7 +39,7 @@ exports.debugFunction = onCall(
       message: "Debug function working correctly",
       timestamp: new Date().toISOString(),
       userId: auth.uid,
-      geminiApiKey: functions.config().gemini?.api_key ? "Present" : "Missing"
+      geminiApiKey: geminiApiKey.value() ? "Present" : "Missing"
     };
   }
 );
@@ -45,7 +48,7 @@ exports.debugFunction = onCall(
  * Classify medical documents using Gemini AI
  */
 exports.classifyMedicalDocument = onCall(
-    {cors: true},
+    {cors: true, secrets: [geminiApiKey]},
     async (request) => {
       const {auth, data} = request;
       
@@ -64,13 +67,13 @@ exports.classifyMedicalDocument = onCall(
       }
 
       try {
-        const geminiApiKey = functions.config().gemini?.api_key;
-        if (!geminiApiKey) {
+        const apiKey = geminiApiKey.value();
+        if (!apiKey) {
           console.warn('⚠️ Gemini API key not configured, using filename-based classification');
           return intelligentClassifyByFilename(fileName);
         }
 
-        const genAI = new GoogleGenerativeAI(geminiApiKey);
+        const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({model: "gemini-2.5-flash-lite-preview-0617"});
         const bucket = admin.storage().bucket();
 
@@ -169,7 +172,7 @@ Focus on identifying:
  * Analyze ONLY lab reports using Gemini AI
  */
 exports.analyzeLabReports = onCall(
-    {cors: true},
+    {cors: true, secrets: [geminiApiKey]},
     async (request) => {
       const {auth, data} = request;
       
@@ -184,12 +187,12 @@ exports.analyzeLabReports = onCall(
       const forceReanalysis = data?.forceReanalysis || false;
       
       try {
-        const geminiApiKey = functions.config().gemini?.api_key;
-        if (!geminiApiKey) {
+        const apiKey = geminiApiKey.value();
+        if (!apiKey) {
           throw new HttpsError("failed-precondition", "API key not configured");
         }
 
-        const genAI = new GoogleGenerativeAI(geminiApiKey);
+        const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({model: "gemini-2.5-flash-lite-preview-0617"});
         const db = admin.firestore();
 
@@ -347,7 +350,7 @@ Be precise with medical terminology and lab values.
  * Analyze ALL medical documents using Gemini AI
  */
 exports.analyzeAllMedicalRecords = onCall(
-    {cors: true},
+    {cors: true, secrets: [geminiApiKey]},
     async (request) => {
       const {auth, data} = request;
       
@@ -362,12 +365,12 @@ exports.analyzeAllMedicalRecords = onCall(
       const forceReanalysis = data?.forceReanalysis || false;
       
       try {
-        const geminiApiKey = functions.config().gemini?.api_key;
-        if (!geminiApiKey) {
+        const apiKey = geminiApiKey.value();
+        if (!apiKey) {
           throw new HttpsError("failed-precondition", "API key not configured");
         }
 
-        const genAI = new GoogleGenerativeAI(geminiApiKey);
+        const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({model: "gemini-2.5-flash-lite-preview-0617"});
         const db = admin.firestore();
 
