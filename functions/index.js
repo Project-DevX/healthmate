@@ -10,9 +10,12 @@
 const {onCall} = require("firebase-functions/v2/https");
 const {setGlobalOptions} = require("firebase-functions/v2");
 const {HttpsError} = require("firebase-functions/v2/https");
+const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const {GoogleGenerativeAI} = require("@google/generative-ai");
-const functions = require("firebase-functions");
+
+// Define secrets
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
 // Set global options
 setGlobalOptions({region: "us-central1"}); // Change to your preferred region
@@ -24,7 +27,7 @@ admin.initializeApp();
  * Debug function to test Cloud Functions connectivity
  */
 exports.debugFunction = onCall(
-  {cors: true},
+  {cors: true, secrets: [geminiApiKey]},
   async (request) => {
     const {auth} = request;
     
@@ -36,7 +39,7 @@ exports.debugFunction = onCall(
       message: "Debug function working correctly",
       timestamp: new Date().toISOString(),
       userId: auth.uid,
-      geminiApiKey: functions.config().gemini?.api_key ? "Present" : "Missing"
+      geminiApiKey: geminiApiKey.value() ? "Present" : "Missing"
     };
   }
 );
@@ -45,7 +48,7 @@ exports.debugFunction = onCall(
  * Classify medical documents using Gemini AI
  */
 exports.classifyMedicalDocument = onCall(
-    {cors: true},
+    {cors: true, secrets: [geminiApiKey]},
     async (request) => {
       const {auth, data} = request;
       
@@ -64,14 +67,14 @@ exports.classifyMedicalDocument = onCall(
       }
 
       try {
-        const geminiApiKey = functions.config().gemini?.api_key;
-        if (!geminiApiKey) {
+        const apiKey = geminiApiKey.value();
+        if (!apiKey) {
           console.warn('⚠️ Gemini API key not configured, using filename-based classification');
           return intelligentClassifyByFilename(fileName);
         }
 
-        const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-2.5-flash-lite-preview-0617"});
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
         const bucket = admin.storage().bucket();
 
         // Check if file exists and is an image
@@ -169,7 +172,7 @@ Focus on identifying:
  * Analyze ONLY lab reports using Gemini AI
  */
 exports.analyzeLabReports = onCall(
-    {cors: true},
+    {cors: true, secrets: [geminiApiKey]},
     async (request) => {
       const {auth, data} = request;
       
@@ -184,13 +187,13 @@ exports.analyzeLabReports = onCall(
       const forceReanalysis = data?.forceReanalysis || false;
       
       try {
-        const geminiApiKey = functions.config().gemini?.api_key;
-        if (!geminiApiKey) {
+        const apiKey = geminiApiKey.value();
+        if (!apiKey) {
           throw new HttpsError("failed-precondition", "API key not configured");
         }
 
-        const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-2.5-flash-lite-preview-0617"});
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
         const db = admin.firestore();
 
         // Get existing lab analysis
@@ -205,15 +208,73 @@ exports.analyzeLabReports = onCall(
         const analyzedDocumentIds = existingAnalysis?.analyzedDocuments || [];
 
         // Get LAB REPORTS only from new document structure
-        const documentsSnapshot = await db
+        console.log('🔍 Querying for lab reports...');
+        
+        // DEBUG: Check multiple possible document locations
+        console.log('🔍 Checking different possible document locations...');
+        
+        // Check users/{userId}/documents
+        const userDocsSnapshot = await db
+            .collection("users")
+            .doc(userId)
+            .collection("documents")
+            .get();
+        console.log(`📄 users/${userId}/documents: ${userDocsSnapshot.size} documents`);
+        
+        // Check users/{userId}/medical_records  
+        const userMedicalSnapshot = await db
+            .collection("users")
+            .doc(userId)
+            .collection("medical_records")
+            .get();
+        console.log(`📄 users/${userId}/medical_records: ${userMedicalSnapshot.size} documents`);
+        
+        // Check medical_records/{userId}/documents
+        const medicalDocsSnapshot = await db
             .collection("medical_records")
             .doc(userId)
             .collection("documents")
-            .where("category", "in", ["Lab Reports", "lab_reports", "Lab Report"])
-            .orderBy("uploadDate", "desc")
             .get();
+        console.log(`📄 medical_records/${userId}/documents: ${medicalDocsSnapshot.size} documents`);
+        
+        // First check if any documents exist at all
+        const allDocsSnapshot = await db
+            .collection("users")
+            .doc(userId)
+            .collection("documents")
+            .get();
+            
+        console.log(`📊 Total documents found: ${allDocsSnapshot.size}`);
+        
+        if (!allDocsSnapshot.empty) {
+          allDocsSnapshot.forEach((doc) => {
+            const data = doc.data();
+            console.log(`📄 Document: ${doc.id}, category: ${data.category}, fileName: ${data.fileName}`);
+          });
+        }
+        
+        // TEMP: Remove the where clause to avoid index error
+        const documentsSnapshot = await db
+            .collection("users")
+            .doc(userId)
+            .collection("documents")
+            .get();
+        
+        // Filter lab reports in memory for now
+        const labReportDocs = [];
+        documentsSnapshot.forEach((doc) => {
+          const data = doc.data();
+          const category = data.category || '';
+          if (category.toLowerCase().includes('lab') || 
+              category.toLowerCase().includes('report') ||
+              category === 'lab_reports') {
+            labReportDocs.push({id: doc.id, data});
+          }
+        });
 
-        if (documentsSnapshot.empty) {
+        console.log(`🧪 Lab reports found: ${labReportDocs.length}`);
+
+        if (labReportDocs.length === 0) {
           return {
             summary: "No lab reports found for analysis. Please upload some lab test results first.",
             documentsAnalyzed: 0,
@@ -227,10 +288,10 @@ exports.analyzeLabReports = onCall(
         const allLabReports = [];
         const newLabReports = [];
 
-        documentsSnapshot.forEach((doc) => {
-          const docData = doc.data();
+        for (const labDoc of labReportDocs) {
+          const docData = labDoc.data;
           const docInfo = {
-            id: doc.id,
+            id: labDoc.id,
             fileName: docData.fileName,
             storagePath: docData.filePath, // Updated field name
             downloadUrl: docData.downloadUrl,
@@ -241,11 +302,11 @@ exports.analyzeLabReports = onCall(
           
           allLabReports.push(docInfo);
           
-          const wasAnalyzed = analyzedDocumentIds.includes(doc.id);
+          const wasAnalyzed = analyzedDocumentIds.includes(labDoc.id);
           if (forceReanalysis || !wasAnalyzed) {
             newLabReports.push(docInfo);
           }
-        });
+        }
 
         console.log(`📄 Total lab reports: ${allLabReports.length}`);
         console.log(`🆕 New lab reports to analyze: ${newLabReports.length}`);
@@ -347,7 +408,7 @@ Be precise with medical terminology and lab values.
  * Analyze ALL medical documents using Gemini AI
  */
 exports.analyzeAllMedicalRecords = onCall(
-    {cors: true},
+    {cors: true, secrets: [geminiApiKey]},
     async (request) => {
       const {auth, data} = request;
       
@@ -362,13 +423,13 @@ exports.analyzeAllMedicalRecords = onCall(
       const forceReanalysis = data?.forceReanalysis || false;
       
       try {
-        const geminiApiKey = functions.config().gemini?.api_key;
-        if (!geminiApiKey) {
+        const apiKey = geminiApiKey.value();
+        if (!apiKey) {
           throw new HttpsError("failed-precondition", "API key not configured");
         }
 
-        const genAI = new GoogleGenerativeAI(geminiApiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-2.5-flash-lite-preview-0617"});
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
         const db = admin.firestore();
 
         // Get existing comprehensive analysis
@@ -383,12 +444,34 @@ exports.analyzeAllMedicalRecords = onCall(
         const analyzedDocumentIds = existingAnalysis?.analyzedDocuments || [];
 
         // Get ALL documents from new structure
-        const documentsSnapshot = await db
-            .collection("medical_records")
+        console.log('🔍 Querying for all medical documents...');
+        
+        // DEBUG: Check multiple possible document locations
+        console.log('🔍 Checking different possible document locations...');
+        
+        // Check users/{userId}/documents
+        const userDocsSnapshot2 = await db
+            .collection("users")
             .doc(userId)
             .collection("documents")
-            .orderBy("uploadDate", "desc")
             .get();
+        console.log(`📄 users/${userId}/documents: ${userDocsSnapshot2.size} documents`);
+        
+        // Check users/{userId}/medical_records  
+        const userMedicalSnapshot2 = await db
+            .collection("users")
+            .doc(userId)
+            .collection("medical_records")
+            .get();
+        console.log(`📄 users/${userId}/medical_records: ${userMedicalSnapshot2.size} documents`);
+        
+        const documentsSnapshot = await db
+            .collection("users")
+            .doc(userId)
+            .collection("documents")
+            .get();
+
+        console.log(`📊 Total medical documents found: ${documentsSnapshot.size}`);
 
         if (documentsSnapshot.empty) {
           return {
