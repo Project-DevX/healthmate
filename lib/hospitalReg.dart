@@ -265,7 +265,11 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
             'businessCertUrl': businessCertUrl,
             'healthDeptApprovalUrl': healthDeptApprovalUrl,
             'pharmacyLicenseUrl': pharmacyLicenseUrl,
-            'userType': 'hospital',
+            'userType': _selectedInstitutionType == 'Pharmacy'
+                ? 'pharmacy'
+                : _selectedInstitutionType == 'Laboratory'
+                    ? 'lab'
+                    : 'hospital',
             'createdAt': FieldValue.serverTimestamp(),
             'lastLogin': FieldValue.serverTimestamp(),
           });

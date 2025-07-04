@@ -409,171 +409,171 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _selectedBottomNav == 0
-          ? Container(
-              color: scaffoldBg,
-              child: ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  // Welcome Card
-                  Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Row(
+              ? Container(
+                  color: scaffoldBg,
+                  child: ListView(
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      // Welcome Card
+                      Card(
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 28,
+                                backgroundColor: mainBlue,
+                                child: Icon(
+                                  Icons.local_hospital,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Welcome, ${hospitalData?['institutionName'] ?? 'Hospital'}!',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: textColor,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      hospitalData?['institutionType'] ??
+                                          'Healthcare Institution',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        color: subTextColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Statistics Cards
+                      Row(
                         children: [
-                          CircleAvatar(
-                            radius: 28,
-                            backgroundColor: mainBlue,
-                            child: Icon(
-                              Icons.local_hospital,
-                              color: Colors.white,
-                              size: 28,
+                          Expanded(
+                            child: _buildStatCard(
+                              'Staff',
+                              '${doctors.length}',
+                              Icons.people,
+                              Colors.blue,
                             ),
                           ),
-                          const SizedBox(width: 16),
+                          const SizedBox(width: 12),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Welcome, ${hospitalData?['institutionName'] ?? 'Hospital'}!',
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: textColor,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  hospitalData?['institutionType'] ??
-                                      'Healthcare Institution',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    color: subTextColor,
-                                  ),
-                                ),
-                              ],
+                            child: _buildStatCard(
+                              'Patients',
+                              '${patients.length}',
+                              Icons.person,
+                              Colors.green,
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ),
 
-                  const SizedBox(height: 24),
+                      const SizedBox(height: 12),
 
-                  // Statistics Cards
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatCard(
-                          'Staff',
-                          '${doctors.length}',
-                          Icons.people,
-                          Colors.blue,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          'Patients',
-                          '${patients.length}',
-                          Icons.person,
-                          Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatCard(
-                          'Appointments',
-                          '${appointments.length}',
-                          Icons.calendar_today,
-                          Colors.orange,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          'Revenue',
-                          '\$0',
-                          Icons.attach_money,
-                          Colors.purple,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Quick Actions
-                  Text(
-                    'Quick Actions',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 1.2,
-                        ),
-                    itemCount: _features.length,
-                    itemBuilder: (context, index) {
-                      final feature = _features[index];
-                      return GestureDetector(
-                        onTap: () => _onFeatureTap(feature.label),
-                        child: Card(
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(feature.icon, size: 32, color: mainBlue),
-                                const SizedBox(height: 8),
-                                Text(
-                                  feature.label,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: textColor,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildStatCard(
+                              'Appointments',
+                              '${appointments.length}',
+                              Icons.calendar_today,
+                              Colors.orange,
                             ),
                           ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildStatCard(
+                              'Revenue',
+                              '\$0',
+                              Icons.attach_money,
+                              Colors.purple,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Quick Actions
+                      Text(
+                        'Quick Actions',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
                         ),
-                      );
-                    },
+                      ),
+                      const SizedBox(height: 12),
+
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              childAspectRatio: 1.2,
+                            ),
+                        itemCount: _features.length,
+                        itemBuilder: (context, index) {
+                          final feature = _features[index];
+                          return GestureDetector(
+                            onTap: () => _onFeatureTap(feature.label),
+                            child: Card(
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(feature.icon, size: 32, color: mainBlue),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      feature.label,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: textColor,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            )
-          : _selectedBottomNav == 1
-          ? const Center(child: Text('Analytics'))
-          : const ProfilePage(),
+                )
+              : _selectedBottomNav == 1
+                  ? const Center(child: Text('Chat System (Stub)', style: TextStyle(fontSize: 20)))
+                  : const ProfilePage(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedBottomNav,
         onTap: (index) => setState(() => _selectedBottomNav = index),
@@ -586,8 +586,8 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
             label: 'Dashboard',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.analytics),
-            label: 'Analytics',
+            icon: Icon(Icons.chat),
+            label: 'Chat',
           ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
