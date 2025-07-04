@@ -3,6 +3,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import '../widgets/lab_report_type_dialog.dart';
 
 class DocumentService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -81,6 +82,7 @@ class DocumentService {
         String subfolder = 'general';
         double confidence = 0.0;
         String reasoning = 'No classification attempted';
+        String? labReportType;
 
         try {
           final classificationResult = await _classifyDocument(
@@ -91,27 +93,74 @@ class DocumentService {
           subfolder = classificationResult['suggestedSubfolder'] ?? 'general';
           confidence = (classificationResult['confidence'] ?? 0.0).toDouble();
           reasoning = classificationResult['reasoning'] ?? 'AI classification';
+
+          // If classified as lab report, prompt user for specific type
+          if (category == 'lab_reports') {
+            // Close the upload loading dialog temporarily
+            Navigator.pop(context);
+
+            // Show lab report type selection dialog
+            final selectedType = await showDialog<String>(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) => LabReportTypeSelectionDialog(
+                fileName: fileName,
+                suggestedType: classificationResult['suggestedSubfolder'],
+              ),
+            );
+
+            if (selectedType == null) {
+              // User cancelled - delete the uploaded file
+              await ref.delete();
+              return;
+            }
+
+            labReportType = selectedType;
+
+            // Show loading again for saving metadata
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (context) =>
+                  const Center(child: CircularProgressIndicator()),
+            );
+
+            // Call Cloud Function to update lab report content with selected type
+            try {
+              await _updateLabReportType(fileName, ref.fullPath, selectedType);
+            } catch (e) {
+              print('Error updating lab report type: $e');
+              // Continue with document saving even if lab report update fails
+            }
+          }
         } catch (e) {
           print('Classification error: $e');
         }
 
         // Save document metadata to Firestore
+        final documentData = {
+          'fileName': fileName,
+          'fileSize': file.size,
+          'fileType': fileExtension,
+          'downloadUrl': downloadUrl,
+          'uploadDate': FieldValue.serverTimestamp(),
+          'storagePath': ref.fullPath,
+          'category': category,
+          'subfolder': subfolder,
+          'classificationConfidence': confidence,
+          'classificationReasoning': reasoning,
+        };
+
+        // Add lab report type if this is a lab report
+        if (labReportType != null) {
+          documentData['labReportType'] = labReportType;
+        }
+
         await _firestore
             .collection('users')
             .doc(userId)
             .collection('documents')
-            .add({
-              'fileName': fileName,
-              'fileSize': file.size,
-              'fileType': fileExtension,
-              'downloadUrl': downloadUrl,
-              'uploadDate': FieldValue.serverTimestamp(),
-              'storagePath': ref.fullPath,
-              'category': category,
-              'subfolder': subfolder,
-              'classificationConfidence': confidence,
-              'classificationReasoning': reasoning,
-            });
+            .add(documentData);
 
         Navigator.pop(context);
 
@@ -178,6 +227,27 @@ class DocumentService {
         'confidence': 0.0,
         'reasoning': 'Classification failed: $e',
       };
+    }
+  }
+
+  // Update lab report type using Cloud Function
+  Future<void> _updateLabReportType(
+    String fileName,
+    String storagePath,
+    String selectedType,
+  ) async {
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'updateLabReportType',
+      );
+      await callable.call({
+        'fileName': fileName,
+        'storagePath': storagePath,
+        'selectedType': selectedType,
+      });
+    } catch (e) {
+      print('Error updating lab report type: $e');
+      rethrow;
     }
   }
 
@@ -279,6 +349,7 @@ class DocumentInfo {
   final String subfolder;
   final double classificationConfidence;
   final String classificationReasoning;
+  final String? labReportType;
 
   DocumentInfo({
     required this.id,
@@ -293,6 +364,7 @@ class DocumentInfo {
     this.subfolder = 'general',
     this.classificationConfidence = 0.0,
     this.classificationReasoning = 'No classification',
+    this.labReportType,
   });
 
   factory DocumentInfo.fromFirestore(DocumentSnapshot doc) {
@@ -314,6 +386,7 @@ class DocumentInfo {
           .toDouble(),
       classificationReasoning:
           data['classificationReasoning'] ?? 'No classification',
+      labReportType: data['labReportType'],
     );
   }
 }

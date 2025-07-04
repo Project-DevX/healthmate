@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import '../services/document_service.dart';
 import '../services/gemini_service.dart';
+import '../services/lab_report_type_service.dart';
 import '../screens/medical_summary_screen.dart';
 
 class MedicalRecordsScreen extends StatefulWidget {
@@ -357,6 +358,34 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
               ],
             ),
             const SizedBox(height: 4),
+            // Show lab report type if this is a lab report
+            if (document.category == 'lab_reports' &&
+                document.labReportType != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                margin: const EdgeInsets.only(bottom: 4),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.science, size: 12, color: Colors.blue[700]),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Type: ${LabReportTypeService.getDisplayName(document.labReportType!)}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.blue[700],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             Text(
               'Size: ${_formatFileSize(document.fileSize)}',
               style: TextStyle(color: Colors.grey[600]),
