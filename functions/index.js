@@ -165,7 +165,7 @@ Focus on identifying:
             // If classified as lab report, extract text content
             if (classification.category === 'lab_reports' && auth?.uid) {
               try {
-                await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model);
+                await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model, null);
               } catch (extractError) {
                 console.error('❌ Failed to extract lab report content:', extractError);
                 // Don't fail the classification if extraction fails
@@ -695,7 +695,7 @@ Mark new findings with "**NEW:**" if updating existing summary.
 /**
  * Extract text content from lab reports using Gemini OCR
  */
-async function extractLabReportContent(userId, fileName, storagePath, base64Data, mimeType, model) {
+async function extractLabReportContent(userId, fileName, storagePath, base64Data, mimeType, model, userSelectedType = null) {
   console.log(`🔬 Extracting lab report content for: ${fileName}`);
   
   try {
@@ -711,6 +711,9 @@ Focus on extracting:
 6. **Laboratory Information**: Lab name, ordering physician
 7. **Clinical Notes**: Any comments or interpretations
 
+${userSelectedType ? `
+The user has indicated this is a "${userSelectedType}" lab report. Please classify accordingly.
+` : `
 Based on the tests present, classify this lab report type as one of:
 - blood_sugar (glucose, diabetes-related tests)
 - cholesterol (lipid panel, triglycerides)
@@ -722,10 +725,11 @@ Based on the tests present, classify this lab report type as one of:
 - vitamin_levels (B12, D, folate)
 - inflammatory_markers (ESR, CRP)
 - other_lab_tests (any other type)
+`}
 
 Return a JSON object with this structure:
 {
-  "lab_report_type": "one of the types above",
+  "lab_report_type": "${userSelectedType || 'auto-detected type'}",
   "extracted_text": "complete text content extracted from the image",
   "test_results": [
     {
@@ -770,7 +774,7 @@ Extract ALL visible text and be extremely thorough.
       console.error('❌ Failed to parse extraction response as JSON:', parseError);
       // Fallback to storing raw text
       extractedData = {
-        lab_report_type: 'other_lab_tests',
+        lab_report_type: userSelectedType || 'other_lab_tests',
         extracted_text: response,
         test_results: [],
         test_date: null,
@@ -778,6 +782,9 @@ Extract ALL visible text and be extremely thorough.
         lab_info: {}
       };
     }
+
+    // Use user-selected type if provided, otherwise use AI-detected type
+    const finalLabReportType = userSelectedType || extractedData.lab_report_type || 'other_lab_tests';
 
     // Store in Firestore
     const db = admin.firestore();
@@ -790,14 +797,15 @@ Extract ALL visible text and be extremely thorough.
     const labReportData = {
       fileName: fileName,
       storagePath: storagePath,
-      labReportType: extractedData.lab_report_type || 'other_lab_tests',
+      labReportType: finalLabReportType,
       extractedText: extractedData.extracted_text || '',
       testResults: extractedData.test_results || [],
       testDate: extractedData.test_date || null,
       patientInfo: extractedData.patient_info || {},
       labInfo: extractedData.lab_info || {},
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      extractionMethod: 'gemini_ocr'
+      extractionMethod: 'gemini_ocr',
+      userSelectedType: userSelectedType ? true : false
     };
 
     await labReportContentRef.set(labReportData);
@@ -845,6 +853,45 @@ async function storeBasicLabReportInfo(userId, fileName, storagePath) {
 
   } catch (error) {
     console.error('❌ Error storing basic lab report info:', error);
+    throw error;
+  }
+}
+
+/**
+ * Store basic lab report info with user-selected type when API key is not available
+ */
+async function storeBasicLabReportInfoWithType(userId, fileName, storagePath, selectedType) {
+  console.log(`📄 Storing basic lab report info with type ${selectedType} for: ${fileName}`);
+  
+  try {
+    const db = admin.firestore();
+    const labReportContentRef = db
+      .collection('users')
+      .doc(userId)
+      .collection('lab_report_content')
+      .doc();
+
+    const basicLabReportData = {
+      fileName: fileName,
+      storagePath: storagePath,
+      labReportType: selectedType,
+      extractedText: 'Content extraction requires API key configuration',
+      testResults: [],
+      testDate: null,
+      patientInfo: {},
+      labInfo: {},
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      extractionMethod: 'basic_info_only',
+      userSelectedType: true
+    };
+
+    await labReportContentRef.set(basicLabReportData);
+    
+    console.log(`✅ Basic lab report info with type stored: ${labReportContentRef.id}`);
+    return labReportContentRef.id;
+
+  } catch (error) {
+    console.error('❌ Error storing basic lab report info with type:', error);
     throw error;
   }
 }
@@ -1294,6 +1341,81 @@ exports.getLabReportContent = onCall(
       } catch (error) {
         console.error("Error getting lab report content:", error);
         throw new HttpsError("internal", "Failed to get lab report content", error.message);
+      }
+    }
+);
+
+/**
+ * Update lab report content with user-selected type
+ */
+exports.updateLabReportType = onCall(
+    {cors: true, secrets: [geminiApiKey]},
+    async (request) => {
+      const {auth, data} = request;
+      
+      console.log('=== UPDATE LAB REPORT TYPE ===');
+      console.log('Auth UID:', auth?.uid);
+
+      if (!auth) {
+        throw new HttpsError("unauthenticated", "User must be logged in");
+      }
+
+      const {fileName, storagePath, selectedType} = data;
+      
+      if (!fileName || !storagePath || !selectedType) {
+        throw new HttpsError("invalid-argument", "fileName, storagePath, and selectedType are required");
+      }
+
+      const userId = auth.uid;
+
+      try {
+        const apiKey = geminiApiKey.value();
+        if (!apiKey) {
+          // Store basic info with user-selected type
+          await storeBasicLabReportInfoWithType(userId, fileName, storagePath, selectedType);
+          return { success: true, message: "Basic lab report info stored with selected type" };
+        }
+
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+        const bucket = admin.storage().bucket();
+
+        // Check if file exists and is an image
+        const file = bucket.file(storagePath);
+        const [exists] = await file.exists();
+        
+        if (!exists) {
+          console.error(`❌ File not found: ${storagePath}`);
+          await storeBasicLabReportInfoWithType(userId, fileName, storagePath, selectedType);
+          return { success: true, message: "File not found, stored basic info" };
+        }
+
+        // Check if it's an image file for AI analysis
+        const isImage = /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(fileName);
+        
+        if (!isImage) {
+          console.log(`📄 Non-image file, storing basic info: ${fileName}`);
+          await storeBasicLabReportInfoWithType(userId, fileName, storagePath, selectedType);
+          return { success: true, message: "Non-image file, stored basic info" };
+        }
+
+        // Download and analyze the image
+        const [fileBuffer] = await file.download();
+        const base64Data = fileBuffer.toString('base64');
+        
+        let mimeType = 'image/jpeg';
+        if (fileName.toLowerCase().endsWith('.png')) mimeType = 'image/png';
+        else if (fileName.toLowerCase().endsWith('.gif')) mimeType = 'image/gif';
+        else if (fileName.toLowerCase().endsWith('.webp')) mimeType = 'image/webp';
+
+        // Extract content with user-selected type
+        await extractLabReportContent(userId, fileName, storagePath, base64Data, mimeType, model, selectedType);
+        
+        return { success: true, message: "Lab report content extracted with selected type" };
+
+      } catch (error) {
+        console.error('❌ Error updating lab report type:', error);
+        throw new HttpsError("internal", "Failed to update lab report type", error.message);
       }
     }
 );
