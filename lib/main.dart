@@ -11,6 +11,7 @@ import 'hospitalReg.dart';
 import 'screens/doctor_dashboard.dart';
 import 'screens/hospital_dashboard.dart';
 import 'screens/caregiver_dashboard.dart';
+import 'screens/lab_dashboard.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -58,6 +59,8 @@ class MyApp extends StatelessWidget {
           return MaterialPageRoute(builder: (_) => const HospitalDashboard());
         } else if (settings.name == '/caregiverDashboard') {
           return MaterialPageRoute(builder: (_) => const CaregiverDashboard());
+        } else if (settings.name == '/labDashboard') {
+          return MaterialPageRoute(builder: (_) => const LabDashboard());
         }
         // Handle unknown routes
         return MaterialPageRoute(builder: (_) => const AuthWrapper());
@@ -74,6 +77,7 @@ class MyApp extends StatelessWidget {
         '/doctorDashboard': (context) => const DoctorDashboard(),
         '/hospitalDashboard': (context) => const HospitalDashboard(),
         '/caregiverDashboard': (context) => const CaregiverDashboard(),
+        '/labDashboard': (context) => const LabDashboard(),
       },
     );
   }

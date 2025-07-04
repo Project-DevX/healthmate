@@ -148,6 +148,9 @@ class _LoginPageState extends State<LoginPage> {
             } else if (userType == 'hospital') {
               print('🏥 Navigating to hospital dashboard...');
               Navigator.pushReplacementNamed(context, '/hospitalDashboard');
+            } else if (userType == 'lab') {
+              print('🧪 Navigating to lab dashboard...');
+              Navigator.pushReplacementNamed(context, '/labDashboard');
             } else {
               print('❓ Unknown user type, returning to login.');
               Navigator.pushReplacementNamed(context, '/login');

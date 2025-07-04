@@ -287,7 +287,13 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
             },
           );
         } else {
-          Navigator.pushReplacementNamed(context, '/home');
+          if (_selectedInstitutionType == 'Laboratory') {
+            Navigator.pushReplacementNamed(context, '/labDashboard');
+          } else if (_selectedInstitutionType == 'Hospital') {
+            Navigator.pushReplacementNamed(context, '/hospitalDashboard');
+          } else {
+            Navigator.pushReplacementNamed(context, '/home');
+          }
         }
       }
     } on FirebaseAuthException catch (e) {
@@ -489,7 +495,7 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
                       return 'Please enter an email address';
                     }
                     if (!RegExp(
-                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
                     ).hasMatch(value)) {
                       return 'Please enter a valid email address';
                     }
@@ -588,7 +594,7 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
                       return 'Please enter an email address';
                     }
                     if (!RegExp(
-                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
                     ).hasMatch(value)) {
                       return 'Please enter a valid email address';
                     }
