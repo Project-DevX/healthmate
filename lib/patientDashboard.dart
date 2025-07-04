@@ -7,6 +7,7 @@ import 'services/document_service.dart';
 import 'services/gemini_service.dart';
 import 'screens/medical_records_screen.dart';
 import 'screens/medical_summary_screen.dart';
+import 'screens/lab_report_content_screen.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -603,6 +604,29 @@ class DashboardContent extends StatelessWidget {
                 },
               ),
             ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildQuickAccessButton(
+                context,
+                Icons.science,
+                'Lab Reports',
+                Colors.teal,
+                () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const LabReportContentScreen(),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(child: SizedBox()), // Empty space to balance the row
           ],
         ),
       ],

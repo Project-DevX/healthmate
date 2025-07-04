@@ -70,7 +70,18 @@ exports.classifyMedicalDocument = onCall(
         const apiKey = geminiApiKey.value();
         if (!apiKey) {
           console.warn('⚠️ Gemini API key not configured, using filename-based classification');
-          return intelligentClassifyByFilename(fileName);
+          const fallbackResult = intelligentClassifyByFilename(fileName);
+          
+          // Even without API key, if classified as lab report, store basic info
+          if (fallbackResult.category === 'lab_reports' && auth?.uid) {
+            try {
+              await storeBasicLabReportInfo(auth.uid, fileName, storagePath);
+            } catch (storeError) {
+              console.error('❌ Failed to store basic lab report info:', storeError);
+            }
+          }
+          
+          return fallbackResult;
         }
 
         const genAI = new GoogleGenerativeAI(apiKey);
@@ -144,12 +155,24 @@ Focus on identifying:
           
           // Validate the response structure
           if (classification.category && typeof classification.confidence === 'number') {
-            return {
+            const result = {
               category: classification.category,
               confidence: Math.max(0, Math.min(1, classification.confidence)),
               suggestedSubfolder: classification.suggestedSubfolder || getDefaultSubfolder(classification.category),
               reasoning: classification.reasoning || 'AI classification'
             };
+
+            // If classified as lab report, extract text content
+            if (classification.category === 'lab_reports' && auth?.uid) {
+              try {
+                await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model);
+              } catch (extractError) {
+                console.error('❌ Failed to extract lab report content:', extractError);
+                // Don't fail the classification if extraction fails
+              }
+            }
+
+            return result;
           }
         } catch (parseError) {
           console.error('❌ Failed to parse Gemini response as JSON:', parseError);
@@ -157,7 +180,20 @@ Focus on identifying:
 
         // Fallback to filename classification if AI fails
         console.log('⚠️ AI classification failed, falling back to filename analysis');
-        return intelligentClassifyByFilename(fileName);
+        const fallbackResult = intelligentClassifyByFilename(fileName);
+        
+        // If fallback classifies as lab report and we have image data, try to extract content
+        if (fallbackResult.category === 'lab_reports' && auth?.uid && base64Data && mimeType) {
+          try {
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+            await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model);
+          } catch (extractError) {
+            console.error('❌ Failed to extract lab report content in fallback:', extractError);
+          }
+        }
+        
+        return fallbackResult;
 
       } catch (error) {
         console.error('❌ Error in document classification:', error);
@@ -657,6 +693,163 @@ Mark new findings with "**NEW:**" if updating existing summary.
 );
 
 /**
+ * Extract text content from lab reports using Gemini OCR
+ */
+async function extractLabReportContent(userId, fileName, storagePath, base64Data, mimeType, model) {
+  console.log(`🔬 Extracting lab report content for: ${fileName}`);
+  
+  try {
+    const extractionPrompt = `
+Analyze this lab report image and extract ALL text content with extreme precision.
+Focus on extracting:
+
+1. **Test Names**: All laboratory tests performed
+2. **Test Values**: Exact numerical results with units
+3. **Reference Ranges**: Normal ranges for each test
+4. **Patient Information**: Name, ID, demographics if visible
+5. **Date Information**: Test date, collection date, report date
+6. **Laboratory Information**: Lab name, ordering physician
+7. **Clinical Notes**: Any comments or interpretations
+
+Based on the tests present, classify this lab report type as one of:
+- blood_sugar (glucose, diabetes-related tests)
+- cholesterol (lipid panel, triglycerides)
+- liver_function (ALT, AST, bilirubin)
+- kidney_function (creatinine, BUN, GFR)
+- thyroid_function (TSH, T3, T4)
+- complete_blood_count (CBC, hemoglobin, platelets)
+- cardiac_markers (troponin, CK-MB)
+- vitamin_levels (B12, D, folate)
+- inflammatory_markers (ESR, CRP)
+- other_lab_tests (any other type)
+
+Return a JSON object with this structure:
+{
+  "lab_report_type": "one of the types above",
+  "extracted_text": "complete text content extracted from the image",
+  "test_results": [
+    {
+      "test_name": "test name",
+      "value": "result value",
+      "unit": "unit of measurement",
+      "reference_range": "normal range",
+      "status": "normal/high/low"
+    }
+  ],
+  "test_date": "date when tests were performed",
+  "patient_info": {
+    "name": "patient name if visible",
+    "id": "patient ID if visible"
+  },
+  "lab_info": {
+    "name": "laboratory name",
+    "ordering_physician": "doctor name if visible"
+  }
+}
+
+Extract ALL visible text and be extremely thorough.
+`;
+
+    const result = await model.generateContent([
+      extractionPrompt,
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType: mimeType
+        }
+      }
+    ]);
+
+    const response = result.response.text();
+    console.log('🤖 Gemini extraction response:', response);
+
+    let extractedData;
+    try {
+      extractedData = JSON.parse(response);
+    } catch (parseError) {
+      console.error('❌ Failed to parse extraction response as JSON:', parseError);
+      // Fallback to storing raw text
+      extractedData = {
+        lab_report_type: 'other_lab_tests',
+        extracted_text: response,
+        test_results: [],
+        test_date: null,
+        patient_info: {},
+        lab_info: {}
+      };
+    }
+
+    // Store in Firestore
+    const db = admin.firestore();
+    const labReportContentRef = db
+      .collection('users')
+      .doc(userId)
+      .collection('lab_report_content')
+      .doc(); // Auto-generate document ID
+
+    const labReportData = {
+      fileName: fileName,
+      storagePath: storagePath,
+      labReportType: extractedData.lab_report_type || 'other_lab_tests',
+      extractedText: extractedData.extracted_text || '',
+      testResults: extractedData.test_results || [],
+      testDate: extractedData.test_date || null,
+      patientInfo: extractedData.patient_info || {},
+      labInfo: extractedData.lab_info || {},
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      extractionMethod: 'gemini_ocr'
+    };
+
+    await labReportContentRef.set(labReportData);
+    
+    console.log(`✅ Lab report content extracted and stored: ${labReportContentRef.id}`);
+    return labReportContentRef.id;
+
+  } catch (error) {
+    console.error('❌ Error extracting lab report content:', error);
+    throw error;
+  }
+}
+
+/**
+ * Store basic lab report info when API key is not available
+ */
+async function storeBasicLabReportInfo(userId, fileName, storagePath) {
+  console.log(`📄 Storing basic lab report info for: ${fileName}`);
+  
+  try {
+    const db = admin.firestore();
+    const labReportContentRef = db
+      .collection('users')
+      .doc(userId)
+      .collection('lab_report_content')
+      .doc();
+
+    const basicLabReportData = {
+      fileName: fileName,
+      storagePath: storagePath,
+      labReportType: 'other_lab_tests', // Default type when can't analyze
+      extractedText: 'Content extraction requires API key configuration',
+      testResults: [],
+      testDate: null,
+      patientInfo: {},
+      labInfo: {},
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      extractionMethod: 'basic_info_only'
+    };
+
+    await labReportContentRef.set(basicLabReportData);
+    
+    console.log(`✅ Basic lab report info stored: ${labReportContentRef.id}`);
+    return labReportContentRef.id;
+
+  } catch (error) {
+    console.error('❌ Error storing basic lab report info:', error);
+    throw error;
+  }
+}
+
+/**
  * Intelligent fallback classification with enhanced medical keyword analysis
  */
 function intelligentClassifyByFilename(fileName) {
@@ -1028,3 +1221,79 @@ function groupDocumentsByCategory(documentAnalyses) {
 
   return categories;
 }
+
+/**
+ * Get lab report content for a user
+ */
+exports.getLabReportContent = onCall(
+    {cors: true},
+    async (request) => {
+      const {auth, data} = request;
+      
+      console.log('=== GET LAB REPORT CONTENT ===');
+      console.log('Auth UID:', auth?.uid);
+
+      if (!auth) {
+        throw new HttpsError("unauthenticated", "User must be logged in");
+      }
+
+      const userId = auth.uid;
+      const { labReportType, limit = 50 } = data || {};
+      
+      try {
+        const db = admin.firestore();
+        
+        let query = db
+          .collection('users')
+          .doc(userId)
+          .collection('lab_report_content')
+          .orderBy('createdAt', 'desc')
+          .limit(limit);
+
+        // Filter by lab report type if specified
+        if (labReportType && labReportType !== 'all') {
+          query = query.where('labReportType', '==', labReportType);
+        }
+
+        const snapshot = await query.get();
+        
+        const labReports = [];
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          labReports.push({
+            id: doc.id,
+            fileName: data.fileName,
+            labReportType: data.labReportType,
+            extractedText: data.extractedText,
+            testResults: data.testResults || [],
+            testDate: data.testDate,
+            patientInfo: data.patientInfo || {},
+            labInfo: data.labInfo || {},
+            createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+            extractionMethod: data.extractionMethod
+          });
+        });
+
+        // Group by lab report type for summary
+        const reportsByType = {};
+        labReports.forEach(report => {
+          const type = report.labReportType;
+          if (!reportsByType[type]) {
+            reportsByType[type] = [];
+          }
+          reportsByType[type].push(report);
+        });
+
+        return {
+          labReports: labReports,
+          totalCount: labReports.length,
+          reportsByType: reportsByType,
+          availableTypes: Object.keys(reportsByType)
+        };
+
+      } catch (error) {
+        console.error("Error getting lab report content:", error);
+        throw new HttpsError("internal", "Failed to get lab report content", error.message);
+      }
+    }
+);
