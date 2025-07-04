@@ -1,61 +1,42 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:io';
 
-class LabDashboard extends StatefulWidget {
-  const LabDashboard({Key? key}) : super(key: key);
+class PharmacyDashboardPage extends StatefulWidget {
+  const PharmacyDashboardPage({Key? key}) : super(key: key);
 
   @override
-  State<LabDashboard> createState() => _LabDashboardState();
+  State<PharmacyDashboardPage> createState() => _PharmacyDashboardPageState();
 }
 
-class _LabDashboardState extends State<LabDashboard> {
+class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
   bool isDarkMode = false;
   int _selectedBottomNav = 0;
   bool _isLoading = false;
 
   // Placeholder data for KPIs
-  int totalTests = 120;
-  int pendingUploads = 8;
-  int todaysAppointments = 15;
+  int totalPrescriptions = 200;
+  int fulfilledPrescriptions = 150;
+  int pendingPrescriptions = 30;
+  int outOfStockAlerts = 5;
+  int todaysPickups = 12;
 
-  final List<_LabDashboardFeature> _features = [
-    _LabDashboardFeature('Report Upload', Icons.upload_file),
-    _LabDashboardFeature('Report Management', Icons.folder),
-    _LabDashboardFeature('Test Requests', Icons.assignment),
-    _LabDashboardFeature('Patient Search', Icons.search),
-    _LabDashboardFeature('Appointment Calendar', Icons.calendar_today),
-    _LabDashboardFeature('Staff Assignment', Icons.people),
-    _LabDashboardFeature('Notifications', Icons.notifications),
+  final List<_PharmacyDashboardFeature> _features = [
+    _PharmacyDashboardFeature('E-Prescriptions', Icons.receipt_long),
+    _PharmacyDashboardFeature('Fulfillment Tracker', Icons.track_changes),
+    _PharmacyDashboardFeature('Inventory', Icons.inventory),
+    _PharmacyDashboardFeature('Search & Filter', Icons.search),
+    _PharmacyDashboardFeature('Notifications', Icons.notifications),
+    _PharmacyDashboardFeature('Messaging', Icons.chat),
+    _PharmacyDashboardFeature('Reports', Icons.bar_chart),
+    _PharmacyDashboardFeature('Profile & Settings', Icons.settings),
   ];
 
   void _onFeatureTap(String feature) {
-    switch (feature) {
-      case 'Report Upload':
-        _showFeatureModal('Report Upload Module');
-        return;
-      case 'Report Management':
-        _showFeatureModal('Report Management Table');
-        return;
-      case 'Test Requests':
-        _showFeatureModal('Test Request Viewer');
-        return;
-      case 'Patient Search':
-        _showFeatureModal('Patient Search Tool');
-        return;
-      case 'Appointment Calendar':
-        _showFeatureModal('Appointment Calendar');
-        return;
-      case 'Staff Assignment':
-        _showFeatureModal('Lab Staff Assignment');
-        return;
-      case 'Notifications':
-        _showFeatureModal('Notifications Panel');
-        return;
-    }
+    _showFeatureModal(feature);
   }
 
   void _showFeatureModal(String title) {
@@ -106,7 +87,7 @@ class _LabDashboardState extends State<LabDashboard> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Logout failed: \\$e')),
+          SnackBar(content: Text('Logout failed: $e')),
         );
       }
     }
@@ -125,7 +106,7 @@ class _LabDashboardState extends State<LabDashboard> {
       appBar: AppBar(
         backgroundColor: mainBlue,
         foregroundColor: Colors.white,
-        title: const Text('Lab Dashboard'),
+        title: const Text('Pharmacy Dashboard'),
         elevation: 0,
         actions: [
           IconButton(
@@ -161,7 +142,7 @@ class _LabDashboardState extends State<LabDashboard> {
                                 radius: 28,
                                 backgroundColor: mainBlue,
                                 child: Icon(
-                                  Icons.science,
+                                  Icons.local_pharmacy,
                                   color: Colors.white,
                                   size: 28,
                                 ),
@@ -172,7 +153,7 @@ class _LabDashboardState extends State<LabDashboard> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Welcome, Lab Staff!',
+                                      'Welcome, Pharmacy Staff!',
                                       style: TextStyle(
                                         fontSize: 20,
                                         fontWeight: FontWeight.bold,
@@ -181,7 +162,7 @@ class _LabDashboardState extends State<LabDashboard> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      'Laboratory Department',
+                                      'Pharmacy Department',
                                       style: TextStyle(
                                         fontSize: 15,
                                         color: subTextColor,
@@ -200,19 +181,19 @@ class _LabDashboardState extends State<LabDashboard> {
                         children: [
                           Expanded(
                             child: _buildStatCard(
-                              'Total Tests',
-                              '$totalTests',
-                              Icons.assignment_turned_in,
-                              Colors.green,
+                              'Total Prescriptions',
+                              '$totalPrescriptions',
+                              Icons.receipt_long,
+                              Colors.blue,
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: _buildStatCard(
-                              'Pending Uploads',
-                              '$pendingUploads',
-                              Icons.upload_file,
-                              Colors.orange,
+                              'Fulfilled',
+                              '$fulfilledPrescriptions',
+                              Icons.check_circle,
+                              Colors.green,
                             ),
                           ),
                         ],
@@ -222,18 +203,31 @@ class _LabDashboardState extends State<LabDashboard> {
                         children: [
                           Expanded(
                             child: _buildStatCard(
-                              "Today's Appointments",
-                              '$todaysAppointments',
-                              Icons.calendar_today,
-                              Colors.blue,
+                              'Pending',
+                              '$pendingPrescriptions',
+                              Icons.pending_actions,
+                              Colors.orange,
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: _buildStatCard(
-                              'Completed',
-                              '${totalTests - pendingUploads}',
-                              Icons.check_circle,
+                              'Out of Stock',
+                              '$outOfStockAlerts',
+                              Icons.warning,
+                              Colors.red,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildStatCard(
+                              "Today's Pickups",
+                              '$todaysPickups',
+                              Icons.local_shipping,
                               Colors.teal,
                             ),
                           ),
@@ -297,7 +291,7 @@ class _LabDashboardState extends State<LabDashboard> {
                 )
               : _selectedBottomNav == 1
                   ? const Center(child: Text('Chat System (Stub)', style: TextStyle(fontSize: 20)))
-                  : const LabProfilePage(),
+                  : const PharmacyProfilePage(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedBottomNav,
         onTap: (index) => setState(() => _selectedBottomNav = index),
@@ -359,35 +353,39 @@ class _LabDashboardState extends State<LabDashboard> {
   }
 }
 
-class _LabDashboardFeature {
+class _PharmacyDashboardFeature {
   final String label;
   final IconData icon;
-  const _LabDashboardFeature(this.label, this.icon);
+  const _PharmacyDashboardFeature(this.label, this.icon);
 }
 
-class LabProfilePage extends StatefulWidget {
-  const LabProfilePage({Key? key}) : super(key: key);
+class PharmacyProfilePage extends StatefulWidget {
+  const PharmacyProfilePage({Key? key}) : super(key: key);
 
   @override
-  State<LabProfilePage> createState() => _LabProfilePageState();
+  State<PharmacyProfilePage> createState() => _PharmacyProfilePageState();
 }
 
-class _LabProfilePageState extends State<LabProfilePage> {
-  Map<String, dynamic>? labData;
+class _PharmacyProfilePageState extends State<PharmacyProfilePage> {
+  Map<String, dynamic>? pharmacyData;
   bool _isLoading = true;
   bool _isUploading = false;
+  bool _docExists = true;
 
   @override
   void initState() {
     super.initState();
-    _loadLabData();
+    _loadPharmacyData();
   }
 
-  Future<void> _loadLabData() async {
+  Future<void> _loadPharmacyData() async {
     setState(() => _isLoading = true);
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      setState(() => _isLoading = false);
+      setState(() {
+        _isLoading = false;
+        _docExists = false;
+      });
       return;
     }
     final uid = user.uid;
@@ -397,10 +395,16 @@ class _LabProfilePageState extends State<LabProfilePage> {
           .doc(uid)
           .get();
       if (docSnap.exists) {
-        labData = docSnap.data();
+        pharmacyData = docSnap.data();
+        _docExists = true;
+      } else {
+        pharmacyData = null;
+        _docExists = false;
       }
     } catch (e) {
-      print('Error loading lab profile: $e');
+      print('Error loading pharmacy profile: $e');
+      pharmacyData = null;
+      _docExists = false;
     }
     setState(() => _isLoading = false);
   }
@@ -418,14 +422,14 @@ class _LabProfilePageState extends State<LabProfilePage> {
       setState(() => _isUploading = true);
       final file = File(picked.path);
       final storageRef = FirebaseStorage.instance.ref().child(
-        'lab_profile_photos/${user.uid}.jpg',
+        'pharmacy_profile_photos/${user.uid}.jpg',
       );
       await storageRef.putFile(file);
       final url = await storageRef.getDownloadURL();
       await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
         {'photoURL': url},
       );
-      await _loadLabData();
+      await _loadPharmacyData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile photo updated!')),
@@ -442,49 +446,25 @@ class _LabProfilePageState extends State<LabProfilePage> {
   }
 
   void _showEditProfileDialog() {
-    final _institutionNameController = TextEditingController(
-      text: labData?['institutionName'] ?? '',
-    );
-    final _hotlineController = TextEditingController(
-      text: labData?['hotline'] ?? '',
-    );
-    final _addressController = TextEditingController(
-      text: labData?['address'] ?? '',
-    );
-    final _websiteController = TextEditingController(
-      text: labData?['website'] ?? '',
-    );
-    final _repNameController = TextEditingController(
-      text: labData?['repName'] ?? '',
-    );
-    final _repDesignationController = TextEditingController(
-      text: labData?['repDesignation'] ?? '',
-    );
-    final _repContactController = TextEditingController(
-      text: labData?['repContact'] ?? '',
-    );
-    final _repEmailController = TextEditingController(
-      text: labData?['repEmail'] ?? '',
-    );
-    final _hoursController = TextEditingController(
-      text: labData?['operatingHours'] ?? '',
-    );
-    final _testTypesController = TextEditingController(
-      text: labData?['testTypes'] ?? '',
-    );
-    final _turnaroundController = TextEditingController(
-      text: labData?['turnaroundTime'] ?? '',
-    );
+    final _institutionNameController = TextEditingController(text: pharmacyData?['institutionName'] ?? '');
+    final _repDesignationController = TextEditingController(text: pharmacyData?['repDesignation'] ?? '');
+    final _repEmailController = TextEditingController(text: pharmacyData?['repEmail'] ?? '');
+    final _hotlineController = TextEditingController(text: pharmacyData?['hotline'] ?? '');
+    final _addressController = TextEditingController(text: pharmacyData?['address'] ?? '');
+    final _websiteController = TextEditingController(text: pharmacyData?['website'] ?? '');
+    final _repNameController = TextEditingController(text: pharmacyData?['repName'] ?? '');
+    final _repContactController = TextEditingController(text: pharmacyData?['repContact'] ?? '');
+    final _hoursController = TextEditingController(text: pharmacyData?['operatingHours'] ?? '');
+    final _servicesController = TextEditingController(text: pharmacyData?['services'] ?? '');
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Edit Lab Profile'),
+        title: const Text('Edit Pharmacy Profile'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Lab Details
               TextField(
                 controller: _institutionNameController,
                 decoration: const InputDecoration(labelText: 'Institution Name'),
@@ -502,7 +482,6 @@ class _LabProfilePageState extends State<LabProfilePage> {
                 decoration: const InputDecoration(labelText: 'Website'),
               ),
               const SizedBox(height: 12),
-              // Authorized Representative
               Text('Authorized Representative', style: TextStyle(fontWeight: FontWeight.bold)),
               TextField(
                 controller: _repNameController,
@@ -521,18 +500,13 @@ class _LabProfilePageState extends State<LabProfilePage> {
                 decoration: const InputDecoration(labelText: 'Email'),
               ),
               const SizedBox(height: 12),
-              // Other editable fields
               TextField(
                 controller: _hoursController,
                 decoration: const InputDecoration(labelText: 'Operating Hours'),
               ),
               TextField(
-                controller: _testTypesController,
-                decoration: const InputDecoration(labelText: 'Test Types Offered'),
-              ),
-              TextField(
-                controller: _turnaroundController,
-                decoration: const InputDecoration(labelText: 'Report Turnaround Time'),
+                controller: _servicesController,
+                decoration: const InputDecoration(labelText: 'Services Offered'),
               ),
             ],
           ),
@@ -564,18 +538,17 @@ class _LabProfilePageState extends State<LabProfilePage> {
                   'repContact': _repContactController.text.trim(),
                   'repEmail': _repEmailController.text.trim(),
                   'operatingHours': _hoursController.text.trim(),
-                  'testTypes': _testTypesController.text.trim(),
-                  'turnaroundTime': _turnaroundController.text.trim(),
+                  'services': _servicesController.text.trim(),
                 };
                 await FirebaseFirestore.instance
                     .collection('users')
                     .doc(uid)
                     .update(updatedData);
-                await _loadLabData();
+                await _loadPharmacyData();
                 if (mounted) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Lab profile updated!')),
+                    const SnackBar(content: Text('Pharmacy profile updated!')),
                   );
                 }
               } catch (e) {
@@ -603,7 +576,7 @@ class _LabProfilePageState extends State<LabProfilePage> {
     final Color textColor = isDarkMode ? Colors.white : mainBlue;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Lab Profile'),
+        title: const Text('Pharmacy Profile'),
         backgroundColor: isDarkMode ? const Color(0xFF232A34) : Colors.white,
         elevation: 0,
         iconTheme: IconThemeData(color: mainBlue),
@@ -615,15 +588,15 @@ class _LabProfilePageState extends State<LabProfilePage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
-            onPressed: labData == null ? null : _showEditProfileDialog,
-            tooltip: 'Edit Lab Details',
+            onPressed: _docExists ? _showEditProfileDialog : null,
+            tooltip: 'Edit Pharmacy Details',
           ),
         ],
       ),
       backgroundColor: scaffoldBg,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : labData == null
+          : !_docExists
               ? const Center(child: Text('No profile data found.'))
               : ListView(
                   padding: const EdgeInsets.all(24),
@@ -636,8 +609,8 @@ class _LabProfilePageState extends State<LabProfilePage> {
                             child: CircleAvatar(
                               radius: 48,
                               backgroundImage: NetworkImage(
-                                labData?['photoURL'] ??
-                                    'https://ui-avatars.com/api/?name=${Uri.encodeComponent(labData?['institutionName'] ?? 'Lab')}&background=7B61FF&color=fff',
+                                pharmacyData?['photoURL'] ??
+                                    'https://ui-avatars.com/api/?name=${Uri.encodeComponent(pharmacyData?['institutionName'] ?? 'Pharmacy')}&background=7B61FF&color=fff',
                               ),
                               child: _isUploading
                                   ? const CircularProgressIndicator()
@@ -659,14 +632,14 @@ class _LabProfilePageState extends State<LabProfilePage> {
                     const SizedBox(height: 16),
                     Center(
                       child: Text(
-                        labData?['institutionName'] ?? 'Lab Name',
+                        pharmacyData?['institutionName'] ?? 'Pharmacy Name',
                         style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor),
                       ),
                     ),
                     const SizedBox(height: 8),
                     Center(
                       child: Text(
-                        labData?['officialEmail'] ?? 'Email not set',
+                        pharmacyData?['officialEmail'] ?? 'Email not set',
                         style: const TextStyle(fontSize: 16, color: Colors.grey),
                       ),
                     ),
@@ -679,36 +652,32 @@ class _LabProfilePageState extends State<LabProfilePage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Lab Details', style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 16)),
+                            Text('Pharmacy Details', style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 16)),
                             const SizedBox(height: 8),
-                            _profileRow('Institution Name', labData?['institutionName']),
-                            _profileRow('License Number', labData?['licenseNumber']),
-                            _profileRow('Hotline', labData?['hotline']),
-                            _profileRow('Address', labData?['address']),
-                            _profileRow('Website', labData?['website']),
+                            _profileRow('Institution Name', pharmacyData?['institutionName']),
+                            _profileRow('License Number', pharmacyData?['licenseNumber']),
+                            _profileRow('Hotline', pharmacyData?['hotline']),
+                            _profileRow('Address', pharmacyData?['address']),
+                            _profileRow('Website', pharmacyData?['website']),
                             const SizedBox(height: 16),
                             Text('Authorized Representative', style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 16)),
                             const SizedBox(height: 8),
-                            _profileRow('Name', labData?['repName']),
-                            _profileRow('Designation', labData?['repDesignation']),
-                            _profileRow('Contact', labData?['repContact']),
-                            _profileRow('Email', labData?['repEmail']),
+                            _profileRow('Name', pharmacyData?['repName']),
+                            _profileRow('Designation', pharmacyData?['repDesignation']),
+                            _profileRow('Contact', pharmacyData?['repContact']),
+                            _profileRow('Email', pharmacyData?['repEmail']),
                             const SizedBox(height: 16),
                             Text('Operating Hours:', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                             const SizedBox(height: 4),
-                            Text(labData?['operatingHours'] ?? 'Not set', style: const TextStyle(color: Colors.grey)),
+                            Text(pharmacyData?['operatingHours'] ?? 'Not set', style: const TextStyle(color: Colors.grey)),
                             const SizedBox(height: 12),
-                            Text('Test Types Offered:', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+                            Text('Services Offered:', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                             const SizedBox(height: 4),
-                            Text((labData?['testTypes'] as String? ?? 'Not set'), style: const TextStyle(color: Colors.grey)),
+                            Text((pharmacyData?['services'] as String? ?? 'Not set'), style: const TextStyle(color: Colors.grey)),
                             const SizedBox(height: 12),
-                            Text('Report Turnaround Time:', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-                            const SizedBox(height: 4),
-                            Text(labData?['turnaroundTime'] ?? 'Not set', style: const TextStyle(color: Colors.grey)),
-                            const SizedBox(height: 16),
                             Text('User Management:', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
                             const SizedBox(height: 4),
-                            Text('Add/remove lab technicians (admin only) - Coming soon', style: const TextStyle(color: Colors.grey)),
+                            Text('Add/remove pharmacy staff (admin only) - Coming soon', style: const TextStyle(color: Colors.grey)),
                           ],
                         ),
                       ),

@@ -38,6 +38,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
             Navigator.pushReplacementNamed(context, '/caregiverDashboard');
           } else if (userType == 'lab') {
             Navigator.pushReplacementNamed(context, '/labDashboard');
+          } else if (userType == 'pharmacy') {
+            Navigator.pushReplacementNamed(context, '/pharmacyDashboard');
           } else {
             // Default to patient dashboard for any unknown user types
             Navigator.pushReplacementNamed(context, '/patientDashboard');
