@@ -27,12 +27,18 @@ class LabReportService {
     }
   }
 
-  /// Get available lab report types for the current user
+  /// Get available lab report types for the current user from dynamic structure
   static Future<List<String>> getAvailableLabReportTypes() async {
     try {
-      final result = await getLabReportContent();
-      final availableTypes = List<String>.from(result['availableTypes'] ?? []);
-      return availableTypes;
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return [];
+
+      // Use the backend function to get lab report types
+      final callable = _functions.httpsCallable('getLabReportTypesForUser');
+      final result = await callable.call({'userId': user.uid});
+
+      final types = List<String>.from(result.data ?? []);
+      return types;
     } catch (e) {
       throw Exception('Failed to get available lab report types: $e');
     }

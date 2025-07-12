@@ -69,13 +69,14 @@ exports.classifyMedicalDocument = onCall(
       try {
         const apiKey = geminiApiKey.value();
         if (!apiKey) {
-          console.warn('⚠️ Gemini API key not configured, using filename-based classification');
+          console.warn('⚠️ Gemini API key not configured, using enhanced filename-based classification');
           const fallbackResult = intelligentClassifyByFilename(fileName);
           
           // Even without API key, if classified as lab report, store basic info
           if (fallbackResult.category === 'lab_reports' && auth?.uid) {
             try {
-              await storeBasicLabReportInfo(auth.uid, fileName, storagePath);
+              const basicLabInfo = await storeBasicLabReportInfo(auth.uid, fileName, storagePath);
+              fallbackResult.labReportType = basicLabInfo.labReportType;
             } catch (storeError) {
               console.error('❌ Failed to store basic lab report info:', storeError);
             }
@@ -151,21 +152,33 @@ Focus on identifying:
 
         // Try to parse the JSON response
         try {
-          const classification = JSON.parse(response);
+          // Strip markdown code block formatting if present
+          let cleanResponse = response.trim();
+          if (cleanResponse.startsWith('```json') && cleanResponse.endsWith('```')) {
+            cleanResponse = cleanResponse.slice(7, -3).trim();
+          } else if (cleanResponse.startsWith('```') && cleanResponse.endsWith('```')) {
+            cleanResponse = cleanResponse.slice(3, -3).trim();
+          }
+          
+          const classification = JSON.parse(cleanResponse);
           
           // Validate the response structure
           if (classification.category && typeof classification.confidence === 'number') {
-            const result = {
+            let result = {
               category: classification.category,
               confidence: Math.max(0, Math.min(1, classification.confidence)),
               suggestedSubfolder: classification.suggestedSubfolder || getDefaultSubfolder(classification.category),
               reasoning: classification.reasoning || 'AI classification'
             };
 
-            // If classified as lab report, extract text content
+            // If classified as lab report, extract text content and determine lab report type
             if (classification.category === 'lab_reports' && auth?.uid) {
               try {
-                await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model, null);
+                console.log('🔬 Document classified as lab report, extracting content...');
+                const labReportDetails = await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model, null);
+                console.log('✅ Lab report details extracted:', labReportDetails);
+                result.labReportType = labReportDetails.labReportType;
+                console.log('📊 Final result with lab report type:', result);
               } catch (extractError) {
                 console.error('❌ Failed to extract lab report content:', extractError);
                 // Don't fail the classification if extraction fails
@@ -178,15 +191,43 @@ Focus on identifying:
           console.error('❌ Failed to parse Gemini response as JSON:', parseError);
         }
 
-        // Fallback to filename classification if AI fails
-        console.log('⚠️ AI classification failed, falling back to filename analysis');
+        // Enhanced fallback: If AI parsing failed but we have image data, try content-based classification
+        console.log('⚠️ AI classification parsing failed, attempting content-based fallback');
+        if (base64Data && mimeType) {
+          try {
+            const contentClassificationResult = await performContentBasedClassification(base64Data, mimeType, model);
+            
+            // If content-based classification succeeded, use it
+            if (contentClassificationResult.category !== 'other') {
+              console.log(`✅ Content-based classification successful: ${contentClassificationResult.category}`);
+              
+              // If classified as lab report, extract content
+              if (contentClassificationResult.category === 'lab_reports' && auth?.uid) {
+                try {
+                  console.log('🔬 Content-based classification: lab report detected, extracting content...');
+                  const labReportDetails = await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model, null);
+                  console.log('✅ Content-based lab report details extracted:', labReportDetails);
+                  contentClassificationResult.labReportType = labReportDetails.labReportType;
+                  console.log('📊 Content-based final result with lab report type:', contentClassificationResult);
+                } catch (extractError) {
+                  console.error('❌ Failed to extract lab report content in content-based fallback:', extractError);
+                }
+              }
+              
+              return contentClassificationResult;
+            }
+          } catch (contentError) {
+            console.error('❌ Content-based classification also failed:', contentError);
+          }
+        }
+
+        // Final fallback to filename classification
+        console.log('⚠️ All AI methods failed, falling back to filename analysis');
         const fallbackResult = intelligentClassifyByFilename(fileName);
         
         // If fallback classifies as lab report and we have image data, try to extract content
         if (fallbackResult.category === 'lab_reports' && auth?.uid && base64Data && mimeType) {
           try {
-            const genAI = new GoogleGenerativeAI(apiKey);
-            const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
             await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model);
           } catch (extractError) {
             console.error('❌ Failed to extract lab report content in fallback:', extractError);
@@ -198,8 +239,49 @@ Focus on identifying:
       } catch (error) {
         console.error('❌ Error in document classification:', error);
         
-        // Fallback to filename classification
-        return intelligentClassifyByFilename(fileName);
+        // Enhanced fallback: If we have image data, try content-based classification first
+        if (base64Data && mimeType) {
+          try {
+            console.log('🔄 Attempting content-based classification after error...');
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+            const contentClassificationResult = await performContentBasedClassification(base64Data, mimeType, model);
+            
+            // If content-based classification succeeded, use it
+            if (contentClassificationResult.category !== 'other' || contentClassificationResult.confidence > 0.5) {
+              console.log(`✅ Content-based classification successful after error: ${contentClassificationResult.category}`);
+              
+              // If classified as lab report, extract content
+              if (contentClassificationResult.category === 'lab_reports' && auth?.uid) {
+                try {
+                  const labReportDetails = await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model, null);
+                  contentClassificationResult.labReportType = labReportDetails.labReportType;
+                } catch (extractError) {
+                  console.error('❌ Failed to extract lab report content in error recovery:', extractError);
+                }
+              }
+              
+              return contentClassificationResult;
+            }
+          } catch (contentError) {
+            console.error('❌ Content-based classification also failed during error recovery:', contentError);
+          }
+        }
+        
+        // Final fallback to filename classification
+        const fallbackResult = intelligentClassifyByFilename(fileName);
+        
+        // Even in error state, if classified as lab report, store basic info
+        if (fallbackResult.category === 'lab_reports' && auth?.uid) {
+          try {
+            const basicLabInfo = await storeBasicLabReportInfo(auth.uid, fileName, storagePath);
+            fallbackResult.labReportType = basicLabInfo.labReportType;
+          } catch (storeError) {
+            console.error('❌ Failed to store basic lab report info in error recovery:', storeError);
+          }
+        }
+        
+        return fallbackResult;
       }
     }
 );
@@ -699,10 +781,31 @@ async function extractLabReportContent(userId, fileName, storagePath, base64Data
   console.log(`🔬 Extracting lab report content for: ${fileName}`);
   
   try {
+    // Get user's existing lab types with statistics for AI context
+    const userLabTypesWithStats = await getUserLabTypesWithStats(userId);
+    console.log('👤 User lab report types with stats:', userLabTypesWithStats);
+    
     const extractionPrompt = `
-Analyze this lab report image and extract ALL text content with extreme precision.
-Focus on extracting:
+Analyze this lab report image and classify it appropriately with historical context.
 
+PATIENT'S EXISTING LAB REPORT TYPES:
+${userLabTypesWithStats.length > 0 ? 
+  userLabTypesWithStats.map(type => `- ${type.name} (seen ${type.frequency} times, category: ${type.category})`).join('\n') :
+  '(No existing lab report types found - this will be the first one)'
+}
+
+CLASSIFICATION INSTRUCTIONS:
+1. **First Priority**: If this lab report matches or is very similar to any existing type above, use that existing type name EXACTLY
+2. **Second Priority**: If this is clearly a variation of an existing type, use the existing name (e.g., "CBC with Auto Diff" should match "Complete Blood Count")
+3. **Last Resort**: Only create a new type if this lab report is genuinely different from all existing types
+
+When analyzing, consider:
+- Primary tests performed
+- Medical panel or category  
+- Clinical purpose/focus area
+- Similarity to existing patient types
+
+Also extract ALL text content with extreme precision:
 1. **Test Names**: All laboratory tests performed
 2. **Test Values**: Exact numerical results with units
 3. **Reference Ranges**: Normal ranges for each test
@@ -713,28 +816,20 @@ Focus on extracting:
 
 ${userSelectedType ? `
 The user has indicated this is a "${userSelectedType}" lab report. Please classify accordingly.
-` : `
-Based on the tests present, classify this lab report type as one of:
-- blood_sugar (glucose, diabetes-related tests)
-- cholesterol (lipid panel, triglycerides)
-- liver_function (ALT, AST, bilirubin)
-- kidney_function (creatinine, BUN, GFR)
-- thyroid_function (TSH, T3, T4)
-- complete_blood_count (CBC, hemoglobin, platelets)
-- cardiac_markers (troponin, CK-MB)
-- vitamin_levels (B12, D, folate)
-- inflammatory_markers (ESR, CRP)
-- other_lab_tests (any other type)
-`}
+` : ''}
 
 Return a JSON object with this structure:
 {
-  "lab_report_type": "${userSelectedType || 'auto-detected type'}",
+  "lab_report_type": "exact name from existing types OR new type name",
+  "isExistingType": true/false,
+  "reasoning": "explanation of why this classification was chosen",
+  "similarToExisting": "name of similar existing type if applicable",
+  "confidence": 0.0-1.0,
   "extracted_text": "complete text content extracted from the image",
   "test_results": [
     {
       "test_name": "test name",
-      "value": "result value",
+      "value": "result value", 
       "unit": "unit of measurement",
       "reference_range": "normal range",
       "status": "normal/high/low"
@@ -750,6 +845,16 @@ Return a JSON object with this structure:
     "ordering_physician": "doctor name if visible"
   }
 }
+
+Examples of good NEW classifications (only if no existing match):
+- "Complete Blood Count with Differential"
+- "Comprehensive Metabolic Panel"
+- "Thyroid Function Panel"
+- "Cardiac Enzyme Panel"
+- "Lipid Profile"
+- "Liver Function Tests"
+- "Hemoglobin A1c"
+- "Vitamin D Level"
 
 Extract ALL visible text and be extremely thorough.
 `;
@@ -769,12 +874,24 @@ Extract ALL visible text and be extremely thorough.
 
     let extractedData;
     try {
-      extractedData = JSON.parse(response);
+      // Strip markdown code block formatting if present
+      let cleanResponse = response.trim();
+      if (cleanResponse.startsWith('```json') && cleanResponse.endsWith('```')) {
+        cleanResponse = cleanResponse.slice(7, -3).trim();
+      } else if (cleanResponse.startsWith('```') && cleanResponse.endsWith('```')) {
+        cleanResponse = cleanResponse.slice(3, -3).trim();
+      }
+      
+      extractedData = JSON.parse(cleanResponse);
+      console.log('✅ Successfully parsed extraction response:', extractedData);
     } catch (parseError) {
       console.error('❌ Failed to parse extraction response as JSON:', parseError);
-      // Fallback to storing raw text
+      // Fallback to storing raw text with generic type
       extractedData = {
-        lab_report_type: userSelectedType || 'other_lab_tests',
+        lab_report_type: 'Other Lab Tests',
+        isExistingType: false,
+        reasoning: 'Failed to parse AI response',
+        confidence: 0.1,
         extracted_text: response,
         test_results: [],
         test_date: null,
@@ -784,7 +901,18 @@ Extract ALL visible text and be extremely thorough.
     }
 
     // Use user-selected type if provided, otherwise use AI-detected type
-    const finalLabReportType = userSelectedType || extractedData.lab_report_type || 'other_lab_tests';
+    const finalLabReportType = userSelectedType || extractedData.lab_report_type || 'Other Lab Tests';
+    console.log('🎯 Final lab report type determined:', finalLabReportType);
+    console.log('🔍 Raw AI detected type:', extractedData.lab_report_type);
+    console.log('👤 User selected type:', userSelectedType);
+    console.log('🤖 AI reasoning:', extractedData.reasoning);
+    console.log('📊 AI confidence:', extractedData.confidence);
+    console.log('🔄 Is existing type:', extractedData.isExistingType);
+    
+    // Save new lab report type to user's personalized list with frequency tracking
+    console.log('💾 Saving lab report type to user settings...');
+    await saveLabReportTypeForUser(userId, finalLabReportType);
+    console.log('✅ Lab report type saved to user settings');
 
     // Store in Firestore
     const db = admin.firestore();
@@ -804,14 +932,34 @@ Extract ALL visible text and be extremely thorough.
       patientInfo: extractedData.patient_info || {},
       labInfo: extractedData.lab_info || {},
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      extractionMethod: 'gemini_ocr',
-      userSelectedType: userSelectedType ? true : false
+      extractionMethod: 'gemini_ocr_dynamic',
+      userSelectedType: userSelectedType ? true : false,
+      aiClassification: {
+        originalType: extractedData.lab_report_type,
+        isExistingType: extractedData.isExistingType,
+        reasoning: extractedData.reasoning,
+        confidence: extractedData.confidence,
+        similarToExisting: extractedData.similarToExisting
+      }
     };
 
     await labReportContentRef.set(labReportData);
     
     console.log(`✅ Lab report content extracted and stored: ${labReportContentRef.id}`);
-    return labReportContentRef.id;
+    
+    // Return the lab report details including the type
+    return {
+      id: labReportContentRef.id,
+      labReportType: finalLabReportType,
+      extractedText: extractedData.extracted_text || '',
+      testResults: extractedData.test_results || [],
+      testDate: extractedData.test_date || null,
+      classification: {
+        isExistingType: extractedData.isExistingType,
+        confidence: extractedData.confidence,
+        reasoning: extractedData.reasoning
+      }
+    };
 
   } catch (error) {
     console.error('❌ Error extracting lab report content:', error);
@@ -826,6 +974,14 @@ async function storeBasicLabReportInfo(userId, fileName, storagePath) {
   console.log(`📄 Storing basic lab report info for: ${fileName}`);
   
   try {
+    // Try to classify by filename to determine a reasonable default type
+    const fallbackClassification = intelligentClassifyByFilename(fileName);
+    const defaultLabReportType = fallbackClassification.category === 'lab_reports' ? 
+      'other_lab_tests' : 'other_lab_tests';
+
+    // Save the lab report type to user's personalized list
+    await saveLabReportTypeForUser(userId, defaultLabReportType);
+
     const db = admin.firestore();
     const labReportContentRef = db
       .collection('users')
@@ -836,7 +992,7 @@ async function storeBasicLabReportInfo(userId, fileName, storagePath) {
     const basicLabReportData = {
       fileName: fileName,
       storagePath: storagePath,
-      labReportType: 'other_lab_tests', // Default type when can't analyze
+      labReportType: defaultLabReportType,
       extractedText: 'Content extraction requires API key configuration',
       testResults: [],
       testDate: null,
@@ -849,7 +1005,11 @@ async function storeBasicLabReportInfo(userId, fileName, storagePath) {
     await labReportContentRef.set(basicLabReportData);
     
     console.log(`✅ Basic lab report info stored: ${labReportContentRef.id}`);
-    return labReportContentRef.id;
+    
+    return {
+      id: labReportContentRef.id,
+      labReportType: defaultLabReportType
+    };
 
   } catch (error) {
     console.error('❌ Error storing basic lab report info:', error);
@@ -864,6 +1024,9 @@ async function storeBasicLabReportInfoWithType(userId, fileName, storagePath, se
   console.log(`📄 Storing basic lab report info with type ${selectedType} for: ${fileName}`);
   
   try {
+    // Save the user-selected lab report type to user's personalized list
+    await saveLabReportTypeForUser(userId, selectedType);
+
     const db = admin.firestore();
     const labReportContentRef = db
       .collection('users')
@@ -888,7 +1051,11 @@ async function storeBasicLabReportInfoWithType(userId, fileName, storagePath, se
     await labReportContentRef.set(basicLabReportData);
     
     console.log(`✅ Basic lab report info with type stored: ${labReportContentRef.id}`);
-    return labReportContentRef.id;
+    
+    return {
+      id: labReportContentRef.id,
+      labReportType: selectedType
+    };
 
   } catch (error) {
     console.error('❌ Error storing basic lab report info with type:', error);
@@ -904,6 +1071,9 @@ function intelligentClassifyByFilename(fileName) {
   
   const nameLower = fileName.toLowerCase();
   const fileExtension = fileName.split('.').pop().toLowerCase();
+  
+  // Check if filename is meaningless (random characters, generic names)
+  const isMeaninglessFilename = checkIfFilenameMeaningless(nameLower);
   
   // Enhanced filename analysis with comprehensive medical keywords
   const medicalKeywords = {
@@ -989,21 +1159,29 @@ function intelligentClassifyByFilename(fileName) {
   // Calculate confidence based on keyword matches and file type
   let confidence = Math.min(0.8, (maxScore * 0.12) + extensionConfidenceBoost);
   
-  // Ensure reasonable confidence for all medical files
-  if (confidence < 0.25) {
+  // If filename is meaningless, drastically reduce confidence to trigger content analysis
+  if (isMeaninglessFilename) {
+    confidence = Math.min(confidence, 0.3);
+    console.log(`⚠️ Meaningless filename detected: ${fileName} - reducing confidence to trigger content analysis`);
+  }
+  
+  // Ensure reasonable confidence for files with meaningful names
+  if (confidence < 0.25 && !isMeaninglessFilename) {
     confidence = 0.25;
   }
   
   // Create detailed reasoning
   let reasoning = '';
-  if (maxScore > 0) {
+  if (maxScore > 0 && !isMeaninglessFilename) {
     reasoning = `Intelligent analysis: Found ${maxScore} medical keywords suggesting ${bestCategory}.`;
+  } else if (isMeaninglessFilename) {
+    reasoning = `Meaningless filename detected - content analysis required for accurate classification.`;
   } else {
     reasoning = `Smart fallback: No clear keywords found, classified as ${bestCategory} based on file type patterns.`;
   }
   reasoning += ` ${extensionHint}`;
   
-  console.log(`📊 Classification result: ${bestCategory} (confidence: ${confidence.toFixed(2)}, score: ${maxScore})`);
+  console.log(`📊 Classification result: ${bestCategory} (confidence: ${confidence.toFixed(2)}, score: ${maxScore}, meaningless: ${isMeaninglessFilename})`);
   
   return {
     category: bestCategory,
@@ -1011,6 +1189,71 @@ function intelligentClassifyByFilename(fileName) {
     suggestedSubfolder: getDefaultSubfolder(bestCategory),
     reasoning: reasoning
   };
+}
+
+/**
+ * Check if filename appears to be meaningless (random characters, generic names)
+ */
+function checkIfFilenameMeaningless(fileName) {
+  // Remove file extension for analysis
+  const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+  
+  // Common meaningless patterns
+  const meaninglessPatterns = [
+    // Random characters/numbers
+    /^[a-f0-9]{8,}$/i,           // Long hex strings
+    /^[0-9]{8,}$/,               // Long number strings
+    /^img_[0-9]+$/i,             // IMG_12345
+    /^image[0-9]*$/i,            // image, image1, image123
+    /^photo[0-9]*$/i,            // photo, photo1, photo123
+    /^pic[0-9]*$/i,              // pic, pic1, pic123
+    /^screenshot[0-9]*$/i,       // screenshot, screenshot1
+    /^scan[0-9]*$/i,             // scan, scan1, scan123
+    /^document[0-9]*$/i,         // document, document1
+    /^file[0-9]*$/i,             // file, file1, file123
+    /^[0-9]+-[0-9]+-[0-9]+/,     // Date-like patterns: 2023-12-25
+    /^[0-9]{4}_[0-9]{2}_[0-9]{2}/, // Date patterns: 2023_12_25
+    /^whatsapp/i,                // WhatsApp image names
+    /^received_/i,               // received_123456
+    /^tmp/i,                     // temporary files
+    /^temp/i,                    // temporary files
+    /^cache/i,                   // cache files
+    /^[a-z]{1,3}[0-9]+$/i,       // Short prefix + numbers: abc123
+  ];
+  
+  // Generic medical scanner names
+  const genericScannerNames = [
+    'untitled', 'new', 'copy', 'duplicate', 'backup',
+    'final', 'version', 'draft', 'test', 'sample'
+  ];
+  
+  // Check against patterns
+  for (const pattern of meaninglessPatterns) {
+    if (pattern.test(nameWithoutExt)) {
+      return true;
+    }
+  }
+  
+  // Check against generic names
+  for (const generic of genericScannerNames) {
+    if (nameWithoutExt.toLowerCase().includes(generic)) {
+      return true;
+    }
+  }
+  
+  // Check if filename is very short and likely meaningless
+  if (nameWithoutExt.length <= 3) {
+    return true;
+  }
+  
+  // Check if filename has high ratio of numbers to letters (likely meaningless)
+  const numbers = (nameWithoutExt.match(/[0-9]/g) || []).length;
+  const letters = (nameWithoutExt.match(/[a-zA-Z]/g) || []).length;
+  if (numbers > 0 && numbers / (numbers + letters) > 0.7) {
+    return true;
+  }
+  
+  return false;
 }
 
 /**
@@ -1419,3 +1662,408 @@ exports.updateLabReportType = onCall(
       }
     }
 );
+
+/**
+ * Perform content-based classification when filename is meaningless
+ */
+async function performContentBasedClassification(base64Data, mimeType, model) {
+  console.log('🔍 Performing content-based classification...');
+  
+  try {
+    const contentAnalysisPrompt = `
+Analyze this medical document image and determine what type of medical document it is by examining the CONTENT, not the filename.
+
+Look for these specific indicators:
+
+LAB REPORTS:
+- Test names and numerical values
+- Reference ranges (Normal: X-Y)
+- Laboratory letterhead or logos
+- Terms like "CBC", "Blood Chemistry", "Glucose", "Cholesterol", etc.
+- Patient ID numbers
+- Test dates and collection times
+- Units of measurement (mg/dL, mmol/L, etc.)
+
+PRESCRIPTIONS:
+- Medication names
+- Dosage instructions (mg, ml, tablets)
+- Frequency (daily, BID, TID, etc.)
+- Pharmacy information
+- Prescription numbers
+- Doctor signatures or stamps
+- "Rx" symbols
+
+DOCTOR NOTES:
+- Clinical observations
+- Diagnosis codes (ICD-10)
+- Vital signs (BP, HR, Temperature)
+- Physical examination findings
+- Treatment plans
+- Doctor letterhead
+- Patient consultation notes
+
+OTHER:
+- Insurance documents
+- Appointment cards
+- Medical bills
+- Administrative forms
+
+Analyze the VISIBLE TEXT AND LAYOUT to determine the document type.
+
+Return ONLY this JSON structure:
+{
+  "category": "lab_reports|prescriptions|doctor_notes|other",
+  "confidence": 0.0-1.0,
+  "reasoning": "specific content indicators found",
+  "suggestedSubfolder": "descriptive name"
+}
+
+Focus on the CONTENT and LAYOUT, not filename.
+`;
+
+    const result = await model.generateContent([
+      contentAnalysisPrompt,
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType: mimeType
+        }
+      }
+    ]);
+
+    const response = result.response.text();
+    console.log('🤖 Content-based classification response:', response);
+
+    try {
+      // Strip markdown code block formatting if present
+      let cleanResponse = response.trim();
+      if (cleanResponse.startsWith('```json') && cleanResponse.endsWith('```')) {
+        cleanResponse = cleanResponse.slice(7, -3).trim();
+      } else if (cleanResponse.startsWith('```') && cleanResponse.endsWith('```')) {
+        cleanResponse = cleanResponse.slice(3, -3).trim();
+      }
+      
+      const classification = JSON.parse(cleanResponse);
+      
+      if (classification.category && typeof classification.confidence === 'number') {
+        return {
+          category: classification.category,
+          confidence: Math.max(0.6, Math.min(1, classification.confidence)), // Higher confidence for content analysis
+          suggestedSubfolder: classification.suggestedSubfolder || getDefaultSubfolder(classification.category),
+          reasoning: `Content analysis: ${classification.reasoning || 'Document content analyzed'}`
+        };
+      }
+    } catch (parseError) {
+      console.error('❌ Failed to parse content classification response:', parseError);
+    }
+
+    // If parsing fails, return other with low confidence
+    return {
+      category: 'other',
+      confidence: 0.3,
+      suggestedSubfolder: 'general',
+      reasoning: 'Content analysis failed to parse classification'
+    };
+
+  } catch (error) {
+    console.error('❌ Error in content-based classification:', error);
+    return {
+      category: 'other',
+      confidence: 0.2,
+      suggestedSubfolder: 'general',
+      reasoning: 'Content analysis encountered an error'
+    };
+  }
+}
+
+async function getLabReportTypesForUser(userId) {
+  console.log(`📚 Getting lab report types for user: ${userId}`);
+  const db = admin.firestore();
+  
+  try {
+    // Try new dynamic structure first
+    const dynamicTypesRef = db.collection('users').doc(userId)
+      .collection('lab_classifications').doc('discovered_types');
+    const dynamicDoc = await dynamicTypesRef.get();
+    
+    if (dynamicDoc.exists) {
+      const data = dynamicDoc.data();
+      const types = data.types || {};
+      console.log(`✅ Found ${Object.keys(types).length} dynamic lab types`);
+      
+      // Return array of type names for backward compatibility
+      return Object.values(types).map(type => type.displayName || type.name);
+    }
+    
+    // Fall back to old structure for migration
+    const oldTypesRef = db.collection('users').doc(userId)
+      .collection('settings').doc('lab_report_types');
+    const oldDoc = await oldTypesRef.get();
+    
+    if (oldDoc.exists) {
+      const data = oldDoc.data();
+      const oldTypes = data.types || [];
+      console.log(`📦 Found ${oldTypes.length} old format types, migrating...`);
+      
+      // Migrate old types to new structure
+      await migrateOldTypesToNewStructure(userId, oldTypes);
+      return oldTypes;
+    }
+    
+    // No existing types - start fresh (no predefined types)
+    console.log(`🆕 No existing lab types found for user ${userId}`);
+    return [];
+    
+  } catch (error) {
+    console.error('❌ Error getting lab report types:', error);
+    return [];
+  }
+}
+
+async function saveLabReportTypeForUser(userId, type) {
+  console.log(`💾 Saving lab report type "${type}" for user ${userId}`);
+  const db = admin.firestore();
+  const typesRef = db.collection('users').doc(userId)
+    .collection('lab_classifications').doc('discovered_types');
+  
+  try {
+    const doc = await typesRef.get();
+    const currentTime = admin.firestore.FieldValue.serverTimestamp();
+    
+    if (!doc.exists) {
+      // Create new document with first lab type
+      console.log('📝 Creating new lab classifications document');
+      const newTypeId = generateTypeId(type);
+      
+      await typesRef.set({
+        types: {
+          [newTypeId]: {
+            id: newTypeId,
+            displayName: type,
+            name: type, // For backward compatibility
+            createdAt: currentTime,
+            firstSeen: currentTime,
+            lastSeen: currentTime,
+            frequency: 1,
+            relatedTypes: [],
+            sampleTests: [],
+            examples: [],
+            category: inferCategoryFromType(type)
+          }
+        },
+        lastUpdated: currentTime,
+        totalTypes: 1
+      });
+      console.log(`✅ Created new type: ${type} with ID: ${newTypeId}`);
+      
+    } else {
+      // Update existing document
+      const data = doc.data();
+      const types = data.types || {};
+      
+      // Check if type already exists (case-insensitive)
+      const existingTypeId = findExistingTypeId(types, type);
+      
+      if (existingTypeId) {
+        // Update existing type frequency
+        console.log(`📈 Updating frequency for existing type: ${type}`);
+        await typesRef.update({
+          [`types.${existingTypeId}.frequency`]: admin.firestore.FieldValue.increment(1),
+          [`types.${existingTypeId}.lastSeen`]: currentTime,
+          lastUpdated: currentTime
+        });
+        console.log(`✅ Updated frequency for existing type: ${type}`);
+        
+      } else {
+        // Add new type
+        console.log(`➕ Adding new type to existing collection: ${type}`);
+        const newTypeId = generateTypeId(type);
+        
+        await typesRef.update({
+          [`types.${newTypeId}`]: {
+            id: newTypeId,
+            displayName: type,
+            name: type,
+            createdAt: currentTime,
+            firstSeen: currentTime,
+            lastSeen: currentTime,
+            frequency: 1,
+            relatedTypes: [],
+            sampleTests: [],
+            examples: [],
+            category: inferCategoryFromType(type)
+          },
+          lastUpdated: currentTime,
+          totalTypes: admin.firestore.FieldValue.increment(1)
+        });
+        console.log(`✅ Added new type: ${type} with ID: ${newTypeId}`);
+      }
+    }
+    
+  } catch (error) {
+    console.error('❌ Error saving lab report type:', error);
+    throw error;
+  }
+}
+
+/**
+ * Helper functions for dynamic lab type management
+ */
+
+// Generate unique ID for lab report type
+function generateTypeId(typeName) {
+  return typeName
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, '_')
+    .substring(0, 50) + '_' + Date.now().toString(36);
+}
+
+// Find existing type ID by name (case-insensitive)
+function findExistingTypeId(types, typeName) {
+  const searchName = typeName.toLowerCase().trim();
+  
+  for (const [typeId, typeData] of Object.entries(types)) {
+    const existingName = (typeData.displayName || typeData.name || '').toLowerCase().trim();
+    if (existingName === searchName) {
+      return typeId;
+    }
+  }
+  
+  return null;
+}
+
+// Infer category from type name for organization
+function inferCategoryFromType(typeName) {
+  const name = typeName.toLowerCase();
+  
+  if (name.includes('blood') && name.includes('count')) return 'hematology';
+  if (name.includes('cholesterol') || name.includes('lipid')) return 'cardiovascular';
+  if (name.includes('liver') || name.includes('hepatic')) return 'hepatology';
+  if (name.includes('kidney') || name.includes('renal')) return 'nephrology';
+  if (name.includes('thyroid') || name.includes('hormone')) return 'endocrinology';
+  if (name.includes('cardiac') || name.includes('heart')) return 'cardiovascular';
+  if (name.includes('vitamin') || name.includes('mineral')) return 'nutrition';
+  if (name.includes('inflammatory') || name.includes('crp') || name.includes('esr')) return 'immunology';
+  if (name.includes('glucose') || name.includes('diabetes') || name.includes('sugar')) return 'endocrinology';
+  if (name.includes('iron') || name.includes('ferritin')) return 'hematology';
+  if (name.includes('bone') || name.includes('calcium')) return 'orthopedics';
+  if (name.includes('cancer') || name.includes('tumor') || name.includes('marker')) return 'oncology';
+  if (name.includes('infectious') || name.includes('culture')) return 'microbiology';
+  if (name.includes('autoimmune') || name.includes('antibody')) return 'immunology';
+  if (name.includes('coagulation') || name.includes('clotting') || name.includes('pt') || name.includes('inr')) return 'hematology';
+  if (name.includes('electrolyte') || name.includes('sodium') || name.includes('potassium')) return 'chemistry';
+  if (name.includes('protein') || name.includes('albumin')) return 'chemistry';
+  
+  return 'general';
+}
+
+// Migrate old format types to new structure
+async function migrateOldTypesToNewStructure(userId, oldTypes) {
+  console.log(`🔄 Migrating ${oldTypes.length} old types to new structure for user ${userId}`);
+  
+  const db = admin.firestore();
+  const typesRef = db.collection('users').doc(userId)
+    .collection('lab_classifications').doc('discovered_types');
+  
+  const currentTime = admin.firestore.FieldValue.serverTimestamp();
+  const newTypes = {};
+  
+  oldTypes.forEach(typeName => {
+    const typeId = generateTypeId(typeName);
+    newTypes[typeId] = {
+      id: typeId,
+      displayName: convertOldTypeToDisplayName(typeName),
+      name: typeName, // Keep original for compatibility
+      createdAt: currentTime,
+      firstSeen: currentTime,
+      lastSeen: currentTime,
+      frequency: 1, // Default frequency
+      relatedTypes: [],
+      sampleTests: [],
+      examples: [],
+      category: inferCategoryFromType(typeName),
+      migratedFrom: 'old_format'
+    };
+  });
+  
+  await typesRef.set({
+    types: newTypes,
+    lastUpdated: currentTime,
+    totalTypes: oldTypes.length,
+    migrationDate: currentTime
+  });
+  
+  console.log(`✅ Successfully migrated ${oldTypes.length} types to new structure`);
+}
+
+// Convert old snake_case types to display names
+function convertOldTypeToDisplayName(oldType) {
+  const conversions = {
+    'blood_sugar': 'Blood Sugar',
+    'cholesterol_lipid_panel': 'Cholesterol/Lipid Panel',
+    'liver_function_tests': 'Liver Function Tests',
+    'kidney_function_tests': 'Kidney Function Tests',
+    'thyroid_function_tests': 'Thyroid Function Tests',
+    'complete_blood_count': 'Complete Blood Count',
+    'cardiac_markers': 'Cardiac Markers',
+    'vitamin_levels': 'Vitamin Levels',
+    'inflammatory_markers': 'Inflammatory Markers',
+    'hormone_tests': 'Hormone Tests',
+    'diabetes_markers': 'Diabetes Markers',
+    'iron_studies': 'Iron Studies',
+    'bone_markers': 'Bone Markers',
+    'cancer_markers': 'Cancer Markers',
+    'infectious_disease_tests': 'Infectious Disease Tests',
+    'autoimmune_markers': 'Autoimmune Markers',
+    'coagulation_studies': 'Coagulation Studies',
+    'electrolyte_panel': 'Electrolyte Panel',
+    'protein_studies': 'Protein Studies',
+    'other_lab_tests': 'Other Lab Tests'
+  };
+  
+  return conversions[oldType] || oldType
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, l => l.toUpperCase());
+}
+
+/**
+ * Get user's lab types with detailed statistics for AI context
+ */
+async function getUserLabTypesWithStats(userId) {
+  console.log(`📊 Getting lab types with statistics for user: ${userId}`);
+  const db = admin.firestore();
+  
+  try {
+    const typesRef = db.collection('users').doc(userId)
+      .collection('lab_classifications').doc('discovered_types');
+    const doc = await typesRef.get();
+    
+    if (!doc.exists) {
+      console.log(`📭 No lab types found for user ${userId}`);
+      return [];
+    }
+    
+    const data = doc.data();
+    const types = data.types || {};
+    
+    // Convert to array with statistics, sorted by frequency
+    const typesWithStats = Object.values(types)
+      .map(type => ({
+        name: type.displayName || type.name,
+        frequency: type.frequency || 1,
+        lastSeen: type.lastSeen,
+        category: type.category || 'general',
+        sampleTests: type.sampleTests || [],
+        examples: type.examples ? type.examples.slice(0, 2) : [] // Recent examples
+      }))
+      .sort((a, b) => b.frequency - a.frequency); // Sort by frequency descending
+    
+    console.log(`📊 Retrieved ${typesWithStats.length} lab types with statistics`);
+    return typesWithStats;
+    
+  } catch (error) {
+    console.error('❌ Error getting lab types with stats:', error);
+    return [];
+  }
+}

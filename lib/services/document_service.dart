@@ -3,7 +3,6 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
-import '../widgets/lab_report_type_dialog.dart';
 
 class DocumentService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -20,7 +19,7 @@ class DocumentService {
 
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'webp'],
         allowMultiple: false,
         withData: true, // Always get bytes for web compatibility
       );
@@ -93,46 +92,8 @@ class DocumentService {
           subfolder = classificationResult['suggestedSubfolder'] ?? 'general';
           confidence = (classificationResult['confidence'] ?? 0.0).toDouble();
           reasoning = classificationResult['reasoning'] ?? 'AI classification';
+          labReportType = classificationResult['labReportType'];
 
-          // If classified as lab report, prompt user for specific type
-          if (category == 'lab_reports') {
-            // Close the upload loading dialog temporarily
-            Navigator.pop(context);
-
-            // Show lab report type selection dialog
-            final selectedType = await showDialog<String>(
-              context: context,
-              barrierDismissible: false,
-              builder: (context) => LabReportTypeSelectionDialog(
-                fileName: fileName,
-                suggestedType: classificationResult['suggestedSubfolder'],
-              ),
-            );
-
-            if (selectedType == null) {
-              // User cancelled - delete the uploaded file
-              await ref.delete();
-              return;
-            }
-
-            labReportType = selectedType;
-
-            // Show loading again for saving metadata
-            showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (context) =>
-                  const Center(child: CircularProgressIndicator()),
-            );
-
-            // Call Cloud Function to update lab report content with selected type
-            try {
-              await _updateLabReportType(fileName, ref.fullPath, selectedType);
-            } catch (e) {
-              print('Error updating lab report type: $e');
-              // Continue with document saving even if lab report update fails
-            }
-          }
         } catch (e) {
           print('Classification error: $e');
         }
