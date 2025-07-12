@@ -799,9 +799,21 @@ Focus on extracting:
 ${userSelectedType ? `
 The user has indicated this is a "${userSelectedType}" lab report. Please classify accordingly.
 ` : `
-Based on the tests present, classify this lab report type as one of:
+Based on the tests present, classify this lab report type as one of these EXACT types:
 ${userLabReportTypes.map(type => `- ${type}`).join('\n')}
 - other_lab_tests (if it does not fit any of the above)
+
+IMPORTANT: Use these exact mappings for common lab reports:
+- Complete Blood Count, CBC, Full Blood Count → complete_blood_count
+- Lipid Panel, Cholesterol Test → cholesterol_lipid_panel  
+- Liver Function Test, LFT → liver_function_tests
+- Kidney Function Test, RFT → kidney_function_tests
+- Thyroid Function Test, TFT → thyroid_function_tests
+- Blood Sugar, Glucose Test → blood_sugar
+- Cardiac Markers, Heart Enzymes → cardiac_markers
+- Coagulation Studies, Thrombophilia Profile → coagulation_studies
+- Vitamin Tests → vitamin_levels
+- Inflammatory Markers, ESR, CRP → inflammatory_markers
 `}
 
 Return a JSON object with this structure:
@@ -872,9 +884,13 @@ Extract ALL visible text and be extremely thorough.
     // Use user-selected type if provided, otherwise use AI-detected type
     const finalLabReportType = userSelectedType || extractedData.lab_report_type || 'other_lab_tests';
     console.log('🎯 Final lab report type determined:', finalLabReportType);
+    console.log('🔍 Raw AI detected type:', extractedData.lab_report_type);
+    console.log('👤 User selected type:', userSelectedType);
     
     // Save new lab report type to user's personalized list if it's a new type
+    console.log('💾 Saving lab report type to user settings...');
     await saveLabReportTypeForUser(userId, finalLabReportType);
+    console.log('✅ Lab report type saved to user settings');
 
     // Store in Firestore
     const db = admin.firestore();
@@ -1758,16 +1774,24 @@ async function getLabReportTypesForUser(userId) {
 }
 
 async function saveLabReportTypeForUser(userId, type) {
+  console.log(`💾 Saving lab report type "${type}" for user ${userId}`);
   const db = admin.firestore();
   const docRef = db.collection('users').doc(userId).collection('settings').doc('lab_report_types');
   const doc = await docRef.get();
   if (!doc.exists) {
+    console.log('📝 Creating new lab report types document');
     await docRef.set({ types: [type] });
+    console.log('✅ Created new document with type:', type);
   } else {
     const data = doc.data();
     const types = data.types || [];
+    console.log('📄 Existing types:', types);
     if (!types.includes(type)) {
+      console.log('➕ Adding new type to existing list');
       await docRef.update({ types: admin.firestore.FieldValue.arrayUnion(type) });
+      console.log('✅ Added new type:', type);
+    } else {
+      console.log('ℹ️ Type already exists in user settings');
     }
   }
 }
