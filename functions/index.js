@@ -781,13 +781,31 @@ async function extractLabReportContent(userId, fileName, storagePath, base64Data
   console.log(`🔬 Extracting lab report content for: ${fileName}`);
   
   try {
-    const userLabReportTypes = await getLabReportTypesForUser(userId);
-    console.log('👤 User lab report types:', userLabReportTypes);
+    // Get user's existing lab types with statistics for AI context
+    const userLabTypesWithStats = await getUserLabTypesWithStats(userId);
+    console.log('👤 User lab report types with stats:', userLabTypesWithStats);
     
     const extractionPrompt = `
-Analyze this lab report image and extract ALL text content with extreme precision.
-Focus on extracting:
+Analyze this lab report image and classify it appropriately with historical context.
 
+PATIENT'S EXISTING LAB REPORT TYPES:
+${userLabTypesWithStats.length > 0 ? 
+  userLabTypesWithStats.map(type => `- ${type.name} (seen ${type.frequency} times, category: ${type.category})`).join('\n') :
+  '(No existing lab report types found - this will be the first one)'
+}
+
+CLASSIFICATION INSTRUCTIONS:
+1. **First Priority**: If this lab report matches or is very similar to any existing type above, use that existing type name EXACTLY
+2. **Second Priority**: If this is clearly a variation of an existing type, use the existing name (e.g., "CBC with Auto Diff" should match "Complete Blood Count")
+3. **Last Resort**: Only create a new type if this lab report is genuinely different from all existing types
+
+When analyzing, consider:
+- Primary tests performed
+- Medical panel or category  
+- Clinical purpose/focus area
+- Similarity to existing patient types
+
+Also extract ALL text content with extreme precision:
 1. **Test Names**: All laboratory tests performed
 2. **Test Values**: Exact numerical results with units
 3. **Reference Ranges**: Normal ranges for each test
@@ -798,32 +816,20 @@ Focus on extracting:
 
 ${userSelectedType ? `
 The user has indicated this is a "${userSelectedType}" lab report. Please classify accordingly.
-` : `
-Based on the tests present, classify this lab report type as one of these EXACT types:
-${userLabReportTypes.map(type => `- ${type}`).join('\n')}
-- other_lab_tests (if it does not fit any of the above)
-
-IMPORTANT: Use these exact mappings for common lab reports:
-- Complete Blood Count, CBC, Full Blood Count → complete_blood_count
-- Lipid Panel, Cholesterol Test → cholesterol_lipid_panel  
-- Liver Function Test, LFT → liver_function_tests
-- Kidney Function Test, RFT → kidney_function_tests
-- Thyroid Function Test, TFT → thyroid_function_tests
-- Blood Sugar, Glucose Test → blood_sugar
-- Cardiac Markers, Heart Enzymes → cardiac_markers
-- Coagulation Studies, Thrombophilia Profile → coagulation_studies
-- Vitamin Tests → vitamin_levels
-- Inflammatory Markers, ESR, CRP → inflammatory_markers
-`}
+` : ''}
 
 Return a JSON object with this structure:
 {
-  "lab_report_type": "one of the types listed above",
+  "lab_report_type": "exact name from existing types OR new type name",
+  "isExistingType": true/false,
+  "reasoning": "explanation of why this classification was chosen",
+  "similarToExisting": "name of similar existing type if applicable",
+  "confidence": 0.0-1.0,
   "extracted_text": "complete text content extracted from the image",
   "test_results": [
     {
       "test_name": "test name",
-      "value": "result value",
+      "value": "result value", 
       "unit": "unit of measurement",
       "reference_range": "normal range",
       "status": "normal/high/low"
@@ -839,6 +845,16 @@ Return a JSON object with this structure:
     "ordering_physician": "doctor name if visible"
   }
 }
+
+Examples of good NEW classifications (only if no existing match):
+- "Complete Blood Count with Differential"
+- "Comprehensive Metabolic Panel"
+- "Thyroid Function Panel"
+- "Cardiac Enzyme Panel"
+- "Lipid Profile"
+- "Liver Function Tests"
+- "Hemoglobin A1c"
+- "Vitamin D Level"
 
 Extract ALL visible text and be extremely thorough.
 `;
@@ -870,9 +886,12 @@ Extract ALL visible text and be extremely thorough.
       console.log('✅ Successfully parsed extraction response:', extractedData);
     } catch (parseError) {
       console.error('❌ Failed to parse extraction response as JSON:', parseError);
-      // Fallback to storing raw text
+      // Fallback to storing raw text with generic type
       extractedData = {
-        lab_report_type: 'other_lab_tests',
+        lab_report_type: 'Other Lab Tests',
+        isExistingType: false,
+        reasoning: 'Failed to parse AI response',
+        confidence: 0.1,
         extracted_text: response,
         test_results: [],
         test_date: null,
@@ -882,12 +901,15 @@ Extract ALL visible text and be extremely thorough.
     }
 
     // Use user-selected type if provided, otherwise use AI-detected type
-    const finalLabReportType = userSelectedType || extractedData.lab_report_type || 'other_lab_tests';
+    const finalLabReportType = userSelectedType || extractedData.lab_report_type || 'Other Lab Tests';
     console.log('🎯 Final lab report type determined:', finalLabReportType);
     console.log('🔍 Raw AI detected type:', extractedData.lab_report_type);
     console.log('👤 User selected type:', userSelectedType);
+    console.log('🤖 AI reasoning:', extractedData.reasoning);
+    console.log('📊 AI confidence:', extractedData.confidence);
+    console.log('🔄 Is existing type:', extractedData.isExistingType);
     
-    // Save new lab report type to user's personalized list if it's a new type
+    // Save new lab report type to user's personalized list with frequency tracking
     console.log('💾 Saving lab report type to user settings...');
     await saveLabReportTypeForUser(userId, finalLabReportType);
     console.log('✅ Lab report type saved to user settings');
@@ -910,8 +932,15 @@ Extract ALL visible text and be extremely thorough.
       patientInfo: extractedData.patient_info || {},
       labInfo: extractedData.lab_info || {},
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      extractionMethod: 'gemini_ocr',
-      userSelectedType: userSelectedType ? true : false
+      extractionMethod: 'gemini_ocr_dynamic',
+      userSelectedType: userSelectedType ? true : false,
+      aiClassification: {
+        originalType: extractedData.lab_report_type,
+        isExistingType: extractedData.isExistingType,
+        reasoning: extractedData.reasoning,
+        confidence: extractedData.confidence,
+        similarToExisting: extractedData.similarToExisting
+      }
     };
 
     await labReportContentRef.set(labReportData);
@@ -924,7 +953,12 @@ Extract ALL visible text and be extremely thorough.
       labReportType: finalLabReportType,
       extractedText: extractedData.extracted_text || '',
       testResults: extractedData.test_results || [],
-      testDate: extractedData.test_date || null
+      testDate: extractedData.test_date || null,
+      classification: {
+        isExistingType: extractedData.isExistingType,
+        confidence: extractedData.confidence,
+        reasoning: extractedData.reasoning
+      }
     };
 
   } catch (error) {
@@ -1743,55 +1777,293 @@ Focus on the CONTENT and LAYOUT, not filename.
 }
 
 async function getLabReportTypesForUser(userId) {
+  console.log(`📚 Getting lab report types for user: ${userId}`);
   const db = admin.firestore();
-  const doc = await db.collection('users').doc(userId).collection('settings').doc('lab_report_types').get();
-  if (!doc.exists) {
-    // Default comprehensive list of lab report types
-    return [
-      'blood_sugar',
-      'cholesterol_lipid_panel',
-      'liver_function_tests',
-      'kidney_function_tests',
-      'thyroid_function_tests',
-      'complete_blood_count',
-      'cardiac_markers',
-      'vitamin_levels',
-      'inflammatory_markers',
-      'hormone_tests',
-      'diabetes_markers',
-      'iron_studies',
-      'bone_markers',
-      'cancer_markers',
-      'infectious_disease_tests',
-      'autoimmune_markers',
-      'coagulation_studies',
-      'electrolyte_panel',
-      'protein_studies'
-    ];
+  
+  try {
+    // Try new dynamic structure first
+    const dynamicTypesRef = db.collection('users').doc(userId)
+      .collection('lab_classifications').doc('discovered_types');
+    const dynamicDoc = await dynamicTypesRef.get();
+    
+    if (dynamicDoc.exists) {
+      const data = dynamicDoc.data();
+      const types = data.types || {};
+      console.log(`✅ Found ${Object.keys(types).length} dynamic lab types`);
+      
+      // Return array of type names for backward compatibility
+      return Object.values(types).map(type => type.displayName || type.name);
+    }
+    
+    // Fall back to old structure for migration
+    const oldTypesRef = db.collection('users').doc(userId)
+      .collection('settings').doc('lab_report_types');
+    const oldDoc = await oldTypesRef.get();
+    
+    if (oldDoc.exists) {
+      const data = oldDoc.data();
+      const oldTypes = data.types || [];
+      console.log(`📦 Found ${oldTypes.length} old format types, migrating...`);
+      
+      // Migrate old types to new structure
+      await migrateOldTypesToNewStructure(userId, oldTypes);
+      return oldTypes;
+    }
+    
+    // No existing types - start fresh (no predefined types)
+    console.log(`🆕 No existing lab types found for user ${userId}`);
+    return [];
+    
+  } catch (error) {
+    console.error('❌ Error getting lab report types:', error);
+    return [];
   }
-  const data = doc.data();
-  return data.types || [];
 }
 
 async function saveLabReportTypeForUser(userId, type) {
   console.log(`💾 Saving lab report type "${type}" for user ${userId}`);
   const db = admin.firestore();
-  const docRef = db.collection('users').doc(userId).collection('settings').doc('lab_report_types');
-  const doc = await docRef.get();
-  if (!doc.exists) {
-    console.log('📝 Creating new lab report types document');
-    await docRef.set({ types: [type] });
-    console.log('✅ Created new document with type:', type);
-  } else {
-    const data = doc.data();
-    const types = data.types || [];
-    console.log('📄 Existing types:', types);
-    if (!types.includes(type)) {
-      console.log('➕ Adding new type to existing list');
-      await docRef.update({ types: admin.firestore.FieldValue.arrayUnion(type) });
-      console.log('✅ Added new type:', type);
+  const typesRef = db.collection('users').doc(userId)
+    .collection('lab_classifications').doc('discovered_types');
+  
+  try {
+    const doc = await typesRef.get();
+    const currentTime = admin.firestore.FieldValue.serverTimestamp();
+    
+    if (!doc.exists) {
+      // Create new document with first lab type
+      console.log('📝 Creating new lab classifications document');
+      const newTypeId = generateTypeId(type);
+      
+      await typesRef.set({
+        types: {
+          [newTypeId]: {
+            id: newTypeId,
+            displayName: type,
+            name: type, // For backward compatibility
+            createdAt: currentTime,
+            firstSeen: currentTime,
+            lastSeen: currentTime,
+            frequency: 1,
+            relatedTypes: [],
+            sampleTests: [],
+            examples: [],
+            category: inferCategoryFromType(type)
+          }
+        },
+        lastUpdated: currentTime,
+        totalTypes: 1
+      });
+      console.log(`✅ Created new type: ${type} with ID: ${newTypeId}`);
+      
     } else {
-      console.log('ℹ️ Type already exists in user settings');
+      // Update existing document
+      const data = doc.data();
+      const types = data.types || {};
+      
+      // Check if type already exists (case-insensitive)
+      const existingTypeId = findExistingTypeId(types, type);
+      
+      if (existingTypeId) {
+        // Update existing type frequency
+        console.log(`📈 Updating frequency for existing type: ${type}`);
+        await typesRef.update({
+          [`types.${existingTypeId}.frequency`]: admin.firestore.FieldValue.increment(1),
+          [`types.${existingTypeId}.lastSeen`]: currentTime,
+          lastUpdated: currentTime
+        });
+        console.log(`✅ Updated frequency for existing type: ${type}`);
+        
+      } else {
+        // Add new type
+        console.log(`➕ Adding new type to existing collection: ${type}`);
+        const newTypeId = generateTypeId(type);
+        
+        await typesRef.update({
+          [`types.${newTypeId}`]: {
+            id: newTypeId,
+            displayName: type,
+            name: type,
+            createdAt: currentTime,
+            firstSeen: currentTime,
+            lastSeen: currentTime,
+            frequency: 1,
+            relatedTypes: [],
+            sampleTests: [],
+            examples: [],
+            category: inferCategoryFromType(type)
+          },
+          lastUpdated: currentTime,
+          totalTypes: admin.firestore.FieldValue.increment(1)
+        });
+        console.log(`✅ Added new type: ${type} with ID: ${newTypeId}`);
+      }
     }
+    
+  } catch (error) {
+    console.error('❌ Error saving lab report type:', error);
+    throw error;
+  }
+}
+
+/**
+ * Helper functions for dynamic lab type management
+ */
+
+// Generate unique ID for lab report type
+function generateTypeId(typeName) {
+  return typeName
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, '_')
+    .substring(0, 50) + '_' + Date.now().toString(36);
+}
+
+// Find existing type ID by name (case-insensitive)
+function findExistingTypeId(types, typeName) {
+  const searchName = typeName.toLowerCase().trim();
+  
+  for (const [typeId, typeData] of Object.entries(types)) {
+    const existingName = (typeData.displayName || typeData.name || '').toLowerCase().trim();
+    if (existingName === searchName) {
+      return typeId;
+    }
+  }
+  
+  return null;
+}
+
+// Infer category from type name for organization
+function inferCategoryFromType(typeName) {
+  const name = typeName.toLowerCase();
+  
+  if (name.includes('blood') && name.includes('count')) return 'hematology';
+  if (name.includes('cholesterol') || name.includes('lipid')) return 'cardiovascular';
+  if (name.includes('liver') || name.includes('hepatic')) return 'hepatology';
+  if (name.includes('kidney') || name.includes('renal')) return 'nephrology';
+  if (name.includes('thyroid') || name.includes('hormone')) return 'endocrinology';
+  if (name.includes('cardiac') || name.includes('heart')) return 'cardiovascular';
+  if (name.includes('vitamin') || name.includes('mineral')) return 'nutrition';
+  if (name.includes('inflammatory') || name.includes('crp') || name.includes('esr')) return 'immunology';
+  if (name.includes('glucose') || name.includes('diabetes') || name.includes('sugar')) return 'endocrinology';
+  if (name.includes('iron') || name.includes('ferritin')) return 'hematology';
+  if (name.includes('bone') || name.includes('calcium')) return 'orthopedics';
+  if (name.includes('cancer') || name.includes('tumor') || name.includes('marker')) return 'oncology';
+  if (name.includes('infectious') || name.includes('culture')) return 'microbiology';
+  if (name.includes('autoimmune') || name.includes('antibody')) return 'immunology';
+  if (name.includes('coagulation') || name.includes('clotting') || name.includes('pt') || name.includes('inr')) return 'hematology';
+  if (name.includes('electrolyte') || name.includes('sodium') || name.includes('potassium')) return 'chemistry';
+  if (name.includes('protein') || name.includes('albumin')) return 'chemistry';
+  
+  return 'general';
+}
+
+// Migrate old format types to new structure
+async function migrateOldTypesToNewStructure(userId, oldTypes) {
+  console.log(`🔄 Migrating ${oldTypes.length} old types to new structure for user ${userId}`);
+  
+  const db = admin.firestore();
+  const typesRef = db.collection('users').doc(userId)
+    .collection('lab_classifications').doc('discovered_types');
+  
+  const currentTime = admin.firestore.FieldValue.serverTimestamp();
+  const newTypes = {};
+  
+  oldTypes.forEach(typeName => {
+    const typeId = generateTypeId(typeName);
+    newTypes[typeId] = {
+      id: typeId,
+      displayName: convertOldTypeToDisplayName(typeName),
+      name: typeName, // Keep original for compatibility
+      createdAt: currentTime,
+      firstSeen: currentTime,
+      lastSeen: currentTime,
+      frequency: 1, // Default frequency
+      relatedTypes: [],
+      sampleTests: [],
+      examples: [],
+      category: inferCategoryFromType(typeName),
+      migratedFrom: 'old_format'
+    };
+  });
+  
+  await typesRef.set({
+    types: newTypes,
+    lastUpdated: currentTime,
+    totalTypes: oldTypes.length,
+    migrationDate: currentTime
+  });
+  
+  console.log(`✅ Successfully migrated ${oldTypes.length} types to new structure`);
+}
+
+// Convert old snake_case types to display names
+function convertOldTypeToDisplayName(oldType) {
+  const conversions = {
+    'blood_sugar': 'Blood Sugar',
+    'cholesterol_lipid_panel': 'Cholesterol/Lipid Panel',
+    'liver_function_tests': 'Liver Function Tests',
+    'kidney_function_tests': 'Kidney Function Tests',
+    'thyroid_function_tests': 'Thyroid Function Tests',
+    'complete_blood_count': 'Complete Blood Count',
+    'cardiac_markers': 'Cardiac Markers',
+    'vitamin_levels': 'Vitamin Levels',
+    'inflammatory_markers': 'Inflammatory Markers',
+    'hormone_tests': 'Hormone Tests',
+    'diabetes_markers': 'Diabetes Markers',
+    'iron_studies': 'Iron Studies',
+    'bone_markers': 'Bone Markers',
+    'cancer_markers': 'Cancer Markers',
+    'infectious_disease_tests': 'Infectious Disease Tests',
+    'autoimmune_markers': 'Autoimmune Markers',
+    'coagulation_studies': 'Coagulation Studies',
+    'electrolyte_panel': 'Electrolyte Panel',
+    'protein_studies': 'Protein Studies',
+    'other_lab_tests': 'Other Lab Tests'
+  };
+  
+  return conversions[oldType] || oldType
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, l => l.toUpperCase());
+}
+
+/**
+ * Get user's lab types with detailed statistics for AI context
+ */
+async function getUserLabTypesWithStats(userId) {
+  console.log(`📊 Getting lab types with statistics for user: ${userId}`);
+  const db = admin.firestore();
+  
+  try {
+    const typesRef = db.collection('users').doc(userId)
+      .collection('lab_classifications').doc('discovered_types');
+    const doc = await typesRef.get();
+    
+    if (!doc.exists) {
+      console.log(`📭 No lab types found for user ${userId}`);
+      return [];
+    }
+    
+    const data = doc.data();
+    const types = data.types || {};
+    
+    // Convert to array with statistics, sorted by frequency
+    const typesWithStats = Object.values(types)
+      .map(type => ({
+        name: type.displayName || type.name,
+        frequency: type.frequency || 1,
+        lastSeen: type.lastSeen,
+        category: type.category || 'general',
+        sampleTests: type.sampleTests || [],
+        examples: type.examples ? type.examples.slice(0, 2) : [] // Recent examples
+      }))
+      .sort((a, b) => b.frequency - a.frequency); // Sort by frequency descending
+    
+    console.log(`📊 Retrieved ${typesWithStats.length} lab types with statistics`);
+    return typesWithStats;
+    
+  } catch (error) {
+    console.error('❌ Error getting lab types with stats:', error);
+    return [];
   }
 }
