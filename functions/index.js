@@ -75,7 +75,8 @@ exports.classifyMedicalDocument = onCall(
           // Even without API key, if classified as lab report, store basic info
           if (fallbackResult.category === 'lab_reports' && auth?.uid) {
             try {
-              await storeBasicLabReportInfo(auth.uid, fileName, storagePath);
+              const basicLabInfo = await storeBasicLabReportInfo(auth.uid, fileName, storagePath);
+              fallbackResult.labReportType = basicLabInfo.labReportType;
             } catch (storeError) {
               console.error('❌ Failed to store basic lab report info:', storeError);
             }
@@ -151,7 +152,15 @@ Focus on identifying:
 
         // Try to parse the JSON response
         try {
-          const classification = JSON.parse(response);
+          // Strip markdown code block formatting if present
+          let cleanResponse = response.trim();
+          if (cleanResponse.startsWith('```json') && cleanResponse.endsWith('```')) {
+            cleanResponse = cleanResponse.slice(7, -3).trim();
+          } else if (cleanResponse.startsWith('```') && cleanResponse.endsWith('```')) {
+            cleanResponse = cleanResponse.slice(3, -3).trim();
+          }
+          
+          const classification = JSON.parse(cleanResponse);
           
           // Validate the response structure
           if (classification.category && typeof classification.confidence === 'number') {
@@ -165,8 +174,11 @@ Focus on identifying:
             // If classified as lab report, extract text content and determine lab report type
             if (classification.category === 'lab_reports' && auth?.uid) {
               try {
+                console.log('🔬 Document classified as lab report, extracting content...');
                 const labReportDetails = await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model, null);
+                console.log('✅ Lab report details extracted:', labReportDetails);
                 result.labReportType = labReportDetails.labReportType;
+                console.log('📊 Final result with lab report type:', result);
               } catch (extractError) {
                 console.error('❌ Failed to extract lab report content:', extractError);
                 // Don't fail the classification if extraction fails
@@ -192,8 +204,11 @@ Focus on identifying:
               // If classified as lab report, extract content
               if (contentClassificationResult.category === 'lab_reports' && auth?.uid) {
                 try {
+                  console.log('🔬 Content-based classification: lab report detected, extracting content...');
                   const labReportDetails = await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model, null);
+                  console.log('✅ Content-based lab report details extracted:', labReportDetails);
                   contentClassificationResult.labReportType = labReportDetails.labReportType;
+                  console.log('📊 Content-based final result with lab report type:', contentClassificationResult);
                 } catch (extractError) {
                   console.error('❌ Failed to extract lab report content in content-based fallback:', extractError);
                 }
@@ -259,7 +274,8 @@ Focus on identifying:
         // Even in error state, if classified as lab report, store basic info
         if (fallbackResult.category === 'lab_reports' && auth?.uid) {
           try {
-            await storeBasicLabReportInfo(auth.uid, fileName, storagePath);
+            const basicLabInfo = await storeBasicLabReportInfo(auth.uid, fileName, storagePath);
+            fallbackResult.labReportType = basicLabInfo.labReportType;
           } catch (storeError) {
             console.error('❌ Failed to store basic lab report info in error recovery:', storeError);
           }
@@ -761,11 +777,13 @@ Mark new findings with "**NEW:**" if updating existing summary.
 /**
  * Extract text content from lab reports using Gemini OCR
  */
-async function extractLabReportContent(userId, fileName, storagePath, base64Data, mimeType, model) {
+async function extractLabReportContent(userId, fileName, storagePath, base64Data, mimeType, model, userSelectedType = null) {
   console.log(`🔬 Extracting lab report content for: ${fileName}`);
   
   try {
     const userLabReportTypes = await getLabReportTypesForUser(userId);
+    console.log('👤 User lab report types:', userLabReportTypes);
+    
     const extractionPrompt = `
 Analyze this lab report image and extract ALL text content with extreme precision.
 Focus on extracting:
@@ -778,13 +796,17 @@ Focus on extracting:
 6. **Laboratory Information**: Lab name, ordering physician
 7. **Clinical Notes**: Any comments or interpretations
 
+${userSelectedType ? `
+The user has indicated this is a "${userSelectedType}" lab report. Please classify accordingly.
+` : `
 Based on the tests present, classify this lab report type as one of:
 ${userLabReportTypes.map(type => `- ${type}`).join('\n')}
 - other_lab_tests (if it does not fit any of the above)
+`}
 
 Return a JSON object with this structure:
 {
-  "lab_report_type": "auto-detected type",
+  "lab_report_type": "one of the types listed above",
   "extracted_text": "complete text content extracted from the image",
   "test_results": [
     {
@@ -824,7 +846,16 @@ Extract ALL visible text and be extremely thorough.
 
     let extractedData;
     try {
-      extractedData = JSON.parse(response);
+      // Strip markdown code block formatting if present
+      let cleanResponse = response.trim();
+      if (cleanResponse.startsWith('```json') && cleanResponse.endsWith('```')) {
+        cleanResponse = cleanResponse.slice(7, -3).trim();
+      } else if (cleanResponse.startsWith('```') && cleanResponse.endsWith('```')) {
+        cleanResponse = cleanResponse.slice(3, -3).trim();
+      }
+      
+      extractedData = JSON.parse(cleanResponse);
+      console.log('✅ Successfully parsed extraction response:', extractedData);
     } catch (parseError) {
       console.error('❌ Failed to parse extraction response as JSON:', parseError);
       // Fallback to storing raw text
@@ -839,9 +870,11 @@ Extract ALL visible text and be extremely thorough.
     }
 
     // Use user-selected type if provided, otherwise use AI-detected type
-    const finalLabReportType = extractedData.lab_report_type || 'other_lab_tests';
+    const finalLabReportType = userSelectedType || extractedData.lab_report_type || 'other_lab_tests';
+    console.log('🎯 Final lab report type determined:', finalLabReportType);
+    
+    // Save new lab report type to user's personalized list if it's a new type
     await saveLabReportTypeForUser(userId, finalLabReportType);
-
 
     // Store in Firestore
     const db = admin.firestore();
@@ -862,13 +895,21 @@ Extract ALL visible text and be extremely thorough.
       labInfo: extractedData.lab_info || {},
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       extractionMethod: 'gemini_ocr',
-      userSelectedType: false
+      userSelectedType: userSelectedType ? true : false
     };
 
     await labReportContentRef.set(labReportData);
     
     console.log(`✅ Lab report content extracted and stored: ${labReportContentRef.id}`);
-    return {id: labReportContentRef.id, labReportType: finalLabReportType};
+    
+    // Return the lab report details including the type
+    return {
+      id: labReportContentRef.id,
+      labReportType: finalLabReportType,
+      extractedText: extractedData.extracted_text || '',
+      testResults: extractedData.test_results || [],
+      testDate: extractedData.test_date || null
+    };
 
   } catch (error) {
     console.error('❌ Error extracting lab report content:', error);
@@ -883,6 +924,14 @@ async function storeBasicLabReportInfo(userId, fileName, storagePath) {
   console.log(`📄 Storing basic lab report info for: ${fileName}`);
   
   try {
+    // Try to classify by filename to determine a reasonable default type
+    const fallbackClassification = intelligentClassifyByFilename(fileName);
+    const defaultLabReportType = fallbackClassification.category === 'lab_reports' ? 
+      'other_lab_tests' : 'other_lab_tests';
+
+    // Save the lab report type to user's personalized list
+    await saveLabReportTypeForUser(userId, defaultLabReportType);
+
     const db = admin.firestore();
     const labReportContentRef = db
       .collection('users')
@@ -893,7 +942,7 @@ async function storeBasicLabReportInfo(userId, fileName, storagePath) {
     const basicLabReportData = {
       fileName: fileName,
       storagePath: storagePath,
-      labReportType: 'other_lab_tests', // Default type when can't analyze
+      labReportType: defaultLabReportType,
       extractedText: 'Content extraction requires API key configuration',
       testResults: [],
       testDate: null,
@@ -906,7 +955,11 @@ async function storeBasicLabReportInfo(userId, fileName, storagePath) {
     await labReportContentRef.set(basicLabReportData);
     
     console.log(`✅ Basic lab report info stored: ${labReportContentRef.id}`);
-    return labReportContentRef.id;
+    
+    return {
+      id: labReportContentRef.id,
+      labReportType: defaultLabReportType
+    };
 
   } catch (error) {
     console.error('❌ Error storing basic lab report info:', error);
@@ -921,6 +974,9 @@ async function storeBasicLabReportInfoWithType(userId, fileName, storagePath, se
   console.log(`📄 Storing basic lab report info with type ${selectedType} for: ${fileName}`);
   
   try {
+    // Save the user-selected lab report type to user's personalized list
+    await saveLabReportTypeForUser(userId, selectedType);
+
     const db = admin.firestore();
     const labReportContentRef = db
       .collection('users')
@@ -945,7 +1001,11 @@ async function storeBasicLabReportInfoWithType(userId, fileName, storagePath, se
     await labReportContentRef.set(basicLabReportData);
     
     console.log(`✅ Basic lab report info with type stored: ${labReportContentRef.id}`);
-    return labReportContentRef.id;
+    
+    return {
+      id: labReportContentRef.id,
+      labReportType: selectedType
+    };
 
   } catch (error) {
     console.error('❌ Error storing basic lab report info with type:', error);
@@ -1625,7 +1685,15 @@ Focus on the CONTENT and LAYOUT, not filename.
     console.log('🤖 Content-based classification response:', response);
 
     try {
-      const classification = JSON.parse(response);
+      // Strip markdown code block formatting if present
+      let cleanResponse = response.trim();
+      if (cleanResponse.startsWith('```json') && cleanResponse.endsWith('```')) {
+        cleanResponse = cleanResponse.slice(7, -3).trim();
+      } else if (cleanResponse.startsWith('```') && cleanResponse.endsWith('```')) {
+        cleanResponse = cleanResponse.slice(3, -3).trim();
+      }
+      
+      const classification = JSON.parse(cleanResponse);
       
       if (classification.category && typeof classification.confidence === 'number') {
         return {
@@ -1662,16 +1730,27 @@ async function getLabReportTypesForUser(userId) {
   const db = admin.firestore();
   const doc = await db.collection('users').doc(userId).collection('settings').doc('lab_report_types').get();
   if (!doc.exists) {
+    // Default comprehensive list of lab report types
     return [
       'blood_sugar',
-      'cholesterol',
-      'liver_function',
-      'kidney_function',
-      'thyroid_function',
+      'cholesterol_lipid_panel',
+      'liver_function_tests',
+      'kidney_function_tests',
+      'thyroid_function_tests',
       'complete_blood_count',
       'cardiac_markers',
       'vitamin_levels',
       'inflammatory_markers',
+      'hormone_tests',
+      'diabetes_markers',
+      'iron_studies',
+      'bone_markers',
+      'cancer_markers',
+      'infectious_disease_tests',
+      'autoimmune_markers',
+      'coagulation_studies',
+      'electrolyte_panel',
+      'protein_studies'
     ];
   }
   const data = doc.data();
