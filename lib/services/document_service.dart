@@ -20,7 +20,7 @@ class DocumentService {
 
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'webp'],
         allowMultiple: false,
         withData: true, // Always get bytes for web compatibility
       );

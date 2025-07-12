@@ -69,7 +69,7 @@ exports.classifyMedicalDocument = onCall(
       try {
         const apiKey = geminiApiKey.value();
         if (!apiKey) {
-          console.warn('⚠️ Gemini API key not configured, using filename-based classification');
+          console.warn('⚠️ Gemini API key not configured, using enhanced filename-based classification');
           const fallbackResult = intelligentClassifyByFilename(fileName);
           
           // Even without API key, if classified as lab report, store basic info
@@ -178,15 +178,39 @@ Focus on identifying:
           console.error('❌ Failed to parse Gemini response as JSON:', parseError);
         }
 
-        // Fallback to filename classification if AI fails
-        console.log('⚠️ AI classification failed, falling back to filename analysis');
+        // Enhanced fallback: If AI parsing failed but we have image data, try content-based classification
+        console.log('⚠️ AI classification parsing failed, attempting content-based fallback');
+        if (base64Data && mimeType) {
+          try {
+            const contentClassificationResult = await performContentBasedClassification(base64Data, mimeType, model);
+            
+            // If content-based classification succeeded, use it
+            if (contentClassificationResult.category !== 'other') {
+              console.log(`✅ Content-based classification successful: ${contentClassificationResult.category}`);
+              
+              // If classified as lab report, extract content
+              if (contentClassificationResult.category === 'lab_reports' && auth?.uid) {
+                try {
+                  await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model, null);
+                } catch (extractError) {
+                  console.error('❌ Failed to extract lab report content in content-based fallback:', extractError);
+                }
+              }
+              
+              return contentClassificationResult;
+            }
+          } catch (contentError) {
+            console.error('❌ Content-based classification also failed:', contentError);
+          }
+        }
+
+        // Final fallback to filename classification
+        console.log('⚠️ All AI methods failed, falling back to filename analysis');
         const fallbackResult = intelligentClassifyByFilename(fileName);
         
         // If fallback classifies as lab report and we have image data, try to extract content
         if (fallbackResult.category === 'lab_reports' && auth?.uid && base64Data && mimeType) {
           try {
-            const genAI = new GoogleGenerativeAI(apiKey);
-            const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
             await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model);
           } catch (extractError) {
             console.error('❌ Failed to extract lab report content in fallback:', extractError);
@@ -198,8 +222,47 @@ Focus on identifying:
       } catch (error) {
         console.error('❌ Error in document classification:', error);
         
-        // Fallback to filename classification
-        return intelligentClassifyByFilename(fileName);
+        // Enhanced fallback: If we have image data, try content-based classification first
+        if (base64Data && mimeType) {
+          try {
+            console.log('🔄 Attempting content-based classification after error...');
+            const genAI = new GoogleGenerativeAI(apiKey);
+            const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+            const contentClassificationResult = await performContentBasedClassification(base64Data, mimeType, model);
+            
+            // If content-based classification succeeded, use it
+            if (contentClassificationResult.category !== 'other' || contentClassificationResult.confidence > 0.5) {
+              console.log(`✅ Content-based classification successful after error: ${contentClassificationResult.category}`);
+              
+              // If classified as lab report, extract content
+              if (contentClassificationResult.category === 'lab_reports' && auth?.uid) {
+                try {
+                  await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model, null);
+                } catch (extractError) {
+                  console.error('❌ Failed to extract lab report content in error recovery:', extractError);
+                }
+              }
+              
+              return contentClassificationResult;
+            }
+          } catch (contentError) {
+            console.error('❌ Content-based classification also failed during error recovery:', contentError);
+          }
+        }
+        
+        // Final fallback to filename classification
+        const fallbackResult = intelligentClassifyByFilename(fileName);
+        
+        // Even in error state, if classified as lab report, store basic info
+        if (fallbackResult.category === 'lab_reports' && auth?.uid) {
+          try {
+            await storeBasicLabReportInfo(auth.uid, fileName, storagePath);
+          } catch (storeError) {
+            console.error('❌ Failed to store basic lab report info in error recovery:', storeError);
+          }
+        }
+        
+        return fallbackResult;
       }
     }
 );
@@ -905,6 +968,9 @@ function intelligentClassifyByFilename(fileName) {
   const nameLower = fileName.toLowerCase();
   const fileExtension = fileName.split('.').pop().toLowerCase();
   
+  // Check if filename is meaningless (random characters, generic names)
+  const isMeaninglessFilename = checkIfFilenameMeaningless(nameLower);
+  
   // Enhanced filename analysis with comprehensive medical keywords
   const medicalKeywords = {
     lab_reports: [
@@ -989,21 +1055,29 @@ function intelligentClassifyByFilename(fileName) {
   // Calculate confidence based on keyword matches and file type
   let confidence = Math.min(0.8, (maxScore * 0.12) + extensionConfidenceBoost);
   
-  // Ensure reasonable confidence for all medical files
-  if (confidence < 0.25) {
+  // If filename is meaningless, drastically reduce confidence to trigger content analysis
+  if (isMeaninglessFilename) {
+    confidence = Math.min(confidence, 0.3);
+    console.log(`⚠️ Meaningless filename detected: ${fileName} - reducing confidence to trigger content analysis`);
+  }
+  
+  // Ensure reasonable confidence for files with meaningful names
+  if (confidence < 0.25 && !isMeaninglessFilename) {
     confidence = 0.25;
   }
   
   // Create detailed reasoning
   let reasoning = '';
-  if (maxScore > 0) {
+  if (maxScore > 0 && !isMeaninglessFilename) {
     reasoning = `Intelligent analysis: Found ${maxScore} medical keywords suggesting ${bestCategory}.`;
+  } else if (isMeaninglessFilename) {
+    reasoning = `Meaningless filename detected - content analysis required for accurate classification.`;
   } else {
     reasoning = `Smart fallback: No clear keywords found, classified as ${bestCategory} based on file type patterns.`;
   }
   reasoning += ` ${extensionHint}`;
   
-  console.log(`📊 Classification result: ${bestCategory} (confidence: ${confidence.toFixed(2)}, score: ${maxScore})`);
+  console.log(`📊 Classification result: ${bestCategory} (confidence: ${confidence.toFixed(2)}, score: ${maxScore}, meaningless: ${isMeaninglessFilename})`);
   
   return {
     category: bestCategory,
@@ -1011,6 +1085,71 @@ function intelligentClassifyByFilename(fileName) {
     suggestedSubfolder: getDefaultSubfolder(bestCategory),
     reasoning: reasoning
   };
+}
+
+/**
+ * Check if filename appears to be meaningless (random characters, generic names)
+ */
+function checkIfFilenameMeaningless(fileName) {
+  // Remove file extension for analysis
+  const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+  
+  // Common meaningless patterns
+  const meaninglessPatterns = [
+    // Random characters/numbers
+    /^[a-f0-9]{8,}$/i,           // Long hex strings
+    /^[0-9]{8,}$/,               // Long number strings
+    /^img_[0-9]+$/i,             // IMG_12345
+    /^image[0-9]*$/i,            // image, image1, image123
+    /^photo[0-9]*$/i,            // photo, photo1, photo123
+    /^pic[0-9]*$/i,              // pic, pic1, pic123
+    /^screenshot[0-9]*$/i,       // screenshot, screenshot1
+    /^scan[0-9]*$/i,             // scan, scan1, scan123
+    /^document[0-9]*$/i,         // document, document1
+    /^file[0-9]*$/i,             // file, file1, file123
+    /^[0-9]+-[0-9]+-[0-9]+/,     // Date-like patterns: 2023-12-25
+    /^[0-9]{4}_[0-9]{2}_[0-9]{2}/, // Date patterns: 2023_12_25
+    /^whatsapp/i,                // WhatsApp image names
+    /^received_/i,               // received_123456
+    /^tmp/i,                     // temporary files
+    /^temp/i,                    // temporary files
+    /^cache/i,                   // cache files
+    /^[a-z]{1,3}[0-9]+$/i,       // Short prefix + numbers: abc123
+  ];
+  
+  // Generic medical scanner names
+  const genericScannerNames = [
+    'untitled', 'new', 'copy', 'duplicate', 'backup',
+    'final', 'version', 'draft', 'test', 'sample'
+  ];
+  
+  // Check against patterns
+  for (const pattern of meaninglessPatterns) {
+    if (pattern.test(nameWithoutExt)) {
+      return true;
+    }
+  }
+  
+  // Check against generic names
+  for (const generic of genericScannerNames) {
+    if (nameWithoutExt.toLowerCase().includes(generic)) {
+      return true;
+    }
+  }
+  
+  // Check if filename is very short and likely meaningless
+  if (nameWithoutExt.length <= 3) {
+    return true;
+  }
+  
+  // Check if filename has high ratio of numbers to letters (likely meaningless)
+  const numbers = (nameWithoutExt.match(/[0-9]/g) || []).length;
+  const letters = (nameWithoutExt.match(/[a-zA-Z]/g) || []).length;
+  if (numbers > 0 && numbers / (numbers + letters) > 0.7) {
+    return true;
+  }
+  
+  return false;
 }
 
 /**
@@ -1419,3 +1558,108 @@ exports.updateLabReportType = onCall(
       }
     }
 );
+
+/**
+ * Perform content-based classification when filename is meaningless
+ */
+async function performContentBasedClassification(base64Data, mimeType, model) {
+  console.log('🔍 Performing content-based classification...');
+  
+  try {
+    const contentAnalysisPrompt = `
+Analyze this medical document image and determine what type of medical document it is by examining the CONTENT, not the filename.
+
+Look for these specific indicators:
+
+LAB REPORTS:
+- Test names and numerical values
+- Reference ranges (Normal: X-Y)
+- Laboratory letterhead or logos
+- Terms like "CBC", "Blood Chemistry", "Glucose", "Cholesterol", etc.
+- Patient ID numbers
+- Test dates and collection times
+- Units of measurement (mg/dL, mmol/L, etc.)
+
+PRESCRIPTIONS:
+- Medication names
+- Dosage instructions (mg, ml, tablets)
+- Frequency (daily, BID, TID, etc.)
+- Pharmacy information
+- Prescription numbers
+- Doctor signatures or stamps
+- "Rx" symbols
+
+DOCTOR NOTES:
+- Clinical observations
+- Diagnosis codes (ICD-10)
+- Vital signs (BP, HR, Temperature)
+- Physical examination findings
+- Treatment plans
+- Doctor letterhead
+- Patient consultation notes
+
+OTHER:
+- Insurance documents
+- Appointment cards
+- Medical bills
+- Administrative forms
+
+Analyze the VISIBLE TEXT AND LAYOUT to determine the document type.
+
+Return ONLY this JSON structure:
+{
+  "category": "lab_reports|prescriptions|doctor_notes|other",
+  "confidence": 0.0-1.0,
+  "reasoning": "specific content indicators found",
+  "suggestedSubfolder": "descriptive name"
+}
+
+Focus on the CONTENT and LAYOUT, not filename.
+`;
+
+    const result = await model.generateContent([
+      contentAnalysisPrompt,
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType: mimeType
+        }
+      }
+    ]);
+
+    const response = result.response.text();
+    console.log('🤖 Content-based classification response:', response);
+
+    try {
+      const classification = JSON.parse(response);
+      
+      if (classification.category && typeof classification.confidence === 'number') {
+        return {
+          category: classification.category,
+          confidence: Math.max(0.6, Math.min(1, classification.confidence)), // Higher confidence for content analysis
+          suggestedSubfolder: classification.suggestedSubfolder || getDefaultSubfolder(classification.category),
+          reasoning: `Content analysis: ${classification.reasoning || 'Document content analyzed'}`
+        };
+      }
+    } catch (parseError) {
+      console.error('❌ Failed to parse content classification response:', parseError);
+    }
+
+    // If parsing fails, return other with low confidence
+    return {
+      category: 'other',
+      confidence: 0.3,
+      suggestedSubfolder: 'general',
+      reasoning: 'Content analysis failed to parse classification'
+    };
+
+  } catch (error) {
+    console.error('❌ Error in content-based classification:', error);
+    return {
+      category: 'other',
+      confidence: 0.2,
+      suggestedSubfolder: 'general',
+      reasoning: 'Content analysis encountered an error'
+    };
+  }
+}
