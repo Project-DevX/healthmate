@@ -155,17 +155,18 @@ Focus on identifying:
           
           // Validate the response structure
           if (classification.category && typeof classification.confidence === 'number') {
-            const result = {
+            let result = {
               category: classification.category,
               confidence: Math.max(0, Math.min(1, classification.confidence)),
               suggestedSubfolder: classification.suggestedSubfolder || getDefaultSubfolder(classification.category),
               reasoning: classification.reasoning || 'AI classification'
             };
 
-            // If classified as lab report, extract text content
+            // If classified as lab report, extract text content and determine lab report type
             if (classification.category === 'lab_reports' && auth?.uid) {
               try {
-                await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model, null);
+                const labReportDetails = await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model, null);
+                result.labReportType = labReportDetails.labReportType;
               } catch (extractError) {
                 console.error('❌ Failed to extract lab report content:', extractError);
                 // Don't fail the classification if extraction fails
@@ -191,7 +192,8 @@ Focus on identifying:
               // If classified as lab report, extract content
               if (contentClassificationResult.category === 'lab_reports' && auth?.uid) {
                 try {
-                  await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model, null);
+                  const labReportDetails = await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model, null);
+                  contentClassificationResult.labReportType = labReportDetails.labReportType;
                 } catch (extractError) {
                   console.error('❌ Failed to extract lab report content in content-based fallback:', extractError);
                 }
@@ -237,7 +239,8 @@ Focus on identifying:
               // If classified as lab report, extract content
               if (contentClassificationResult.category === 'lab_reports' && auth?.uid) {
                 try {
-                  await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model, null);
+                  const labReportDetails = await extractLabReportContent(auth.uid, fileName, storagePath, base64Data, mimeType, model, null);
+                  contentClassificationResult.labReportType = labReportDetails.labReportType;
                 } catch (extractError) {
                   console.error('❌ Failed to extract lab report content in error recovery:', extractError);
                 }
@@ -758,10 +761,11 @@ Mark new findings with "**NEW:**" if updating existing summary.
 /**
  * Extract text content from lab reports using Gemini OCR
  */
-async function extractLabReportContent(userId, fileName, storagePath, base64Data, mimeType, model, userSelectedType = null) {
+async function extractLabReportContent(userId, fileName, storagePath, base64Data, mimeType, model) {
   console.log(`🔬 Extracting lab report content for: ${fileName}`);
   
   try {
+    const userLabReportTypes = await getLabReportTypesForUser(userId);
     const extractionPrompt = `
 Analyze this lab report image and extract ALL text content with extreme precision.
 Focus on extracting:
@@ -774,25 +778,13 @@ Focus on extracting:
 6. **Laboratory Information**: Lab name, ordering physician
 7. **Clinical Notes**: Any comments or interpretations
 
-${userSelectedType ? `
-The user has indicated this is a "${userSelectedType}" lab report. Please classify accordingly.
-` : `
 Based on the tests present, classify this lab report type as one of:
-- blood_sugar (glucose, diabetes-related tests)
-- cholesterol (lipid panel, triglycerides)
-- liver_function (ALT, AST, bilirubin)
-- kidney_function (creatinine, BUN, GFR)
-- thyroid_function (TSH, T3, T4)
-- complete_blood_count (CBC, hemoglobin, platelets)
-- cardiac_markers (troponin, CK-MB)
-- vitamin_levels (B12, D, folate)
-- inflammatory_markers (ESR, CRP)
-- other_lab_tests (any other type)
-`}
+${userLabReportTypes.map(type => `- ${type}`).join('\n')}
+- other_lab_tests (if it does not fit any of the above)
 
 Return a JSON object with this structure:
 {
-  "lab_report_type": "${userSelectedType || 'auto-detected type'}",
+  "lab_report_type": "auto-detected type",
   "extracted_text": "complete text content extracted from the image",
   "test_results": [
     {
@@ -837,7 +829,7 @@ Extract ALL visible text and be extremely thorough.
       console.error('❌ Failed to parse extraction response as JSON:', parseError);
       // Fallback to storing raw text
       extractedData = {
-        lab_report_type: userSelectedType || 'other_lab_tests',
+        lab_report_type: 'other_lab_tests',
         extracted_text: response,
         test_results: [],
         test_date: null,
@@ -847,7 +839,9 @@ Extract ALL visible text and be extremely thorough.
     }
 
     // Use user-selected type if provided, otherwise use AI-detected type
-    const finalLabReportType = userSelectedType || extractedData.lab_report_type || 'other_lab_tests';
+    const finalLabReportType = extractedData.lab_report_type || 'other_lab_tests';
+    await saveLabReportTypeForUser(userId, finalLabReportType);
+
 
     // Store in Firestore
     const db = admin.firestore();
@@ -868,13 +862,13 @@ Extract ALL visible text and be extremely thorough.
       labInfo: extractedData.lab_info || {},
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       extractionMethod: 'gemini_ocr',
-      userSelectedType: userSelectedType ? true : false
+      userSelectedType: false
     };
 
     await labReportContentRef.set(labReportData);
     
     console.log(`✅ Lab report content extracted and stored: ${labReportContentRef.id}`);
-    return labReportContentRef.id;
+    return {id: labReportContentRef.id, labReportType: finalLabReportType};
 
   } catch (error) {
     console.error('❌ Error extracting lab report content:', error);
@@ -1661,5 +1655,40 @@ Focus on the CONTENT and LAYOUT, not filename.
       suggestedSubfolder: 'general',
       reasoning: 'Content analysis encountered an error'
     };
+  }
+}
+
+async function getLabReportTypesForUser(userId) {
+  const db = admin.firestore();
+  const doc = await db.collection('users').doc(userId).collection('settings').doc('lab_report_types').get();
+  if (!doc.exists) {
+    return [
+      'blood_sugar',
+      'cholesterol',
+      'liver_function',
+      'kidney_function',
+      'thyroid_function',
+      'complete_blood_count',
+      'cardiac_markers',
+      'vitamin_levels',
+      'inflammatory_markers',
+    ];
+  }
+  const data = doc.data();
+  return data.types || [];
+}
+
+async function saveLabReportTypeForUser(userId, type) {
+  const db = admin.firestore();
+  const docRef = db.collection('users').doc(userId).collection('settings').doc('lab_report_types');
+  const doc = await docRef.get();
+  if (!doc.exists) {
+    await docRef.set({ types: [type] });
+  } else {
+    const data = doc.data();
+    const types = data.types || [];
+    if (!types.includes(type)) {
+      await docRef.update({ types: admin.firestore.FieldValue.arrayUnion(type) });
+    }
   }
 }
