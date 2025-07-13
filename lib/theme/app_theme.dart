@@ -55,6 +55,7 @@ class AppTheme {
     return ThemeData(
       primarySwatch: Colors.blue,
       primaryColor: primaryBlue,
+      scaffoldBackgroundColor: backgroundGrey,
       colorScheme: ColorScheme.fromSeed(
         seedColor: primaryBlue,
         brightness: Brightness.light,
@@ -65,11 +66,9 @@ class AppTheme {
         elevation: 2,
         centerTitle: false,
       ),
-      cardTheme: const CardThemeData(
+      cardTheme: CardThemeData(
         elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(12)),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         color: cardWhite,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -88,6 +87,50 @@ class AppTheme {
       useMaterial3: true,
     );
   }
+
+  static ThemeData get darkTheme {
+    return ThemeData(
+      primarySwatch: Colors.blue,
+      primaryColor: Color(0xFF64B5F6),
+      scaffoldBackgroundColor: Color(0xFF121212),
+      brightness: Brightness.dark,
+
+      appBarTheme: AppBarTheme(
+        backgroundColor: Color(0xFF1F1F1F),
+        foregroundColor: Colors.white,
+        elevation: 2,
+      ),
+
+      cardTheme: CardThemeData(
+        elevation: 2,
+        color: Color(0xFF1F1F1F),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: Colors.blue,
+        brightness: Brightness.dark,
+      ),
+      useMaterial3: true,
+    );
+  }
+
+  // Chart colors for different trend types
+  static const Map<String, Color> trendColors = {
+    'increasing': Colors.red,
+    'decreasing': Colors.orange,
+    'stable': Colors.green,
+    'prediction': Colors.blue,
+    'anomaly': Colors.deepOrange,
+  };
+
+  // Health status colors
+  static const Map<String, Color> healthStatusColors = {
+    'excellent': Colors.green,
+    'good': Colors.lightGreen,
+    'fair': Colors.orange,
+    'concerning': Colors.red,
+  };
 
   /// Card decoration with shadow
   static BoxDecoration get cardDecoration {
