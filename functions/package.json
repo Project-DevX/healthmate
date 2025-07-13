@@ -17,6 +17,10 @@
     "node": "22"
   },
   "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./trend": "./trendDetection.js"
+  },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "firebase-admin": "^12.6.0",
