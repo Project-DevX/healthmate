@@ -41,7 +41,6 @@ dependencies:
   shared_preferences: ^2.3.3
 
   cloud_functions: ^5.5.2
-  fl_chart: ^0.68.0  # For interactive charts
 
   path: ^1.8.3
   image_picker: ^1.1.2
