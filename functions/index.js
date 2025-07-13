@@ -13,6 +13,7 @@ const {HttpsError} = require("firebase-functions/v2/https");
 const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const {GoogleGenerativeAI} = require("@google/generative-ai");
+const trendDetection = require('./trendDetection');
 
 // Define secrets
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
@@ -896,7 +897,17 @@ Extract ALL visible text and be extremely thorough.
         test_results: [],
         test_date: null,
         patient_info: {},
-        lab_info: {}
+        lab_info: {},
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        extractionMethod: 'gemini_ocr_dynamic',
+        userSelectedType: userSelectedType ? true : false,
+        aiClassification: {
+          originalType: extractedData.lab_report_type,
+          isExistingType: extractedData.isExistingType,
+          reasoning: extractedData.reasoning,
+          confidence: extractedData.confidence,
+          similarToExisting: extractedData.similarToExisting
+        }
       };
     }
 
