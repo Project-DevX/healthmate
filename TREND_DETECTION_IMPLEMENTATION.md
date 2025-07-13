@@ -658,9 +658,6 @@ class TrendAnalysisData {
   final Map<String, VitalTrendData> vitals;
   final Map<String, List<PredictionData>> predictions;
   final DateTime generatedAt;
-  final String modelType;
-  final Map<String, dynamic>? mlInsights;
-  final Map<String, List<FeatureImportanceData>>? featureImportance;
 
   TrendAnalysisData({
     required this.labReportType,
@@ -669,9 +666,6 @@ class TrendAnalysisData {
     required this.vitals,
     required this.predictions,
     required this.generatedAt,
-    required this.modelType,
-    this.mlInsights,
-    this.featureImportance,
   });
 
   factory TrendAnalysisData.fromFirestore(Map<String, dynamic> data) {
@@ -692,24 +686,6 @@ class TrendAnalysisData {
       predictionsMap[key] = predictionsList;
     });
 
-    // Parse ML insights
-    final mlInsightsMap = <String, dynamic>{};
-    final mlInsightsData = data['mlInsights'] as Map<String, dynamic>? ?? {};
-    mlInsightsData.forEach((key, value) {
-      mlInsightsMap[key] = value;
-    });
-
-    // Parse feature importance
-    final featureImportanceMap = <String, List<FeatureImportanceData>>{};
-    vitalsData.forEach((vitalName, vitalData) {
-      if (vitalData is Map<String, dynamic> && vitalData['featureImportance'] != null) {
-        final importanceList = (vitalData['featureImportance'] as List<dynamic>)
-            .map((item) => FeatureImportanceData.fromMap(Map<String, dynamic>.from(item)))
-            .toList();
-        featureImportanceMap[vitalName] = importanceList;
-      }
-    });
-
     return TrendAnalysisData(
       labReportType: data['labReportType'] ?? '',
       reportCount: data['reportCount'] ?? 0,
@@ -717,16 +693,23 @@ class TrendAnalysisData {
       vitals: vitalsMap,
       predictions: predictionsMap,
       generatedAt: DateTime.parse(data['generatedAt'] ?? DateTime.now().toISOString()),
-      modelType: data['modelType'] ?? 'linear',
-      mlInsights: mlInsightsMap.isNotEmpty ? mlInsightsMap : null,
-      featureImportance: featureImportanceMap.isNotEmpty ? featureImportanceMap : null,
     );
   }
 
-  bool get isMLEnhanced => modelType == 'xgboost';
-  
-  bool get hasCrossPatientInsights => 
-    mlInsights?.isNotEmpty ?? false;
+  bool get hasSignificantTrends {
+    return vitals.values.any((vital) => vital.trendSignificance > 0.6);
+  }
+
+  bool get hasAnomalies {
+    return vitals.values.any((vital) => vital.anomalies.isNotEmpty);
+  }
+
+  List<String> get concerningTrends {
+    return vitals.entries
+        .where((entry) => entry.value.isConcerrning)
+        .map((entry) => entry.key)
+        .toList();
+  }
 }
 
 class VitalTrendData {
@@ -839,34 +822,12 @@ class PredictionData {
   }
 
   String get formattedDate {
-    return '${date.month}/${date.year.toString().substring(2)}';
+    return '${date.month}/${date.year}';
   }
 
   String get confidencePercentage {
     return '${(confidence * 100).round()}%';
   }
-}
-
-class FeatureImportanceData {
-  final String featureName;
-  final double importance;
-  final String interpretation;
-
-  FeatureImportanceData({
-    required this.featureName,
-    required this.importance,
-    required this.interpretation,
-  });
-
-  factory FeatureImportanceData.fromMap(Map<String, dynamic> data) {
-    return FeatureImportanceData(
-      featureName: data['feature_name'] ?? '',
-      importance: (data['importance'] ?? 0).toDouble(),
-      interpretation: data['interpretation'] ?? '',
-    );
-  }
-
-  String get formattedImportance => '${(importance * 100).toStringAsFixed(1)}%';
 }
 
 // Additional data model classes...
@@ -971,2801 +932,625 @@ class ConfidenceIntervalData {
 }
 ```
 
-### Phase 2: Backend Integration Points
+### Phase 4: Frontend UI Components
 
-#### **2.1 Trigger Trend Detection Automatically**
+#### **4.1 Trend Analysis Screen**
 
-Modify the existing lab report classification function to trigger trend detection:
-
-```javascript
-// In extractLabReportContent function, after storing the lab report:
-exports.extractLabReportContent = onCall(
-  {cors: true, secrets: [geminiApiKey]},
-  async (request) => {
-    // ... existing extraction logic ...
-    
-    // After successful classification and storage:
-    if (labReportType && labReportType !== 'other_lab_tests') {
-      try {
-        // Check if this triggers trend analysis threshold
-        await checkTrendAnalysisTrigger(auth.uid, labReportType);
-      } catch (error) {
-        console.log('Trend analysis check failed:', error);
-        // Don't fail the main operation
-      }
-    }
-    
-    return result;
-  }
-);
-
-async function checkTrendAnalysisTrigger(userId, labReportType) {
-  const db = admin.firestore();
-  
-  // Count reports of this type
-  const countSnapshot = await db
-    .collection('users')
-    .doc(userId)
-    .collection('lab_report_content')
-    .where('labReportType', '==', labReportType)
-    .get();
-  
-  const reportCount = countSnapshot.size;
-  
-  console.log(`📊 User ${userId} has ${reportCount} reports of type ${labReportType}`);
-  
-  // Trigger trend analysis if threshold reached
-  if (reportCount >= 5) {
-    // Check if trend analysis was already done recently
-    const lastTrendRef = db
-      .collection('users')
-      .doc(userId)
-      .collection('latest_trends')
-      .doc(labReportType);
-    
-    const lastTrend = await lastTrendRef.get();
-    const shouldUpdate = !lastTrend.exists || 
-      (lastTrend.data()?.reportCount || 0) < reportCount;
-    
-    if (shouldUpdate) {
-      console.log(`🎯 Triggering trend analysis for ${labReportType}`);
-      
-      // Call trend detection function
-      const trendAnalysis = await analyzeLabTrends(userId, labReportType);
-      if (trendAnalysis.shouldGenerateGraphs) {
-        const trendData = await generateTrendData(userId, labReportType, trendAnalysis);
-        await storeTrendAnalysis(userId, labReportType, trendData);
-        
-        // Send notification about new trends
-        await sendTrendNotification(userId, labReportType, trendData);
-      }
-    }
-  }
-}
-
-async function sendTrendNotification(userId, labReportType, trendData) {
-  // Store notification for user
-  const db = admin.firestore();
-  
-  const notification = {
-    type: 'trend_analysis',
-    title: 'New Health Trends Detected',
-    message: `We've analyzed your ${labReportType} reports and found interesting trends.`,
-    labReportType: labReportType,
-    vitalsAnalyzed: Object.keys(trendData.vitals).length,
-    hasAnomalies: Object.values(trendData.vitals).some(v => v.anomalies.length > 0),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    read: false
-  };
-  
-  await db
-    .collection('users')
-    .doc(userId)
-    .collection('notifications')
-    .add(notification);
-  
-  console.log(`🔔 Trend notification sent to user ${userId}`);
-}
-```
-
-### Phase 3: Frontend Services
-
-#### **3.1 Trend Analysis Service**
-
-**File:** `lib/services/trend_analysis_service.dart`
+**File:** `lib/screens/trend_analysis_screen.dart`
 
 ```dart
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
+import '../services/trend_analysis_service.dart';
 
-class TrendAnalysisService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static final FirebaseFunctions _functions = FirebaseFunctions.instance;
+class TrendAnalysisScreen extends StatefulWidget {
+  final String? labReportType;
 
-  /// Get trend analysis for a specific lab report type
-  static Future<TrendAnalysisData?> getTrendAnalysis(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return null;
+  const TrendAnalysisScreen({Key? key, this.labReportType}) : super(key: key);
 
-      final trendDoc = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('latest_trends')
-          .doc(labReportType)
-          .get();
-
-      if (trendDoc.exists) {
-        return TrendAnalysisData.fromFirestore(trendDoc.data()!);
-      }
-      return null;
-    } catch (e) {
-      throw Exception('Failed to get trend analysis: $e');
-    }
-  }
-
-  /// Get all available trend analyses for user
-  static Future<List<TrendAnalysisData>> getAllTrendAnalyses() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return [];
-
-      final trendsSnapshot = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('latest_trends')
-          .get();
-
-      return trendsSnapshot.docs
-          .map((doc) => TrendAnalysisData.fromFirestore(doc.data()))
-          .toList();
-    } catch (e) {
-      throw Exception('Failed to get trend analyses: $e');
-    }
-  }
-
-  /// Manually trigger trend detection for a lab report type
-  static Future<bool> triggerTrendDetection(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return false;
-
-      final callable = _functions.httpsCallable('detectLabTrends');
-      final result = await callable.call({
-        'userId': user.uid,
-        'labReportType': labReportType,
-      });
-
-      return result.data['success'] ?? false;
-    } catch (e) {
-      throw Exception('Failed to trigger trend detection: $e');
-    }
-  }
-
-  /// Check if trend analysis is available for a lab report type
-  static Future<bool> isTrendAnalysisAvailable(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return false;
-
-      // Count reports of this type
-      final countSnapshot = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('lab_report_content')
-          .where('labReportType', '==', labReportType)
-          .get();
-
-      return countSnapshot.size >= 5;
-    } catch (e) {
-      return false;
-    }
-  }
+  @override
+  State<TrendAnalysisScreen> createState() => _TrendAnalysisScreenState();
 }
 
-/// Data models for trend analysis
-class TrendAnalysisData {
-  final String labReportType;
-  final int reportCount;
-  final TimeSpanData timespan;
-  final Map<String, VitalTrendData> vitals;
-  final Map<String, List<PredictionData>> predictions;
-  final DateTime generatedAt;
-  final String modelType;
-  final Map<String, dynamic>? mlInsights;
-  final Map<String, List<FeatureImportanceData>>? featureImportance;
+class _TrendAnalysisScreenState extends State<TrendAnalysisScreen> {
+  List<TrendAnalysisData> _trendAnalyses = [];
+  TrendAnalysisData? _selectedTrend;
+  bool _isLoading = true;
+  String? _selectedVital;
 
-  TrendAnalysisData({
-    required this.labReportType,
-    required this.reportCount,
-    required this.timespan,
-    required this.vitals,
-    required this.predictions,
-    required this.generatedAt,
-    required this.modelType,
-    this.mlInsights,
-    this.featureImportance,
-  });
+  @override
+  void initState() {
+    super.initState();
+    _loadTrendAnalyses();
+  }
 
-  factory TrendAnalysisData.fromFirestore(Map<String, dynamic> data) {
-    final vitalsMap = <String, VitalTrendData>{};
-    final vitalsData = data['vitals'] as Map<String, dynamic>? ?? {};
-    
-    vitalsData.forEach((key, value) {
-      vitalsMap[key] = VitalTrendData.fromMap(Map<String, dynamic>.from(value));
-    });
+  Future<void> _loadTrendAnalyses() async {
+    try {
+      setState(() => _isLoading = true);
 
-    final predictionsMap = <String, List<PredictionData>>{};
-    final predictionsData = data['predictions'] as Map<String, dynamic>? ?? {};
-    
-    predictionsData.forEach((key, value) {
-      final predictionsList = (value as List<dynamic>)
-          .map((item) => PredictionData.fromMap(Map<String, dynamic>.from(item)))
-          .toList();
-      predictionsMap[key] = predictionsList;
-    });
-
-    // Parse ML insights
-    final mlInsightsMap = <String, dynamic>{};
-    final mlInsightsData = data['mlInsights'] as Map<String, dynamic>? ?? {};
-    mlInsightsData.forEach((key, value) {
-      mlInsightsMap[key] = value;
-    });
-
-    // Parse feature importance
-    final featureImportanceMap = <String, List<FeatureImportanceData>>{};
-    vitalsData.forEach((vitalName, vitalData) {
-      if (vitalData is Map<String, dynamic> && vitalData['featureImportance'] != null) {
-        final importanceList = (vitalData['featureImportance'] as List<dynamic>)
-            .map((item) => FeatureImportanceData.fromMap(Map<String, dynamic>.from(item)))
-            .toList();
-        featureImportanceMap[vitalName] = importanceList;
+      if (widget.labReportType != null) {
+        final trend = await TrendAnalysisService.getTrendAnalysis(widget.labReportType!);
+        if (trend != null) {
+          setState(() {
+            _trendAnalyses = [trend];
+            _selectedTrend = trend;
+          });
+        }
+      } else {
+        final trends = await TrendAnalysisService.getAllTrendAnalyses();
+        setState(() {
+          _trendAnalyses = trends;
+          if (trends.isNotEmpty) {
+            _selectedTrend = trends.first;
+          }
+        });
       }
-    });
 
-    return TrendAnalysisData(
-      labReportType: data['labReportType'] ?? '',
-      reportCount: data['reportCount'] ?? 0,
-      timespan: TimeSpanData.fromMap(Map<String, dynamic>.from(data['timespan'] ?? {})),
-      vitals: vitalsMap,
-      predictions: predictionsMap,
-      generatedAt: DateTime.parse(data['generatedAt'] ?? DateTime.now().toISOString()),
-      modelType: data['modelType'] ?? 'linear',
-      mlInsights: mlInsightsMap.isNotEmpty ? mlInsightsMap : null,
-      featureImportance: featureImportanceMap.isNotEmpty ? featureImportanceMap : null,
+      if (_selectedTrend != null && _selectedTrend!.vitals.isNotEmpty) {
+        _selectedVital = _selectedTrend!.vitals.keys.first;
+      }
+
+      setState(() => _isLoading = false);
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading trend analyses: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Health Trends'),
+        backgroundColor: Theme.of(context).primaryColor,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadTrendAnalyses,
+          ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _trendAnalyses.isEmpty
+              ? _buildEmptyState()
+              : _buildTrendAnalysisView(),
     );
   }
 
-  bool get isMLEnhanced => modelType == 'xgboost';
-  
-  bool get hasCrossPatientInsights => 
-    mlInsights?.isNotEmpty ?? false;
-}
-
-class VitalTrendData {
-  final String vitalName;
-  final int dataCount;
-  final double currentValue;
-  final double meanValue;
-  final double standardDeviation;
-  final String trendDirection;
-  final double trendSlope;
-  final double trendSignificance;
-  final List<AnomalyData> anomalies;
-  final List<DataPointData> dataPoints;
-  final String unit;
-  final DateRangeData dateRange;
-
-  VitalTrendData({
-    required this.vitalName,
-    required this.dataCount,
-    required this.currentValue,
-    required this.meanValue,
-    required this.standardDeviation,
-    required this.trendDirection,
-    required this.trendSlope,
-    required this.trendSignificance,
-    required this.anomalies,
-    required this.dataPoints,
-    required this.unit,
-    required this.dateRange,
-  });
-
-  factory VitalTrendData.fromMap(Map<String, dynamic> data) {
-    return VitalTrendData(
-      vitalName: data['vitalName'] ?? '',
-      dataCount: data['dataCount'] ?? 0,
-      currentValue: (data['currentValue'] ?? 0).toDouble(),
-      meanValue: (data['meanValue'] ?? 0).toDouble(),
-      standardDeviation: (data['standardDeviation'] ?? 0).toDouble(),
-      trendDirection: data['trendDirection'] ?? 'stable',
-      trendSlope: (data['trendSlope'] ?? 0).toDouble(),
-      trendSignificance: (data['trendSignificance'] ?? 0).toDouble(),
-      anomalies: (data['anomalies'] as List<dynamic>? ?? [])
-          .map((item) => AnomalyData.fromMap(Map<String, dynamic>.from(item)))
-          .toList(),
-      dataPoints: (data['dataPoints'] as List<dynamic>? ?? [])
-          .map((item) => DataPointData.fromMap(Map<String, dynamic>.from(item)))
-          .toList(),
-      unit: data['unit'] ?? '',
-      dateRange: DateRangeData.fromMap(Map<String, dynamic>.from(data['dateRange'] ?? {})),
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.trending_up, size: 80, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text(
+            'No Trend Analysis Available',
+            style: TextStyle(fontSize: 20, color: Colors.grey[600]),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Upload at least 5 lab reports of the same type\nto generate trend analysis',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey[500]),
+          ),
+        ],
+      ),
     );
   }
 
-  bool get isConcerrning {
-    return trendSignificance > 0.7 && 
-           (trendDirection == 'increasing' || trendDirection == 'decreasing') ||
-           anomalies.any((anomaly) => anomaly.severity == 'high');
+  Widget _buildTrendAnalysisView() {
+    return Column(
+      children: [
+        if (_trendAnalyses.length > 1) _buildTrendSelector(),
+        if (_selectedTrend != null) ...[
+          _buildTrendSummary(),
+          if (_selectedTrend!.vitals.isNotEmpty) _buildVitalSelector(),
+          Expanded(child: _buildTrendChart()),
+        ],
+      ],
+    );
   }
 
-  String get formattedTrendDirection {
+  Widget _buildTrendSelector() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
+      ),
+      child: DropdownButtonFormField<TrendAnalysisData>(
+        value: _selectedTrend,
+        decoration: const InputDecoration(
+          labelText: 'Select Lab Report Type',
+          border: OutlineInputBorder(),
+        ),
+        items: _trendAnalyses.map((trend) {
+          return DropdownMenuItem(
+            value: trend,
+            child: Text(trend.labReportType),
+          );
+        }).toList(),
+        onChanged: (value) {
+          setState(() {
+            _selectedTrend = value;
+            if (value != null && value.vitals.isNotEmpty) {
+              _selectedVital = value.vitals.keys.first;
+            }
+          });
+        },
+      ),
+    );
+  }
+
+  Widget _buildTrendSummary() {
+    final trend = _selectedTrend!;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            trend.labReportType,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _buildSummaryItem('Reports', '${trend.reportCount}', Icons.description),
+              const SizedBox(width: 16),
+              _buildSummaryItem('Timespan', '${trend.timespan.months} months', Icons.calendar_today),
+              const SizedBox(width: 16),
+              _buildSummaryItem('Vitals', '${trend.vitals.length}', Icons.favorite),
+            ],
+          ),
+          if (trend.hasAnomalies) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.orange[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.warning, size: 16, color: Colors.orange[700]),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Anomalies detected',
+                    style: TextStyle(color: Colors.orange[700], fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryItem(String label, String value, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, size: 20, color: Colors.blue[600]),
+        const SizedBox(height: 4),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+      ],
+    );
+  }
+
+  Widget _buildVitalSelector() {
+    final vitals = _selectedTrend!.vitals.keys.toList();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: DropdownButtonFormField<String>(
+        value: _selectedVital,
+        decoration: const InputDecoration(
+          labelText: 'Select Vital Parameter',
+          border: OutlineInputBorder(),
+        ),
+        items: vitals.map((vital) {
+          final vitalData = _selectedTrend!.vitals[vital]!;
+          return DropdownMenuItem(
+            value: vital,
+            child: Row(
+              children: [
+                Text(_formatVitalName(vital)),
+                const Spacer(),
+                Text(
+                  vitalData.formattedTrendDirection,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _getTrendColor(vitalData.trendDirection),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+        onChanged: (value) {
+          setState(() => _selectedVital = value);
+        },
+      ),
+    );
+  }
+
+  Widget _buildTrendChart() {
+    if (_selectedVital == null) {
+      return const Center(child: Text('Select a vital parameter to view chart'));
+    }
+
+    final vitalData = _selectedTrend!.vitals[_selectedVital]!;
+    final predictions = _selectedTrend!.predictions[_selectedVital] ?? [];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildVitalInfo(vitalData),
+          const SizedBox(height: 16),
+          Expanded(child: _buildLineChart(vitalData, predictions)),
+          if (predictions.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _buildPredictionsTable(predictions),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVitalInfo(VitalTrendData vitalData) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _formatVitalName(vitalData.vitalName),
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _buildVitalStat('Current', '${vitalData.currentValue.toStringAsFixed(1)} ${vitalData.unit}'),
+              const SizedBox(width: 16),
+              _buildVitalStat('Average', '${vitalData.meanValue.toStringAsFixed(1)} ${vitalData.unit}'),
+              const SizedBox(width: 16),
+              _buildVitalStat('Trend', vitalData.trendInterpretation),
+            ],
+          ),
+          if (vitalData.anomalies.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.red[100],
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '${vitalData.anomalies.length} anomalie(s) detected',
+                style: TextStyle(color: Colors.red[700], fontSize: 12),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVitalStat(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+
+  Widget _buildLineChart(VitalTrendData vitalData, List<PredictionData> predictions) {
+    final dataPoints = vitalData.dataPoints;
+    final spots = dataPoints.asMap().entries.map((entry) {
+      return FlSpot(entry.key.toDouble(), entry.value.value);
+    }).toList();
+
+    // Add prediction points
+    final predictionSpots = predictions.asMap().entries.map((entry) {
+      return FlSpot(
+        (dataPoints.length + entry.key).toDouble(),
+        entry.value.predictedValue,
+      );
+    }).toList();
+
+    return LineChart(
+      LineChartData(
+        gridData: FlGridData(show: true),
+        titlesData: FlTitlesData(
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 60,
+              getTitlesWidget: (value, meta) {
+                return Text(
+                  value.toStringAsFixed(1),
+                  style: const TextStyle(fontSize: 12),
+                );
+              },
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 30,
+              getTitlesWidget: (value, meta) {
+                final index = value.toInt();
+                if (index < dataPoints.length) {
+                  final date = dataPoints[index].date;
+                  return Text(
+                    '${date.month}/${date.year.toString().substring(2)}',
+                    style: const TextStyle(fontSize: 10),
+                  );
+                } else if (predictions.isNotEmpty) {
+                  final predIndex = index - dataPoints.length;
+                  if (predIndex < predictions.length) {
+                    final date = predictions[predIndex].date;
+                    return Text(
+                      '${date.month}/${date.year.toString().substring(2)}',
+                      style: TextStyle(fontSize: 10, color: Colors.blue[600]),
+                    );
+                  }
+                }
+                return const Text('');
+              },
+            ),
+          ),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(show: true),
+        lineBarsData: [
+          // Historical data line
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            color: Colors.blue,
+            barWidth: 3,
+            dotData: FlDotData(show: true),
+          ),
+          // Prediction line
+          if (predictionSpots.isNotEmpty)
+            LineChartBarData(
+              spots: predictionSpots,
+              isCurved: true,
+              color: Colors.blue[300],
+              barWidth: 2,
+              dotData: FlDotData(show: true),
+              dashArray: [5, 5], // Dashed line for predictions
+            ),
+        ],
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
+              return touchedBarSpots.map((barSpot) {
+                final isHistorical = barSpot.x < dataPoints.length;
+                final prefix = isHistorical ? 'Actual: ' : 'Predicted: ';
+                return LineTooltipItem(
+                  '$prefix${barSpot.y.toStringAsFixed(1)} ${vitalData.unit}',
+                  TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                );
+              }).toList();
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPredictionsTable(List<PredictionData> predictions) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blue[50],
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
+              ),
+            ),
+            child: const Text(
+              'Future Predictions',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          ...predictions.map((prediction) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: Colors.grey[200]!)),
+                ),
+                child: Row(
+                  children: [
+                    Text('${prediction.monthsAhead} months:'),
+                    const Spacer(),
+                    Text(
+                      '${prediction.predictedValue.toStringAsFixed(1)} ± ${(prediction.confidenceInterval.upper - prediction.confidenceInterval.lower).toStringAsFixed(1)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.green[100],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        prediction.confidencePercentage,
+                        style: TextStyle(fontSize: 10, color: Colors.green[700]),
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+
+  String _formatVitalName(String vital) {
+    return vital
+        .replaceAll('_', ' ')
+        .split(' ')
+        .map((word) => word[0].toUpperCase() + word.substring(1))
+        .join(' ');
+  }
+
+  Color _getTrendColor(String trendDirection) {
     switch (trendDirection) {
       case 'increasing':
-        return 'Trending Up ↗️';
+        return Colors.red;
       case 'decreasing':
-        return 'Trending Down ↘️';
+        return Colors.orange;
       case 'stable':
-        return 'Stable ➡️';
+        return Colors.green;
       default:
-        return trendDirection;
+        return Colors.grey;
     }
-  }
-
-  String get trendInterpretation {
-    if (trendSignificance < 0.3) {
-      return 'No clear trend detected';
-    } else if (trendSignificance < 0.6) {
-      return 'Mild ${trendDirection} trend';
-    } else if (trendSignificance < 0.8) {
-      return 'Moderate ${trendDirection} trend';
-    } else {
-      return 'Strong ${trendDirection} trend';
-    }
-  }
-}
-
-class PredictionData {
-  final DateTime date;
-  final double predictedValue;
-  final ConfidenceIntervalData confidenceInterval;
-  final double confidence;
-  final int monthsAhead;
-
-  PredictionData({
-    required this.date,
-    required this.predictedValue,
-    required this.confidenceInterval,
-    required this.confidence,
-    required this.monthsAhead,
-  });
-
-  factory PredictionData.fromMap(Map<String, dynamic> data) {
-    return PredictionData(
-      date: DateTime.parse(data['date']),
-      predictedValue: (data['predictedValue'] ?? 0).toDouble(),
-      confidenceInterval: ConfidenceIntervalData.fromMap(
-        Map<String, dynamic>.from(data['confidenceInterval'] ?? {})
-      ),
-      confidence: (data['confidence'] ?? 0).toDouble(),
-      monthsAhead: data['monthsAhead'] ?? 0,
-    );
-  }
-
-  String get formattedDate {
-    return '${date.month}/${date.year.toString().substring(2)}';
-  }
-
-  String get confidencePercentage {
-    return '${(confidence * 100).round()}%';
-  }
-}
-
-class FeatureImportanceData {
-  final String featureName;
-  final double importance;
-  final String interpretation;
-
-  FeatureImportanceData({
-    required this.featureName,
-    required this.importance,
-    required this.interpretation,
-  });
-
-  factory FeatureImportanceData.fromMap(Map<String, dynamic> data) {
-    return FeatureImportanceData(
-      featureName: data['feature_name'] ?? '',
-      importance: (data['importance'] ?? 0).toDouble(),
-      interpretation: data['interpretation'] ?? '',
-    );
-  }
-
-  String get formattedImportance => '${(importance * 100).toStringAsFixed(1)}%';
-}
-
-// Additional data model classes...
-class TimeSpanData {
-  final int days;
-  final int months;
-  final DateTime startDate;
-  final DateTime endDate;
-
-  TimeSpanData({
-    required this.days,
-    required this.months,
-    required this.startDate,
-    required this.endDate,
-  });
-
-  factory TimeSpanData.fromMap(Map<String, dynamic> data) {
-    return TimeSpanData(
-      days: data['days'] ?? 0,
-      months: data['months'] ?? 0,
-      startDate: DateTime.parse(data['startDate'] ?? DateTime.now().toISOString()),
-      endDate: DateTime.parse(data['endDate'] ?? DateTime.now().toISOString()),
-    );
-  }
-}
-
-class AnomalyData {
-  final int index;
-  final double value;
-  final double zScore;
-  final String severity;
-
-  AnomalyData({
-    required this.index,
-    required this.value,
-    required this.zScore,
-    required this.severity,
-  });
-
-  factory AnomalyData.fromMap(Map<String, dynamic> data) {
-    return AnomalyData(
-      index: data['index'] ?? 0,
-      value: (data['value'] ?? 0).toDouble(),
-      zScore: (data['zScore'] ?? 0).toDouble(),
-      severity: data['severity'] ?? 'low',
-    );
-  }
-}
-
-class DataPointData {
-  final DateTime date;
-  final double value;
-  final String unit;
-  final String status;
-  final String reportId;
-
-  DataPointData({
-    required this.date,
-    required this.value,
-    required this.unit,
-    required this.status,
-    required this.reportId,
-  });
-
-  factory DataPointData.fromMap(Map<String, dynamic> data) {
-    return DataPointData(
-      date: DateTime.parse(data['date']),
-      value: (data['value'] ?? 0).toDouble(),
-      unit: data['unit'] ?? '',
-      status: data['status'] ?? 'normal',
-      reportId: data['reportId'] ?? '',
-    );
-  }
-}
-
-class DateRangeData {
-  final DateTime start;
-  final DateTime end;
-
-  DateRangeData({required this.start, required this.end});
-
-  factory DateRangeData.fromMap(Map<String, dynamic> data) {
-    return DateRangeData(
-      start: DateTime.parse(data['start'] ?? DateTime.now().toISOString()),
-      end: DateTime.parse(data['end'] ?? DateTime.now().toISOString()),
-    );
-  }
-}
-
-class ConfidenceIntervalData {
-  final double lower;
-  final double upper;
-
-  ConfidenceIntervalData({required this.lower, required this.upper});
-
-  factory ConfidenceIntervalData.fromMap(Map<String, dynamic> data) {
-    return ConfidenceIntervalData(
-      lower: (data['lower'] ?? 0).toDouble(),
-      upper: (data['upper'] ?? 0).toDouble(),
-    );
   }
 }
 ```
 
-### Phase 2: Backend Integration Points
+### Phase 5: Integration and Dependencies
 
-#### **2.1 Trigger Trend Detection Automatically**
+#### **5.1 Add Required Dependencies**
 
-Modify the existing lab report classification function to trigger trend detection:
+Add to `pubspec.yaml`:
 
-```javascript
-// In extractLabReportContent function, after storing the lab report:
-exports.extractLabReportContent = onCall(
-  {cors: true, secrets: [geminiApiKey]},
-  async (request) => {
-    // ... existing extraction logic ...
-    
-    // After successful classification and storage:
-    if (labReportType && labReportType !== 'other_lab_tests') {
-      try {
-        // Check if this triggers trend analysis threshold
-        await checkTrendAnalysisTrigger(auth.uid, labReportType);
-      } catch (error) {
-        console.log('Trend analysis check failed:', error);
-        // Don't fail the main operation
-      }
-    }
-    
-    return result;
-  }
-);
-
-async function checkTrendAnalysisTrigger(userId, labReportType) {
-  const db = admin.firestore();
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  # ... existing dependencies ...
+  fl_chart: ^0.68.0  # For interactive charts
   
-  // Count reports of this type
-  const countSnapshot = await db
-    .collection('users')
-    .doc(userId)
-    .collection('lab_report_content')
-    .where('labReportType', '==', labReportType)
-    .get();
-  
-  const reportCount = countSnapshot.size;
-  
-  console.log(`📊 User ${userId} has ${reportCount} reports of type ${labReportType}`);
-  
-  // Trigger trend analysis if threshold reached
-  if (reportCount >= 5) {
-    // Check if trend analysis was already done recently
-    const lastTrendRef = db
-      .collection('users')
-      .doc(userId)
-      .collection('latest_trends')
-      .doc(labReportType);
-    
-    const lastTrend = await lastTrendRef.get();
-    const shouldUpdate = !lastTrend.exists || 
-      (lastTrend.data()?.reportCount || 0) < reportCount;
-    
-    if (shouldUpdate) {
-      console.log(`🎯 Triggering trend analysis for ${labReportType}`);
-      
-      // Call trend detection function
-      const trendAnalysis = await analyzeLabTrends(userId, labReportType);
-      if (trendAnalysis.shouldGenerateGraphs) {
-        const trendData = await generateTrendData(userId, labReportType, trendAnalysis);
-        await storeTrendAnalysis(userId, labReportType, trendData);
-        
-        // Send notification about new trends
-        await sendTrendNotification(userId, labReportType, trendData);
-      }
-    }
-  }
-}
-
-async function sendTrendNotification(userId, labReportType, trendData) {
-  // Store notification for user
-  const db = admin.firestore();
-  
-  const notification = {
-    type: 'trend_analysis',
-    title: 'New Health Trends Detected',
-    message: `We've analyzed your ${labReportType} reports and found interesting trends.`,
-    labReportType: labReportType,
-    vitalsAnalyzed: Object.keys(trendData.vitals).length,
-    hasAnomalies: Object.values(trendData.vitals).some(v => v.anomalies.length > 0),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    read: false
-  };
-  
-  await db
-    .collection('users')
-    .doc(userId)
-    .collection('notifications')
-    .add(notification);
-  
-  console.log(`🔔 Trend notification sent to user ${userId}`);
-}
+dev_dependencies:
+  # ... existing dev dependencies ...
 ```
 
-### Phase 3: Frontend Services
+#### **5.2 Add Navigation Integration**
 
-#### **3.1 Trend Analysis Service**
-
-**File:** `lib/services/trend_analysis_service.dart`
+Update existing screens to include trend analysis navigation:
 
 ```dart
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-
-class TrendAnalysisService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static final FirebaseFunctions _functions = FirebaseFunctions.instance;
-
-  /// Get trend analysis for a specific lab report type
-  static Future<TrendAnalysisData?> getTrendAnalysis(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return null;
-
-      final trendDoc = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('latest_trends')
-          .doc(labReportType)
-          .get();
-
-      if (trendDoc.exists) {
-        return TrendAnalysisData.fromFirestore(trendDoc.data()!);
-      }
-      return null;
-    } catch (e) {
-      throw Exception('Failed to get trend analysis: $e');
-    }
-  }
-
-  /// Get all available trend analyses for user
-  static Future<List<TrendAnalysisData>> getAllTrendAnalyses() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return [];
-
-      final trendsSnapshot = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('latest_trends')
-          .get();
-
-      return trendsSnapshot.docs
-          .map((doc) => TrendAnalysisData.fromFirestore(doc.data()))
-          .toList();
-    } catch (e) {
-      throw Exception('Failed to get trend analyses: $e');
-    }
-  }
-
-  /// Manually trigger trend detection for a lab report type
-  static Future<bool> triggerTrendDetection(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return false;
-
-      final callable = _functions.httpsCallable('detectLabTrends');
-      final result = await callable.call({
-        'userId': user.uid,
-        'labReportType': labReportType,
-      });
-
-      return result.data['success'] ?? false;
-    } catch (e) {
-      throw Exception('Failed to trigger trend detection: $e');
-    }
-  }
-
-  /// Check if trend analysis is available for a lab report type
-  static Future<bool> isTrendAnalysisAvailable(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return false;
-
-      // Count reports of this type
-      final countSnapshot = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('lab_report_content')
-          .where('labReportType', '==', labReportType)
-          .get();
-
-      return countSnapshot.size >= 5;
-    } catch (e) {
-      return false;
-    }
-  }
-}
-
-/// Data models for trend analysis
-class TrendAnalysisData {
-  final String labReportType;
-  final int reportCount;
-  final TimeSpanData timespan;
-  final Map<String, VitalTrendData> vitals;
-  final Map<String, List<PredictionData>> predictions;
-  final DateTime generatedAt;
-  final String modelType;
-  final Map<String, dynamic>? mlInsights;
-  final Map<String, List<FeatureImportanceData>>? featureImportance;
-
-  TrendAnalysisData({
-    required this.labReportType,
-    required this.reportCount,
-    required this.timespan,
-    required this.vitals,
-    required this.predictions,
-    required this.generatedAt,
-    required this.modelType,
-    this.mlInsights,
-    this.featureImportance,
-  });
-
-  factory TrendAnalysisData.fromFirestore(Map<String, dynamic> data) {
-    final vitalsMap = <String, VitalTrendData>{};
-    final vitalsData = data['vitals'] as Map<String, dynamic>? ?? {};
-    
-    vitalsData.forEach((key, value) {
-      vitalsMap[key] = VitalTrendData.fromMap(Map<String, dynamic>.from(value));
-    });
-
-    final predictionsMap = <String, List<PredictionData>>{};
-    final predictionsData = data['predictions'] as Map<String, dynamic>? ?? {};
-    
-    predictionsData.forEach((key, value) {
-      final predictionsList = (value as List<dynamic>)
-          .map((item) => PredictionData.fromMap(Map<String, dynamic>.from(item)))
-          .toList();
-      predictionsMap[key] = predictionsList;
-    });
-
-    // Parse ML insights
-    final mlInsightsMap = <String, dynamic>{};
-    final mlInsightsData = data['mlInsights'] as Map<String, dynamic>? ?? {};
-    mlInsightsData.forEach((key, value) {
-      mlInsightsMap[key] = value;
-    });
-
-    // Parse feature importance
-    final featureImportanceMap = <String, List<FeatureImportanceData>>{};
-    vitalsData.forEach((vitalName, vitalData) {
-      if (vitalData is Map<String, dynamic> && vitalData['featureImportance'] != null) {
-        final importanceList = (vitalData['featureImportance'] as List<dynamic>)
-            .map((item) => FeatureImportanceData.fromMap(Map<String, dynamic>.from(item)))
-            .toList();
-        featureImportanceMap[vitalName] = importanceList;
-      }
-    });
-
-    return TrendAnalysisData(
-      labReportType: data['labReportType'] ?? '',
-      reportCount: data['reportCount'] ?? 0,
-      timespan: TimeSpanData.fromMap(Map<String, dynamic>.from(data['timespan'] ?? {})),
-      vitals: vitalsMap,
-      predictions: predictionsMap,
-      generatedAt: DateTime.parse(data['generatedAt'] ?? DateTime.now().toISOString()),
-      modelType: data['modelType'] ?? 'linear',
-      mlInsights: mlInsightsMap.isNotEmpty ? mlInsightsMap : null,
-      featureImportance: featureImportanceMap.isNotEmpty ? featureImportanceMap : null,
-    );
-  }
-
-  bool get isMLEnhanced => modelType == 'xgboost';
-  
-  bool get hasCrossPatientInsights => 
-    mlInsights?.isNotEmpty ?? false;
-}
-
-class VitalTrendData {
-  final String vitalName;
-  final int dataCount;
-  final double currentValue;
-  final double meanValue;
-  final double standardDeviation;
-  final String trendDirection;
-  final double trendSlope;
-  final double trendSignificance;
-  final List<AnomalyData> anomalies;
-  final List<DataPointData> dataPoints;
-  final String unit;
-  final DateRangeData dateRange;
-
-  VitalTrendData({
-    required this.vitalName,
-    required this.dataCount,
-    required this.currentValue,
-    required this.meanValue,
-    required this.standardDeviation,
-    required this.trendDirection,
-    required this.trendSlope,
-    required this.trendSignificance,
-    required this.anomalies,
-    required this.dataPoints,
-    required this.unit,
-    required this.dateRange,
-  });
-
-  factory VitalTrendData.fromMap(Map<String, dynamic> data) {
-    return VitalTrendData(
-      vitalName: data['vitalName'] ?? '',
-      dataCount: data['dataCount'] ?? 0,
-      currentValue: (data['currentValue'] ?? 0).toDouble(),
-      meanValue: (data['meanValue'] ?? 0).toDouble(),
-      standardDeviation: (data['standardDeviation'] ?? 0).toDouble(),
-      trendDirection: data['trendDirection'] ?? 'stable',
-      trendSlope: (data['trendSlope'] ?? 0).toDouble(),
-      trendSignificance: (data['trendSignificance'] ?? 0).toDouble(),
-      anomalies: (data['anomalies'] as List<dynamic>? ?? [])
-          .map((item) => AnomalyData.fromMap(Map<String, dynamic>.from(item)))
-          .toList(),
-      dataPoints: (data['dataPoints'] as List<dynamic>? ?? [])
-          .map((item) => DataPointData.fromMap(Map<String, dynamic>.from(item)))
-          .toList(),
-      unit: data['unit'] ?? '',
-      dateRange: DateRangeData.fromMap(Map<String, dynamic>.from(data['dateRange'] ?? {})),
-    );
-  }
-
-  bool get isConcerrning {
-    return trendSignificance > 0.7 && 
-           (trendDirection == 'increasing' || trendDirection == 'decreasing') ||
-           anomalies.any((anomaly) => anomaly.severity == 'high');
-  }
-
-  String get formattedTrendDirection {
-    switch (trendDirection) {
-      case 'increasing':
-        return 'Trending Up ↗️';
-      case 'decreasing':
-        return 'Trending Down ↘️';
-      case 'stable':
-        return 'Stable ➡️';
-      default:
-        return trendDirection;
-    }
-  }
-
-  String get trendInterpretation {
-    if (trendSignificance < 0.3) {
-      return 'No clear trend detected';
-    } else if (trendSignificance < 0.6) {
-      return 'Mild ${trendDirection} trend';
-    } else if (trendSignificance < 0.8) {
-      return 'Moderate ${trendDirection} trend';
-    } else {
-      return 'Strong ${trendDirection} trend';
-    }
-  }
-}
-
-class PredictionData {
-  final DateTime date;
-  final double predictedValue;
-  final ConfidenceIntervalData confidenceInterval;
-  final double confidence;
-  final int monthsAhead;
-
-  PredictionData({
-    required this.date,
-    required this.predictedValue,
-    required this.confidenceInterval,
-    required this.confidence,
-    required this.monthsAhead,
-  });
-
-  factory PredictionData.fromMap(Map<String, dynamic> data) {
-    return PredictionData(
-      date: DateTime.parse(data['date']),
-      predictedValue: (data['predictedValue'] ?? 0).toDouble(),
-      confidenceInterval: ConfidenceIntervalData.fromMap(
-        Map<String, dynamic>.from(data['confidenceInterval'] ?? {})
+// In medical_records_screen.dart or dashboard
+FloatingActionButton(
+  onPressed: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const TrendAnalysisScreen(),
       ),
-      confidence: (data['confidence'] ?? 0).toDouble(),
-      monthsAhead: data['monthsAhead'] ?? 0,
     );
-  }
+  },
+  child: const Icon(Icons.trending_up),
+),
 
-  String get formattedDate {
-    return '${date.month}/${date.year.toString().substring(2)}';
-  }
-
-  String get confidencePercentage {
-    return '${(confidence * 100).round()}%';
-  }
-}
-
-class FeatureImportanceData {
-  final String featureName;
-  final double importance;
-  final String interpretation;
-
-  FeatureImportanceData({
-    required this.featureName,
-    required this.importance,
-    required this.interpretation,
-  });
-
-  factory FeatureImportanceData.fromMap(Map<String, dynamic> data) {
-    return FeatureImportanceData(
-      featureName: data['feature_name'] ?? '',
-      importance: (data['importance'] ?? 0).toDouble(),
-      interpretation: data['interpretation'] ?? '',
-    );
-  }
-
-  String get formattedImportance => '${(importance * 100).toStringAsFixed(1)}%';
-}
-
-// Additional data model classes...
-class TimeSpanData {
-  final int days;
-  final int months;
-  final DateTime startDate;
-  final DateTime endDate;
-
-  TimeSpanData({
-    required this.days,
-    required this.months,
-    required this.startDate,
-    required this.endDate,
-  });
-
-  factory TimeSpanData.fromMap(Map<String, dynamic> data) {
-    return TimeSpanData(
-      days: data['days'] ?? 0,
-      months: data['months'] ?? 0,
-      startDate: DateTime.parse(data['startDate'] ?? DateTime.now().toISOString()),
-      endDate: DateTime.parse(data['endDate'] ?? DateTime.now().toISOString()),
-    );
-  }
-}
-
-class AnomalyData {
-  final int index;
-  final double value;
-  final double zScore;
-  final String severity;
-
-  AnomalyData({
-    required this.index,
-    required this.value,
-    required this.zScore,
-    required this.severity,
-  });
-
-  factory AnomalyData.fromMap(Map<String, dynamic> data) {
-    return AnomalyData(
-      index: data['index'] ?? 0,
-      value: (data['value'] ?? 0).toDouble(),
-      zScore: (data['zScore'] ?? 0).toDouble(),
-      severity: data['severity'] ?? 'low',
-    );
-  }
-}
-
-class DataPointData {
-  final DateTime date;
-  final double value;
-  final String unit;
-  final String status;
-  final String reportId;
-
-  DataPointData({
-    required this.date,
-    required this.value,
-    required this.unit,
-    required this.status,
-    required this.reportId,
-  });
-
-  factory DataPointData.fromMap(Map<String, dynamic> data) {
-    return DataPointData(
-      date: DateTime.parse(data['date']),
-      value: (data['value'] ?? 0).toDouble(),
-      unit: data['unit'] ?? '',
-      status: data['status'] ?? 'normal',
-      reportId: data['reportId'] ?? '',
-    );
-  }
-}
-
-class DateRangeData {
-  final DateTime start;
-  final DateTime end;
-
-  DateRangeData({required this.start, required this.end});
-
-  factory DateRangeData.fromMap(Map<String, dynamic> data) {
-    return DateRangeData(
-      start: DateTime.parse(data['start'] ?? DateTime.now().toISOString()),
-      end: DateTime.parse(data['end'] ?? DateTime.now().toISOString()),
-    );
-  }
-}
-
-class ConfidenceIntervalData {
-  final double lower;
-  final double upper;
-
-  ConfidenceIntervalData({required this.lower, required this.upper});
-
-  factory ConfidenceIntervalData.fromMap(Map<String, dynamic> data) {
-    return ConfidenceIntervalData(
-      lower: (data['lower'] ?? 0).toDouble(),
-      upper: (data['upper'] ?? 0).toDouble(),
-    );
-  }
-}
-```
-
-### Phase 2: Backend Integration Points
-
-#### **2.1 Trigger Trend Detection Automatically**
-
-Modify the existing lab report classification function to trigger trend detection:
-
-```javascript
-// In extractLabReportContent function, after storing the lab report:
-exports.extractLabReportContent = onCall(
-  {cors: true, secrets: [geminiApiKey]},
-  async (request) => {
-    // ... existing extraction logic ...
-    
-    // After successful classification and storage:
-    if (labReportType && labReportType !== 'other_lab_tests') {
-      try {
-        // Check if this triggers trend analysis threshold
-        await checkTrendAnalysisTrigger(auth.uid, labReportType);
-      } catch (error) {
-        console.log('Trend analysis check failed:', error);
-        // Don't fail the main operation
-      }
-    }
-    
-    return result;
-  }
-);
-
-async function checkTrendAnalysisTrigger(userId, labReportType) {
-  const db = admin.firestore();
-  
-  // Count reports of this type
-  const countSnapshot = await db
-    .collection('users')
-    .doc(userId)
-    .collection('lab_report_content')
-    .where('labReportType', '==', labReportType)
-    .get();
-  
-  const reportCount = countSnapshot.size;
-  
-  console.log(`📊 User ${userId} has ${reportCount} reports of type ${labReportType}`);
-  
-  // Trigger trend analysis if threshold reached
-  if (reportCount >= 5) {
-    // Check if trend analysis was already done recently
-    const lastTrendRef = db
-      .collection('users')
-      .doc(userId)
-      .collection('latest_trends')
-      .doc(labReportType);
-    
-    const lastTrend = await lastTrendRef.get();
-    const shouldUpdate = !lastTrend.exists || 
-      (lastTrend.data()?.reportCount || 0) < reportCount;
-    
-    if (shouldUpdate) {
-      console.log(`🎯 Triggering trend analysis for ${labReportType}`);
-      
-      // Call trend detection function
-      const trendAnalysis = await analyzeLabTrends(userId, labReportType);
-      if (trendAnalysis.shouldGenerateGraphs) {
-        const trendData = await generateTrendData(userId, labReportType, trendAnalysis);
-        await storeTrendAnalysis(userId, labReportType, trendData);
-        
-        // Send notification about new trends
-        await sendTrendNotification(userId, labReportType, trendData);
-      }
-    }
-  }
-}
-
-async function sendTrendNotification(userId, labReportType, trendData) {
-  // Store notification for user
-  const db = admin.firestore();
-  
-  const notification = {
-    type: 'trend_analysis',
-    title: 'New Health Trends Detected',
-    message: `We've analyzed your ${labReportType} reports and found interesting trends.`,
-    labReportType: labReportType,
-    vitalsAnalyzed: Object.keys(trendData.vitals).length,
-    hasAnomalies: Object.values(trendData.vitals).some(v => v.anomalies.length > 0),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    read: false
-  };
-  
-  await db
-    .collection('users')
-    .doc(userId)
-    .collection('notifications')
-    .add(notification);
-  
-  console.log(`🔔 Trend notification sent to user ${userId}`);
-}
-```
-
-### Phase 3: Frontend Services
-
-#### **3.1 Trend Analysis Service**
-
-**File:** `lib/services/trend_analysis_service.dart`
-
-```dart
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-
-class TrendAnalysisService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static final FirebaseFunctions _functions = FirebaseFunctions.instance;
-
-  /// Get trend analysis for a specific lab report type
-  static Future<TrendAnalysisData?> getTrendAnalysis(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return null;
-
-      final trendDoc = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('latest_trends')
-          .doc(labReportType)
-          .get();
-
-      if (trendDoc.exists) {
-        return TrendAnalysisData.fromFirestore(trendDoc.data()!);
-      }
-      return null;
-    } catch (e) {
-      throw Exception('Failed to get trend analysis: $e');
-    }
-  }
-
-  /// Get all available trend analyses for user
-  static Future<List<TrendAnalysisData>> getAllTrendAnalyses() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return [];
-
-      final trendsSnapshot = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('latest_trends')
-          .get();
-
-      return trendsSnapshot.docs
-          .map((doc) => TrendAnalysisData.fromFirestore(doc.data()))
-          .toList();
-    } catch (e) {
-      throw Exception('Failed to get trend analyses: $e');
-    }
-  }
-
-  /// Manually trigger trend detection for a lab report type
-  static Future<bool> triggerTrendDetection(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return false;
-
-      final callable = _functions.httpsCallable('detectLabTrends');
-      final result = await callable.call({
-        'userId': user.uid,
-        'labReportType': labReportType,
-      });
-
-      return result.data['success'] ?? false;
-    } catch (e) {
-      throw Exception('Failed to trigger trend detection: $e');
-    }
-  }
-
-  /// Check if trend analysis is available for a lab report type
-  static Future<bool> isTrendAnalysisAvailable(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return false;
-
-      // Count reports of this type
-      final countSnapshot = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('lab_report_content')
-          .where('labReportType', '==', labReportType)
-          .get();
-
-      return countSnapshot.size >= 5;
-    } catch (e) {
-      return false;
-    }
-  }
-}
-
-/// Data models for trend analysis
-class TrendAnalysisData {
-  final String labReportType;
-  final int reportCount;
-  final TimeSpanData timespan;
-  final Map<String, VitalTrendData> vitals;
-  final Map<String, List<PredictionData>> predictions;
-  final DateTime generatedAt;
-  final String modelType;
-  final Map<String, dynamic>? mlInsights;
-  final Map<String, List<FeatureImportanceData>>? featureImportance;
-
-  TrendAnalysisData({
-    required this.labReportType,
-    required this.reportCount,
-    required this.timespan,
-    required this.vitals,
-    required this.predictions,
-    required this.generatedAt,
-    required this.modelType,
-    this.mlInsights,
-    this.featureImportance,
-  });
-
-  factory TrendAnalysisData.fromFirestore(Map<String, dynamic> data) {
-    final vitalsMap = <String, VitalTrendData>{};
-    final vitalsData = data['vitals'] as Map<String, dynamic>? ?? {};
-    
-    vitalsData.forEach((key, value) {
-      vitalsMap[key] = VitalTrendData.fromMap(Map<String, dynamic>.from(value));
-    });
-
-    final predictionsMap = <String, List<PredictionData>>{};
-    final predictionsData = data['predictions'] as Map<String, dynamic>? ?? {};
-    
-    predictionsData.forEach((key, value) {
-      final predictionsList = (value as List<dynamic>)
-          .map((item) => PredictionData.fromMap(Map<String, dynamic>.from(item)))
-          .toList();
-      predictionsMap[key] = predictionsList;
-    });
-
-    // Parse ML insights
-    final mlInsightsMap = <String, dynamic>{};
-    final mlInsightsData = data['mlInsights'] as Map<String, dynamic>? ?? {};
-    mlInsightsData.forEach((key, value) {
-      mlInsightsMap[key] = value;
-    });
-
-    // Parse feature importance
-    final featureImportanceMap = <String, List<FeatureImportanceData>>{};
-       vitalsData.forEach((vitalName, vitalData) {
-      if (vitalData is Map<String, dynamic> && vitalData['featureImportance'] != null) {
-        final importanceList = (vitalData['featureImportance'] as List<dynamic>)
-            .map((item) => FeatureImportanceData.fromMap(Map<String, dynamic>.from(item)))
-            .toList();
-        featureImportanceMap[vitalName] = importanceList;
-      }
-    });
-
-    return TrendAnalysisData(
-      labReportType: data['labReportType'] ?? '',
-      reportCount: data['reportCount'] ?? 0,
-      timespan: TimeSpanData.fromMap(Map<String, dynamic>.from(data['timespan'] ?? {})),
-      vitals: vitalsMap,
-      predictions: predictionsMap,
-      generatedAt: DateTime.parse(data['generatedAt'] ?? DateTime.now().toISOString()),
-      modelType: data['modelType'] ?? 'linear',
-      mlInsights: mlInsightsMap.isNotEmpty ? mlInsightsMap : null,
-      featureImportance: featureImportanceMap.isNotEmpty ? featureImportanceMap : null,
-    );
-  }
-
-  bool get isMLEnhanced => modelType == 'xgboost';
-  
-  bool get hasCrossPatientInsights => 
-    mlInsights?.isNotEmpty ?? false;
-}
-
-class VitalTrendData {
-  final String vitalName;
-  final int dataCount;
-  final double currentValue;
-  final double meanValue;
-  final double standardDeviation;
-  final String trendDirection;
-  final double trendSlope;
-  final double trendSignificance;
-  final List<AnomalyData> anomalies;
-  final List<DataPointData> dataPoints;
-  final String unit;
-  final DateRangeData dateRange;
-
-  VitalTrendData({
-    required this.vitalName,
-    required this.dataCount,
-    required this.currentValue,
-    required this.meanValue,
-    required this.standardDeviation,
-    required this.trendDirection,
-    required this.trendSlope,
-    required this.trendSignificance,
-    required this.anomalies,
-    required this.dataPoints,
-    required this.unit,
-    required this.dateRange,
-  });
-
-  factory VitalTrendData.fromMap(Map<String, dynamic> data) {
-    return VitalTrendData(
-      vitalName: data['vitalName'] ?? '',
-      dataCount: data['dataCount'] ?? 0,
-      currentValue: (data['currentValue'] ?? 0).toDouble(),
-      meanValue: (data['meanValue'] ?? 0).toDouble(),
-      standardDeviation: (data['standardDeviation'] ?? 0).toDouble(),
-      trendDirection: data['trendDirection'] ?? 'stable',
-      trendSlope: (data['trendSlope'] ?? 0).toDouble(),
-      trendSignificance: (data['trendSignificance'] ?? 0).toDouble(),
-      anomalies: (data['anomalies'] as List<dynamic>? ?? [])
-          .map((item) => AnomalyData.fromMap(Map<String, dynamic>.from(item)))
-          .toList(),
-      dataPoints: (data['dataPoints'] as List<dynamic>? ?? [])
-          .map((item) => DataPointData.fromMap(Map<String, dynamic>.from(item)))
-          .toList(),
-      unit: data['unit'] ?? '',
-      dateRange: DateRangeData.fromMap(Map<String, dynamic>.from(data['dateRange'] ?? {})),
-    );
-  }
-
-  bool get isConcerrning {
-    return trendSignificance > 0.7 && 
-           (trendDirection == 'increasing' || trendDirection == 'decreasing') ||
-           anomalies.any((anomaly) => anomaly.severity == 'high');
-  }
-
-  String get formattedTrendDirection {
-    switch (trendDirection) {
-      case 'increasing':
-        return 'Trending Up ↗️';
-      case 'decreasing':
-        return 'Trending Down ↘️';
-      case 'stable':
-        return 'Stable ➡️';
-      default:
-        return trendDirection;
-    }
-  }
-
-  String get trendInterpretation {
-    if (trendSignificance < 0.3) {
-      return 'No clear trend detected';
-    } else if (trendSignificance < 0.6) {
-      return 'Mild ${trendDirection} trend';
-    } else if (trendSignificance < 0.8) {
-      return 'Moderate ${trendDirection} trend';
-    } else {
-      return 'Strong ${trendDirection} trend';
-    }
-  }
-}
-
-class PredictionData {
-  final DateTime date;
-  final double predictedValue;
-  final ConfidenceIntervalData confidenceInterval;
-  final double confidence;
-  final int monthsAhead;
-
-  PredictionData({
-    required this.date,
-    required this.predictedValue,
-    required this.confidenceInterval,
-    required this.confidence,
-    required this.monthsAhead,
-  });
-
-  factory PredictionData.fromMap(Map<String, dynamic> data) {
-    return PredictionData(
-      date: DateTime.parse(data['date']),
-      predictedValue: (data['predictedValue'] ?? 0).toDouble(),
-      confidenceInterval: ConfidenceIntervalData.fromMap(
-        Map<String, dynamic>.from(data['confidenceInterval'] ?? {})
+// Or add as a tab/menu item
+ListTile(
+  leading: const Icon(Icons.analytics),
+  title: const Text('Health Trends'),
+  onTap: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const TrendAnalysisScreen(),
       ),
-      confidence: (data['confidence'] ?? 0).toDouble(),
-      monthsAhead: data['monthsAhead'] ?? 0,
     );
-  }
-
-  String get formattedDate {
-    return '${date.month}/${date.year.toString().substring(2)}';
-  }
-
-  String get confidencePercentage {
-    return '${(confidence * 100).round()}%';
-  }
-}
-
-class FeatureImportanceData {
-  final String featureName;
-  final double importance;
-  final String interpretation;
-
-  FeatureImportanceData({
-    required this.featureName,
-    required this.importance,
-    required this.interpretation,
-  });
-
-  factory FeatureImportanceData.fromMap(Map<String, dynamic> data) {
-    return FeatureImportanceData(
-      featureName: data['feature_name'] ?? '',
-      importance: (data['importance'] ?? 0).toDouble(),
-      interpretation: data['interpretation'] ?? '',
-    );
-  }
-
-  String get formattedImportance => '${(importance * 100).toStringAsFixed(1)}%';
-}
-
-// Additional data model classes...
-class TimeSpanData {
-  final int days;
-  final int months;
-  final DateTime startDate;
-  final DateTime endDate;
-
-  TimeSpanData({
-    required this.days,
-    required this.months,
-    required this.startDate,
-    required this.endDate,
-  });
-
-  factory TimeSpanData.fromMap(Map<String, dynamic> data) {
-    return TimeSpanData(
-      days: data['days'] ?? 0,
-      months: data['months'] ?? 0,
-      startDate: DateTime.parse(data['startDate'] ?? DateTime.now().toISOString()),
-      endDate: DateTime.parse(data['endDate'] ?? DateTime.now().toISOString()),
-    );
-  }
-}
-
-class AnomalyData {
-  final int index;
-  final double value;
-  final double zScore;
-  final String severity;
-
-  AnomalyData({
-    required this.index,
-    required this.value,
-    required this.zScore,
-    required this.severity,
-  });
-
-  factory AnomalyData.fromMap(Map<String, dynamic> data) {
-    return AnomalyData(
-      index: data['index'] ?? 0,
-      value: (data['value'] ?? 0).toDouble(),
-      zScore: (data['zScore'] ?? 0).toDouble(),
-      severity: data['severity'] ?? 'low',
-    );
-  }
-}
-
-class DataPointData {
-  final DateTime date;
-  final double value;
-  final String unit;
-  final String status;
-  final String reportId;
-
-  DataPointData({
-    required this.date,
-    required this.value,
-    required this.unit,
-    required this.status,
-    required this.reportId,
-  });
-
-  factory DataPointData.fromMap(Map<String, dynamic> data) {
-    return DataPointData(
-      date: DateTime.parse(data['date']),
-      value: (data['value'] ?? 0).toDouble(),
-      unit: data['unit'] ?? '',
-      status: data['status'] ?? 'normal',
-      reportId: data['reportId'] ?? '',
-    );
-  }
-}
-
-class DateRangeData {
-  final DateTime start;
-  final DateTime end;
-
-  DateRangeData({required this.start, required this.end});
-
-  factory DateRangeData.fromMap(Map<String, dynamic> data) {
-    return DateRangeData(
-      start: DateTime.parse(data['start'] ?? DateTime.now().toISOString()),
-      end: DateTime.parse(data['end'] ?? DateTime.now().toISOString()),
-    );
-  }
-}
-
-class ConfidenceIntervalData {
-  final double lower;
-  final double upper;
-
-  ConfidenceIntervalData({required this.lower, required this.upper});
-
-  factory ConfidenceIntervalData.fromMap(Map<String, dynamic> data) {
-    return ConfidenceIntervalData(
-      lower: (data['lower'] ?? 0).toDouble(),
-      upper: (data['upper'] ?? 0).toDouble(),
-    );
-  }
-}
+  },
+),
 ```
 
-### Phase 2: Backend Integration Points
+### Phase 6: Testing and Deployment
 
-#### **2.1 Trigger Trend Detection Automatically**
+#### **6.1 Backend Testing**
 
-Modify the existing lab report classification function to trigger trend detection:
-
-```javascript
-// In extractLabReportContent function, after storing the lab report:
-exports.extractLabReportContent = onCall(
-  {cors: true, secrets: [geminiApiKey]},
-  async (request) => {
-    // ... existing extraction logic ...
-    
-    // After successful classification and storage:
-    if (labReportType && labReportType !== 'other_lab_tests') {
-      try {
-        // Check if this triggers trend analysis threshold
-        await checkTrendAnalysisTrigger(auth.uid, labReportType);
-      } catch (error) {
-        console.log('Trend analysis check failed:', error);
-        // Don't fail the main operation
-      }
-    }
-    
-    return result;
-  }
-);
-
-async function checkTrendAnalysisTrigger(userId, labReportType) {
-  const db = admin.firestore();
-  
-  // Count reports of this type
-  const countSnapshot = await db
-    .collection('users')
-    .doc(userId)
-    .collection('lab_report_content')
-    .where('labReportType', '==', labReportType)
-    .get();
-  
-  const reportCount = countSnapshot.size;
-  
-  console.log(`📊 User ${userId} has ${reportCount} reports of type ${labReportType}`);
-  
-  // Trigger trend analysis if threshold reached
-  if (reportCount >= 5) {
-    // Check if trend analysis was already done recently
-    const lastTrendRef = db
-      .collection('users')
-      .doc(userId)
-      .collection('latest_trends')
-      .doc(labReportType);
-    
-    const lastTrend = await lastTrendRef.get();
-    const shouldUpdate = !lastTrend.exists || 
-      (lastTrend.data()?.reportCount || 0) < reportCount;
-    
-    if (shouldUpdate) {
-      console.log(`🎯 Triggering trend analysis for ${labReportType}`);
-      
-      // Call trend detection function
-      const trendAnalysis = await analyzeLabTrends(userId, labReportType);
-      if (trendAnalysis.shouldGenerateGraphs) {
-        const trendData = await generateTrendData(userId, labReportType, trendAnalysis);
-        await storeTrendAnalysis(userId, labReportType, trendData);
-        
-        // Send notification about new trends
-        await sendTrendNotification(userId, labReportType, trendData);
-      }
-    }
-  }
-}
-
-async function sendTrendNotification(userId, labReportType, trendData) {
-  // Store notification for user
-  const db = admin.firestore();
-  
-  const notification = {
-    type: 'trend_analysis',
-    title: 'New Health Trends Detected',
-    message: `We've analyzed your ${labReportType} reports and found interesting trends.`,
-    labReportType: labReportType,
-    vitalsAnalyzed: Object.keys(trendData.vitals).length,
-    hasAnomalies: Object.values(trendData.vitals).some(v => v.anomalies.length > 0),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    read: false
-  };
-  
-  await db
-    .collection('users')
-    .doc(userId)
-    .collection('notifications')
-    .add(notification);
-  
-  console.log(`🔔 Trend notification sent to user ${userId}`);
-}
+1. **Deploy Functions:**
+```bash
+cd functions
+npm install
+firebase deploy --only functions:detectLabTrends
 ```
 
-### Phase 3: Frontend Services
-
-#### **3.1 Trend Analysis Service**
-
-**File:** `lib/services/trend_analysis_service.dart`
-
-```dart
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-
-class TrendAnalysisService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static final FirebaseFunctions _functions = FirebaseFunctions.instance;
-
-  /// Get trend analysis for a specific lab report type
-  static Future<TrendAnalysisData?> getTrendAnalysis(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return null;
-
-      final trendDoc = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('latest_trends')
-          .doc(labReportType)
-          .get();
-
-      if (trendDoc.exists) {
-        return TrendAnalysisData.fromFirestore(trendDoc.data()!);
-      }
-      return null;
-    } catch (e) {
-      throw Exception('Failed to get trend analysis: $e');
-    }
-  }
-
-  /// Get all available trend analyses for user
-  static Future<List<TrendAnalysisData>> getAllTrendAnalyses() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return [];
-
-      final trendsSnapshot = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('latest_trends')
-          .get();
-
-      return trendsSnapshot.docs
-          .map((doc) => TrendAnalysisData.fromFirestore(doc.data()))
-          .toList();
-    } catch (e) {
-      throw Exception('Failed to get trend analyses: $e');
-    }
-  }
-
-  /// Manually trigger trend detection for a lab report type
-  static Future<bool> triggerTrendDetection(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return false;
-
-      final callable = _functions.httpsCallable('detectLabTrends');
-      final result = await callable.call({
-        'userId': user.uid,
-        'labReportType': labReportType,
-      });
-
-      return result.data['success'] ?? false;
-    } catch (e) {
-      throw Exception('Failed to trigger trend detection: $e');
-    }
-  }
-
-  /// Check if trend analysis is available for a lab report type
-  static Future<bool> isTrendAnalysisAvailable(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return false;
-
-      // Count reports of this type
-      final countSnapshot = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('lab_report_content')
-          .where('labReportType', '==', labReportType)
-          .get();
-
-      return countSnapshot.size >= 5;
-    } catch (e) {
-      return false;
-    }
-  }
-}
-
-/// Data models for trend analysis
-class TrendAnalysisData {
-  final String labReportType;
-  final int reportCount;
-  final TimeSpanData timespan;
-  final Map<String, VitalTrendData> vitals;
-  final Map<String, List<PredictionData>> predictions;
-  final DateTime generatedAt;
-  final String modelType;
-  final Map<String, dynamic>? mlInsights;
-  final Map<String, List<FeatureImportanceData>>? featureImportance;
-
-  TrendAnalysisData({
-    required this.labReportType,
-    required this.reportCount,
-    required this.timespan,
-    required this.vitals,
-    required this.predictions,
-    required this.generatedAt,
-    required this.modelType,
-    this.mlInsights,
-    this.featureImportance,
-  });
-
-  factory TrendAnalysisData.fromFirestore(Map<String, dynamic> data) {
-    final vitalsMap = <String, VitalTrendData>{};
-    final vitalsData = data['vitals'] as Map<String, dynamic>? ?? {};
-    
-    vitalsData.forEach((key, value) {
-      vitalsMap[key] = VitalTrendData.fromMap(Map<String, dynamic>.from(value));
-    });
-
-    final predictionsMap = <String, List<PredictionData>>{};
-    final predictionsData = data['predictions'] as Map<String, dynamic>? ?? {};
-    
-    predictionsData.forEach((key, value) {
-      final predictionsList = (value as List<dynamic>)
-          .map((item) => PredictionData.fromMap(Map<String, dynamic>.from(item)))
-          .toList();
-      predictionsMap[key] = predictionsList;
-    });
-
-    // Parse ML insights
-    final mlInsightsMap = <String, dynamic>{};
-    final mlInsightsData = data['mlInsights'] as Map<String, dynamic>? ?? {};
-    mlInsightsData.forEach((key, value) {
-      mlInsightsMap[key] = value;
-    });
-
-    // Parse feature importance
-    final featureImportanceMap = <String, List<FeatureImportanceData>>{};
-    vitalsData.forEach((vitalName, vitalData) {
-      if (vitalData is Map<String, dynamic> && vitalData['featureImportance'] != null) {
-        final importanceList = (vitalData['featureImportance'] as List<dynamic>)
-            .map((item) => FeatureImportanceData.fromMap(Map<String, dynamic>.from(item)))
-            .toList();
-        featureImportanceMap[vitalName] = importanceList;
-      }
-    });
-
-    return TrendAnalysisData(
-      labReportType: data['labReportType'] ?? '',
-      reportCount: data['reportCount'] ?? 0,
-      timespan: TimeSpanData.fromMap(Map<String, dynamic>.from(data['timespan'] ?? {})),
-      vitals: vitalsMap,
-      predictions: predictionsMap,
-      generatedAt: DateTime.parse(data['generatedAt'] ?? DateTime.now().toISOString()),
-      modelType: data['modelType'] ?? 'linear',
-      mlInsights: mlInsightsMap.isNotEmpty ? mlInsightsMap : null,
-      featureImportance: featureImportanceMap.isNotEmpty ? featureImportanceMap : null,
-    );
-  }
-
-  bool get isMLEnhanced => modelType == 'xgboost';
-  
-  bool get hasCrossPatientInsights => 
-    mlInsights?.isNotEmpty ?? false;
-}
-
-class VitalTrendData {
-  final String vitalName;
-  final int dataCount;
-  final double currentValue;
-  final double meanValue;
-  final double standardDeviation;
-  final String trendDirection;
-  final double trendSlope;
-  final double trendSignificance;
-  final List<AnomalyData> anomalies;
-  final List<DataPointData> dataPoints;
-  final String unit;
-  final DateRangeData dateRange;
-
-  VitalTrendData({
-    required this.vitalName,
-    required this.dataCount,
-    required this.currentValue,
-    required this.meanValue,
-    required this.standardDeviation,
-    required this.trendDirection,
-    required this.trendSlope,
-    required this.trendSignificance,
-    required this.anomalies,
-    required this.dataPoints,
-    required this.unit,
-    required this.dateRange,
-  });
-
-  factory VitalTrendData.fromMap(Map<String, dynamic> data) {
-    return VitalTrendData(
-      vitalName: data['vitalName'] ?? '',
-      dataCount: data['dataCount'] ?? 0,
-      currentValue: (data['currentValue'] ?? 0).toDouble(),
-      meanValue: (data['meanValue'] ?? 0).toDouble(),
-      standardDeviation: (data['standardDeviation'] ?? 0).toDouble(),
-      trendDirection: data['trendDirection'] ?? 'stable',
-      trendSlope: (data['trendSlope'] ?? 0).toDouble(),
-      trendSignificance: (data['trendSignificance'] ?? 0).toDouble(),
-      anomalies: (data['anomalies'] as List<dynamic>? ?? [])
-          .map((item) => AnomalyData.fromMap(Map<String, dynamic>.from(item)))
-          .toList(),
-      dataPoints: (data['dataPoints'] as List<dynamic>? ?? [])
-          .map((item) => DataPointData.fromMap(Map<String, dynamic>.from(item)))
-          .toList(),
-      unit: data['unit'] ?? '',
-      dateRange: DateRangeData.fromMap(Map<String, dynamic>.from(data['dateRange'] ?? {})),
-    );
-  }
-
-  bool get isConcerrning {
-    return trendSignificance > 0.7 && 
-           (trendDirection == 'increasing' || trendDirection == 'decreasing') ||
-           anomalies.any((anomaly) => anomaly.severity == 'high');
-  }
-
-  String get formattedTrendDirection {
-    switch (trendDirection) {
-      case 'increasing':
-        return 'Trending Up ↗️';
-      case 'decreasing':
-        return 'Trending Down ↘️';
-      case 'stable':
-        return 'Stable ➡️';
-      default:
-        return trendDirection;
-    }
-  }
-
-  String get trendInterpretation {
-    if (trendSignificance < 0.3) {
-      return 'No clear trend detected';
-    } else if (trendSignificance < 0.6) {
-      return 'Mild ${trendDirection} trend';
-    } else if (trendSignificance < 0.8) {
-      return 'Moderate ${trendDirection} trend';
-    } else {
-      return 'Strong ${trendDirection} trend';
-    }
-  }
-}
-
-class PredictionData {
-  final DateTime date;
-  final double predictedValue;
-  final ConfidenceIntervalData confidenceInterval;
-  final double confidence;
-  final int monthsAhead;
-
-  PredictionData({
-    required this.date,
-    required this.predictedValue,
-    required this.confidenceInterval,
-    required this.confidence,
-    required this.monthsAhead,
-  });
-
-  factory PredictionData.fromMap(Map<String, dynamic> data) {
-    return PredictionData(
-      date: DateTime.parse(data['date']),
-      predictedValue: (data['predictedValue'] ?? 0).toDouble(),
-      confidenceInterval: ConfidenceIntervalData.fromMap(
-        Map<String, dynamic>.from(data['confidenceInterval'] ?? {})
-      ),
-      confidence: (data['confidence'] ?? 0).toDouble(),
-      monthsAhead: data['monthsAhead'] ?? 0,
-    );
-  }
-
-  String get formattedDate {
-    return '${date.month}/${date.year.toString().substring(2)}';
-  }
-
-  String get confidencePercentage {
-    return '${(confidence * 100).round()}%';
-  }
-}
-
-class FeatureImportanceData {
-  final String featureName;
-  final double importance;
-  final String interpretation;
-
-  FeatureImportanceData({
-    required this.featureName,
-    required this.importance,
-    required this.interpretation,
-  });
-
-  factory FeatureImportanceData.fromMap(Map<String, dynamic> data) {
-    return FeatureImportanceData(
-      featureName: data['feature_name'] ?? '',
-      importance: (data['importance'] ?? 0).toDouble(),
-      interpretation: data['interpretation'] ?? '',
-    );
-  }
-
-  String get formattedImportance => '${(importance * 100).toStringAsFixed(1)}%';
-}
-
-// Additional data model classes...
-class TimeSpanData {
-  final int days;
-  final int months;
-  final DateTime startDate;
-  final DateTime endDate;
-
-  TimeSpanData({
-    required this.days,
-    required this.months,
-    required this.startDate,
-    required this.endDate,
-  });
-
-  factory TimeSpanData.fromMap(Map<String, dynamic> data) {
-    return TimeSpanData(
-      days: data['days'] ?? 0,
-      months: data['months'] ?? 0,
-      startDate: DateTime.parse(data['startDate'] ?? DateTime.now().toISOString()),
-      endDate: DateTime.parse(data['endDate'] ?? DateTime.now().toISOString()),
-    );
-  }
-}
-
-class AnomalyData {
-  final int index;
-  final double value;
-  final double zScore;
-  final String severity;
-
-  AnomalyData({
-    required this.index,
-    required this.value,
-    required this.zScore,
-    required this.severity,
-  });
-
-  factory AnomalyData.fromMap(Map<String, dynamic> data) {
-    return AnomalyData(
-      index: data['index'] ?? 0,
-      value: (data['value'] ?? 0).toDouble(),
-      zScore: (data['zScore'] ?? 0).toDouble(),
-      severity: data['severity'] ?? 'low',
-    );
-  }
-}
-
-class DataPointData {
-  final DateTime date;
-  final double value;
-  final String unit;
-  final String status;
-  final String reportId;
-
-  DataPointData({
-    required this.date,
-    required this.value,
-    required this.unit,
-    required this.status,
-    required this.reportId,
-  });
-
-  factory DataPointData.fromMap(Map<String, dynamic> data) {
-    return DataPointData(
-      date: DateTime.parse(data['date']),
-      value: (data['value'] ?? 0).toDouble(),
-      unit: data['unit'] ?? '',
-      status: data['status'] ?? 'normal',
-      reportId: data['reportId'] ?? '',
-    );
-  }
-}
-
-class DateRangeData {
-  final DateTime start;
-  final DateTime end;
-
-  DateRangeData({required this.start, required this.end});
-
-  factory DateRangeData.fromMap(Map<String, dynamic> data) {
-    return DateRangeData(
-      start: DateTime.parse(data['start'] ?? DateTime.now().toISOString()),
-      end: DateTime.parse(data['end'] ?? DateTime.now().toISOString()),
-    );
-  }
-}
-
-class ConfidenceIntervalData {
-  final double lower;
-  final double upper;
-
-  ConfidenceIntervalData({required this.lower, required this.upper});
-
-  factory ConfidenceIntervalData.fromMap(Map<String, dynamic> data) {
-    return ConfidenceIntervalData(
-      lower: (data['lower'] ?? 0).toDouble(),
-      upper: (data['upper'] ?? 0).toDouble(),
-    );
-  }
-}
+2. **Test Trend Detection:**
+```bash
+# Upload 5+ lab reports of same type
+# Monitor Firebase logs for trend detection triggers
+# Verify Firestore structure under users/{userId}/trend_analysis/
 ```
 
-### Phase 2: Backend Integration Points
+#### **6.2 Frontend Testing**
 
-#### **2.1 Trigger Trend Detection Automatically**
-
-Modify the existing lab report classification function to trigger trend detection:
-
-```javascript
-// In extractLabReportContent function, after storing the lab report:
-exports.extractLabReportContent = onCall(
-  {cors: true, secrets: [geminiApiKey]},
-  async (request) => {
-    // ... existing extraction logic ...
-    
-    // After successful classification and storage:
-    if (labReportType && labReportType !== 'other_lab_tests') {
-      try {
-        // Check if this triggers trend analysis threshold
-        await checkTrendAnalysisTrigger(auth.uid, labReportType);
-      } catch (error) {
-        console.log('Trend analysis check failed:', error);
-        // Don't fail the main operation
-      }
-    }
-    
-    return result;
-  }
-);
-
-async function checkTrendAnalysisTrigger(userId, labReportType) {
-  const db = admin.firestore();
-  
-  // Count reports of this type
-  const countSnapshot = await db
-    .collection('users')
-    .doc(userId)
-    .collection('lab_report_content')
-    .where('labReportType', '==', labReportType)
-    .get();
-  
-  const reportCount = countSnapshot.size;
-  
-  console.log(`📊 User ${userId} has ${reportCount} reports of type ${labReportType}`);
-  
-  // Trigger trend analysis if threshold reached
-  if (reportCount >= 5) {
-    // Check if trend analysis was already done recently
-    const lastTrendRef = db
-      .collection('users')
-      .doc(userId)
-      .collection('latest_trends')
-      .doc(labReportType);
-    
-    const lastTrend = await lastTrendRef.get();
-    const shouldUpdate = !lastTrend.exists || 
-      (lastTrend.data()?.reportCount || 0) < reportCount;
-    
-    if (shouldUpdate) {
-      console.log(`🎯 Triggering trend analysis for ${labReportType}`);
-      
-      // Call trend detection function
-      const trendAnalysis = await analyzeLabTrends(userId, labReportType);
-      if (trendAnalysis.shouldGenerateGraphs) {
-        const trendData = await generateTrendData(userId, labReportType, trendAnalysis);
-        await storeTrendAnalysis(userId, labReportType, trendData);
-        
-        // Send notification about new trends
-        await sendTrendNotification(userId, labReportType, trendData);
-      }
-    }
-  }
-}
-
-async function sendTrendNotification(userId, labReportType, trendData) {
-  // Store notification for user
-  const db = admin.firestore();
-  
-  const notification = {
-    type: 'trend_analysis',
-    title: 'New Health Trends Detected',
-    message: `We've analyzed your ${labReportType} reports and found interesting trends.`,
-    labReportType: labReportType,
-    vitalsAnalyzed: Object.keys(trendData.vitals).length,
-    hasAnomalies: Object.values(trendData.vitals).some(v => v.anomalies.length > 0),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    read: false
-  };
-  
-  await db
-    .collection('users')
-    .doc(userId)
-    .collection('notifications')
-    .add(notification);
-  
-  console.log(`🔔 Trend notification sent to user ${userId}`);
-}
+1. **Test UI Components:**
+```bash
+flutter run
+# Navigate to Trend Analysis screen
+# Verify charts display correctly
+# Test different lab report types
 ```
 
-### Phase 3: Frontend Services
-
-#### **3.1 Trend Analysis Service**
-
-**File:** `lib/services/trend_analysis_service.dart`
-
-```dart
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-
-class TrendAnalysisService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static final FirebaseFunctions _functions = FirebaseFunctions.instance;
-
-  /// Get trend analysis for a specific lab report type
-  static Future<TrendAnalysisData?> getTrendAnalysis(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return null;
-
-      final trendDoc = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('latest_trends')
-          .doc(labReportType)
-          .get();
-
-      if (trendDoc.exists) {
-        return TrendAnalysisData.fromFirestore(trendDoc.data()!);
-      }
-      return null;
-    } catch (e) {
-      throw Exception('Failed to get trend analysis: $e');
-    }
-  }
-
-  /// Get all available trend analyses for user
-  static Future<List<TrendAnalysisData>> getAllTrendAnalyses() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return [];
-
-      final trendsSnapshot = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('latest_trends')
-          .get();
-
-      return trendsSnapshot.docs
-          .map((doc) => TrendAnalysisData.fromFirestore(doc.data()))
-          .toList();
-    } catch (e) {
-      throw Exception('Failed to get trend analyses: $e');
-    }
-  }
-
-  /// Manually trigger trend detection for a lab report type
-  static Future<bool> triggerTrendDetection(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return false;
-
-      final callable = _functions.httpsCallable('detectLabTrends');
-      final result = await callable.call({
-        'userId': user.uid,
-        'labReportType': labReportType,
-      });
-
-      return result.data['success'] ?? false;
-    } catch (e) {
-      throw Exception('Failed to trigger trend detection: $e');
-    }
-  }
-
-  /// Check if trend analysis is available for a lab report type
-  static Future<bool> isTrendAnalysisAvailable(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return false;
-
-      // Count reports of this type
-      final countSnapshot = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('lab_report_content')
-          .where('labReportType', '==', labReportType)
-          .get();
-
-      return countSnapshot.size >= 5;
-    } catch (e) {
-      return false;
-    }
-  }
-}
-
-/// Data models for trend analysis
-class TrendAnalysisData {
-  final String labReportType;
-  final int reportCount;
-  final TimeSpanData timespan;
-  final Map<String, VitalTrendData> vitals;
-  final Map<String, List<PredictionData>> predictions;
-  final DateTime generatedAt;
-  final String modelType;
-  final Map<String, dynamic>? mlInsights;
-  final Map<String, List<FeatureImportanceData>>? featureImportance;
-
-  TrendAnalysisData({
-    required this.labReportType,
-    required this.reportCount,
-    required this.timespan,
-    required this.vitals,
-    required this.predictions,
-    required this.generatedAt,
-    required this.modelType,
-    this.mlInsights,
-    this.featureImportance,
-  });
-
-  factory TrendAnalysisData.fromFirestore(Map<String, dynamic> data) {
-    final vitalsMap = <String, VitalTrendData>{};
-    final vitalsData = data['vitals'] as Map<String, dynamic>? ?? {};
-    
-    vitalsData.forEach((key, value) {
-      vitalsMap[key] = VitalTrendData.fromMap(Map<String, dynamic>.from(value));
-    });
-
-    final predictionsMap = <String, List<PredictionData>>{};
-    final predictionsData = data['predictions'] as Map<String, dynamic>? ?? {};
-    
-    predictionsData.forEach((key, value) {
-      final predictionsList = (value as List<dynamic>)
-          .map((item) => PredictionData.fromMap(Map<String, dynamic>.from(item)))
-          .toList();
-      predictionsMap[key] = predictionsList;
-    });
-
-    // Parse ML insights
-    final mlInsightsMap = <String, dynamic>{};
-    final mlInsightsData = data['mlInsights'] as Map<String, dynamic>? ?? {};
-    mlInsightsData.forEach((key, value) {
-      mlInsightsMap[key] = value;
-    });
-
-    // Parse feature importance
-    final featureImportanceMap = <String, List<FeatureImportanceData>>{};
-    vitalsData.forEach((vitalName, vitalData) {
-      if (vitalData is Map<String, dynamic> && vitalData['featureImportance'] != null) {
-        final importanceList = (vitalData['featureImportance'] as List<dynamic>)
-            .map((item) => FeatureImportanceData.fromMap(Map<String, dynamic>.from(item)))
-            .toList();
-        featureImportanceMap[vitalName] = importanceList;
-      }
-    });
-
-    return TrendAnalysisData(
-      labReportType: data['labReportType'] ?? '',
-      reportCount: data['reportCount'] ?? 0,
-      timespan: TimeSpanData.fromMap(Map<String, dynamic>.from(data['timespan'] ?? {})),
-      vitals: vitalsMap,
-      predictions: predictionsMap,
-      generatedAt: DateTime.parse(data['generatedAt'] ?? DateTime.now().toISOString()),
-      modelType: data['modelType'] ?? 'linear',
-      mlInsights: mlInsightsMap.isNotEmpty ? mlInsightsMap : null,
-      featureImportance: featureImportanceMap.isNotEmpty ? featureImportanceMap : null,
-    );
-  }
-
-  bool get isMLEnhanced => modelType == 'xgboost';
-  
-  bool get hasCrossPatientInsights => 
-    mlInsights?.isNotEmpty ?? false;
-}
-
-class VitalTrendData {
-  final String vitalName;
-  final int dataCount;
-  final double currentValue;
-  final double meanValue;
-  final double standardDeviation;
-  final String trendDirection;
-  final double trendSlope;
-  final double trendSignificance;
-  final List<AnomalyData> anomalies;
-  final List<DataPointData> dataPoints;
-  final String unit;
-  final DateRangeData dateRange;
-
-  VitalTrendData({
-    required this.vitalName,
-    required this.dataCount,
-    required this.currentValue,
-    required this.meanValue,
-    required this.standardDeviation,
-    required this.trendDirection,
-    required this.trendSlope,
-    required this.trendSignificance,
-    required this.anomalies,
-    required this.dataPoints,
-    required this.unit,
-    required this.dateRange,
-  });
-
-  factory VitalTrendData.fromMap(Map<String, dynamic> data) {
-    return VitalTrendData(
-      vitalName: data['vitalName'] ?? '',
-      dataCount: data['dataCount'] ?? 0,
-      currentValue: (data['currentValue'] ?? 0).toDouble(),
-      meanValue: (data['meanValue'] ?? 0).toDouble(),
-      standardDeviation: (data['standardDeviation'] ?? 0).toDouble(),
-      trendDirection: data['trendDirection'] ?? 'stable',
-      trendSlope: (data['trendSlope'] ?? 0).toDouble(),
-      trendSignificance: (data['trendSignificance'] ?? 0).toDouble(),
-      anomalies: (data['anomalies'] as List<dynamic>? ?? [])
-          .map((item) => AnomalyData.fromMap(Map<String, dynamic>.from(item)))
-          .toList(),
-      dataPoints: (data['dataPoints'] as List<dynamic>? ?? [])
-          .map((item) => DataPointData.fromMap(Map<String, dynamic>.from(item)))
-          .toList(),
-      unit: data['unit'] ?? '',
-      dateRange: DateRangeData.fromMap(Map<String, dynamic>.from(data['dateRange'] ?? {})),
-    );
-  }
-
-  bool get isConcerrning {
-    return trendSignificance > 0.7 && 
-           (trendDirection == 'increasing' || trendDirection == 'decreasing') ||
-           anomalies.any((anomaly) => anomaly.severity == 'high');
-  }
-
-  String get formattedTrendDirection {
-    switch (trendDirection) {
-      case 'increasing':
-        return 'Trending Up ↗️';
-      case 'decreasing':
-        return 'Trending Down ↘️';
-      case 'stable':
-        return 'Stable ➡️';
-      default:
-        return trendDirection;
-    }
-  }
-
-  String get trendInterpretation {
-    if (trendSignificance < 0.3) {
-      return 'No clear trend detected';
-    } else if (trendSignificance < 0.6) {
-      return 'Mild ${trendDirection} trend';
-    } else if (trendSignificance < 0.8) {
-      return 'Moderate ${trendDirection} trend';
-    } else {
-      return 'Strong ${trendDirection} trend';
-    }
-  }
-}
-
-class PredictionData {
-  final DateTime date;
-  final double predictedValue;
-  final ConfidenceIntervalData confidenceInterval;
-  final double confidence;
-  final int monthsAhead;
-
-  PredictionData({
-    required this.date,
-    required this.predictedValue,
-    required this.confidenceInterval,
-    required this.confidence,
-    required this.monthsAhead,
-  });
-
-  factory PredictionData.fromMap(Map<String, dynamic> data) {
-    return PredictionData(
-      date: DateTime.parse(data['date']),
-      predictedValue: (data['predictedValue'] ?? 0).toDouble(),
-      confidenceInterval: ConfidenceIntervalData.fromMap(
-        Map<String, dynamic>.from(data['confidenceInterval'] ?? {})
-      ),
-      confidence: (data['confidence'] ?? 0).toDouble(),
-      monthsAhead: data['monthsAhead'] ?? 0,
-    );
-  }
-
-  String get formattedDate {
-    return '${date.month}/${date.year.toString().substring(2)}';
-  }
-
-  String get confidencePercentage {
-    return '${(confidence * 100).round()}%';
-  }
-}
-
-class FeatureImportanceData {
-  final String featureName;
-  final double importance;
-  final String interpretation;
-
-  FeatureImportanceData({
-    required this.featureName,
-    required this.importance,
-    required this.interpretation,
-  });
-
-  factory FeatureImportanceData.fromMap(Map<String, dynamic> data) {
-    return FeatureImportanceData(
-      featureName: data['feature_name'] ?? '',
-      importance: (data['importance'] ?? 0).toDouble(),
-      interpretation: data['interpretation'] ?? '',
-    );
-  }
-
-  String get formattedImportance => '${(importance * 100).toStringAsFixed(1)}%';
-}
-
-// Additional data model classes...
-class TimeSpanData {
-  final int days;
-  final int months;
-  final DateTime startDate;
-  final DateTime endDate;
-
-  TimeSpanData({
-    required this.days,
-    required this.months,
-    required this.startDate,
-    required this.endDate,
-  });
-
-  factory TimeSpanData.fromMap(Map<String, dynamic> data) {
-    return TimeSpanData(
-      days: data['days'] ?? 0,
-      months: data['months'] ?? 0,
-      startDate: DateTime.parse(data['startDate'] ?? DateTime.now().toISOString()),
-      endDate: DateTime.parse(data['endDate'] ?? DateTime.now().toISOString()),
-    );
-  }
-}
-
-class AnomalyData {
-  final int index;
-  final double value;
-  final double zScore;
-  final String severity;
-
-  AnomalyData({
-    required this.index,
-    required this.value,
-    required this.zScore,
-    required this.severity,
-  });
-
-  factory AnomalyData.fromMap(Map<String, dynamic> data) {
-    return AnomalyData(
-      index: data['index'] ?? 0,
-      value: (data['value'] ?? 0).toDouble(),
-      zScore: (data['zScore'] ?? 0).toDouble(),
-      severity: data['severity'] ?? 'low',
-    );
-  }
-}
-
-class DataPointData {
-  final DateTime date;
-  final double value;
-  final String unit;
-  final String status;
-  final String reportId;
-
-  DataPointData({
-    required this.date,
-    required this.value,
-    required this.unit,
-    required this.status,
-    required this.reportId,
-  });
-
-  factory DataPointData.fromMap(Map<String, dynamic> data) {
-    return DataPointData(
-      date: DateTime.parse(data['date']),
-      value: (data['value'] ?? 0).toDouble(),
-      unit: data['unit'] ?? '',
-      status: data['status'] ?? 'normal',
-      reportId: data['reportId'] ?? '',
-    );
-  }
-}
-
-class DateRangeData {
-  final DateTime start;
-  final DateTime end;
-
-  DateRangeData({required this.start, required this.end});
-
-  factory DateRangeData.fromMap(Map<String, dynamic> data) {
-    return DateRangeData(
-      start: DateTime.parse(data['start'] ?? DateTime.now().toISOString()),
-      end: DateTime.parse(data['end'] ?? DateTime.now().toISOString()),
-    );
-  }
-}
-
-class ConfidenceIntervalData {
-  final double lower;
-  final double upper;
-
-  ConfidenceIntervalData({required this.lower, required this.upper});
-
-  factory ConfidenceIntervalData.fromMap(Map<String, dynamic> data) {
-    return ConfidenceIntervalData(
-      lower: (data['lower'] ?? 0).toDouble(),
-      upper: (data['upper'] ?? 0).toDouble(),
-    );
-  }
-}
+2. **Test Integration:**
+```bash
+# Upload new lab report
+# Check if trend analysis updates automatically
+# Verify predictions are generated
 ```
 
-### Phase 2: Backend Integration Points
+## 📈 Expected Results
 
-#### **2.1 Trigger Trend Detection Automatically**
+After implementation:
 
-Modify the existing lab report classification function to trigger trend detection:
+1. **Automatic Detection:** System detects when 5+ reports of same type exist
+2. **Intelligent Analysis:** AI extracts vital parameters and calculates trends
+3. **Visual Graphs:** Interactive charts show historical values and predictions
+4. **Health Insights:** Trend direction, significance, and anomaly detection
+5. **Future Predictions:** 3, 6, and 12-month forecasts with confidence intervals
+6. **Smart Notifications:** Alerts for concerning trends or anomalies
 
-```javascript
-// In extractLabReportContent function, after storing the lab report:
-exports.extractLabReportContent = onCall(
-  {cors: true, secrets: [geminiApiKey]},
-  async (request) => {
-    // ... existing extraction logic ...
-    
-    // After successful classification and storage:
-    if (labReportType && labReportType !== 'other_lab_tests') {
-      try {
-        // Check if this triggers trend analysis threshold
-        await checkTrendAnalysisTrigger(auth.uid, labReportType);
-      } catch (error) {
-        console.log('Trend analysis check failed:', error);
-        // Don't fail the main operation
-      }
-    }
-    
-    return result;
-  }
-);
+## 🔄 Enhancement Opportunities
 
-async function checkTrendAnalysisTrigger(userId, labReportType) {
-  const db = admin.firestore();
-  
-  // Count reports of this type
-  const countSnapshot = await db
-    .collection('users')
-    .doc(userId)
-    .collection('lab_report_content')
-    .where('labReportType', '==', labReportType)
-    .get();
-  
-  const reportCount = countSnapshot.size;
-  
-  console.log(`📊 User ${userId} has ${reportCount} reports of type ${labReportType}`);
-  
-  // Trigger trend analysis if threshold reached
-  if (reportCount >= 5) {
-    // Check if trend analysis was already done recently
-    const lastTrendRef = db
-      .collection('users')
-      .doc(userId)
-      .collection('latest_trends')
-      .doc(labReportType);
-    
-    const lastTrend = await lastTrendRef.get();
-    const shouldUpdate = !lastTrend.exists || 
-      (lastTrend.data()?.reportCount || 0) < reportCount;
-    
-    if (shouldUpdate) {
-      console.log(`🎯 Triggering trend analysis for ${labReportType}`);
-      
-      // Call trend detection function
-      const trendAnalysis = await analyzeLabTrends(userId, labReportType);
-      if (trendAnalysis.shouldGenerateGraphs) {
-        const trendData = await generateTrendData(userId, labReportType, trendAnalysis);
-        await storeTrendAnalysis(userId, labReportType, trendData);
-        
-        // Send notification about new trends
-        await sendTrendNotification(userId, labReportType, trendData);
-      }
-    }
-  }
-}
+1. **Machine Learning Integration:** Replace linear regression with ML models
+2. **Reference Range Alerts:** Compare trends against medical normal ranges
+3. **Correlation Analysis:** Find relationships between different vital parameters
+4. **Doctor Integration:** Share trend reports with healthcare providers
+5. **Export Capabilities:** PDF reports for medical consultations
+6. **Advanced Analytics:** Seasonal patterns, risk assessment, health scores
 
-async function sendTrendNotification(userId, labReportType, trendData) {
-  // Store notification for user
-  const db = admin.firestore();
-  
-  const notification = {
-    type: 'trend_analysis',
-    title: 'New Health Trends Detected',
-    message: `We've analyzed your ${labReportType} reports and found interesting trends.`,
-    labReportType: labReportType,
-    vitalsAnalyzed: Object.keys(trendData.vitals).length,
-    hasAnomalies: Object.values(trendData.vitals).some(v => v.anomalies.length > 0),
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    read: false
-  };
-  
-  await db
-    .collection('users')
-    .doc(userId)
-    .collection('notifications')
-    .add(notification);
-  
-  console.log(`🔔 Trend notification sent to user ${userId}`);
-}
-```
-
-### Phase 3: Frontend Services
-
-#### **3.1 Trend Analysis Service**
-
-**File:** `lib/services/trend_analysis_service.dart`
-
-```dart
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-
-class TrendAnalysisService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static final FirebaseFunctions _functions = FirebaseFunctions.instance;
-
-  /// Get trend analysis for a specific lab report type
-  static Future<TrendAnalysisData?> getTrendAnalysis(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return null;
-
-      final trendDoc = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('latest_trends')
-          .doc(labReportType)
-          .get();
-
-      if (trendDoc.exists) {
-        return TrendAnalysisData.fromFirestore(trendDoc.data()!);
-      }
-      return null;
-    } catch (e) {
-      throw Exception('Failed to get trend analysis: $e');
-    }
-  }
-
-  /// Get all available trend analyses for user
-  static Future<List<TrendAnalysisData>> getAllTrendAnalyses() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return [];
-
-      final trendsSnapshot = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('latest_trends')
-          .get();
-
-      return trendsSnapshot.docs
-          .map((doc) => TrendAnalysisData.fromFirestore(doc.data()))
-          .toList();
-    } catch (e) {
-      throw Exception('Failed to get trend analyses: $e');
-    }
-  }
-
-  /// Manually trigger trend detection for a lab report type
-  static Future<bool> triggerTrendDetection(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return false;
-
-      final callable = _functions.httpsCallable('detectLabTrends');
-      final result = await callable.call({
-        'userId': user.uid,
-        'labReportType': labReportType,
-      });
-
-      return result.data['success'] ?? false;
-    } catch (e) {
-      throw Exception('Failed to trigger trend detection: $e');
-    }
-  }
-
-  /// Check if trend analysis is available for a lab report type
-  static Future<bool> isTrendAnalysisAvailable(String labReportType) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return false;
-
-      // Count reports of this type
-      final countSnapshot = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .collection('lab_report_content')
-          .where('labReportType', '==', labReportType)
-          .get();
-
-      return countSnapshot.size >= 5;
-    } catch (e) {
-      return false;
-    }
-  }
-}
-
-/// Data models for trend analysis
-class TrendAnalysisData {
-  final String labReportType;
-  final int reportCount;
-  final TimeSpanData timespan;
-  final Map<String, VitalTrendData> vitals;
-  final Map<String, List<PredictionData>> predictions;
-  final DateTime generatedAt;
-  final String modelType;
-  final Map<String, dynamic>? mlInsights;
-  final Map<String, List<FeatureImportanceData>>? featureImportance;
-
-  TrendAnalysisData({
-    required this.labReportType,
-    required this.reportCount,
-    required this.timespan,
-    required this.vitals,
-    required this.predictions,
-    required this.generatedAt,
-    required this.modelType,
-    this.mlInsights,
-    this.featureImportance,
-  });
-
-  factory TrendAnalysisData.fromFirestore(Map<String, dynamic> data) {
-    final vitalsMap = <String, VitalTrendData>{};
-    final vitalsData = data['vitals'] as Map<String, dynamic>? ?? {};
-    
-    vitalsData.forEach((key, value) {
-      vitalsMap[key] = VitalTrendData.fromMap(Map<String, dynamic>.from(value));
-    });
-
-    final predictionsMap = <String, List<PredictionData>>{};
-    final predictionsData = data['predictions'] as Map<String, dynamic>? ?? {};
-    
+This comprehensive system will provide users with valuable insights into their health trends and help them make informed decisions about their healthcare journey.
