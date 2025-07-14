@@ -2118,8 +2118,14 @@ exports.detectLabTrends = onCall(
       };
       
     } catch (error) {
-      console.error('Error in detectLabTrends:', error);
-      throw new HttpsError("internal", "Failed to detect lab trends");
+      console.error('Error in detectLabTrends for:', labReportType, error);
+      console.error('Error details:', {
+        userId: userId,
+        labReportType: labReportType,
+        errorMessage: error.message,
+        errorStack: error.stack
+      });
+      throw new HttpsError("internal", `Failed to detect lab trends for ${labReportType}: ${error.message}`);
     }
   }
 );
@@ -2172,6 +2178,9 @@ async function analyzeLabTrends(userId, labReportType) {
  * Extract vital parameters based on lab report type
  */
 function extractVitalParameters(reports, labReportType) {
+  console.log(`🔍 Extracting vital parameters for: ${labReportType}`);
+  console.log(`📊 Number of reports: ${reports.length}`);
+  
   const vitalMappings = {
     // Blood Sugar / Glucose
     'blood_sugar': ['glucose', 'blood_glucose', 'fasting_glucose', 'random_glucose'],
@@ -2200,6 +2209,8 @@ function extractVitalParameters(reports, labReportType) {
   };
   
   const relevantVitals = vitalMappings[labReportType] || [];
+  console.log(`🎯 Expected vitals for ${labReportType}:`, relevantVitals);
+  
   const extractedData = {};
   
   // Initialize arrays for each vital parameter
@@ -2208,18 +2219,31 @@ function extractVitalParameters(reports, labReportType) {
   });
   
   // Extract values from each report
-  reports.forEach(report => {
-    const testDate = report.testDate || report.createdAt;
+  reports.forEach((report, index) => {
+    console.log(`📋 Processing report ${index + 1}:`, {
+      testDate: report.testDate,
+      testResultsCount: report.testResults?.length || 0
+    });
+    
+    const rawTestDate = report.testDate || report.createdAt;
+    // Convert Firestore Timestamp to JavaScript Date
+    const testDate = rawTestDate?.toDate ? rawTestDate.toDate() : new Date(rawTestDate);
     const testResults = report.testResults || [];
     
-    testResults.forEach(test => {
+    testResults.forEach((test, testIndex) => {
       const testName = test.testName || test.test_name || '';
       const value = parseFloat(test.value);
       const unit = test.unit || '';
       
+      console.log(`  🧪 Test ${testIndex + 1}: "${testName}" = ${value} ${unit}`);
+      
       // Find matching vital parameter
       relevantVitals.forEach(vital => {
-        if (isMatchingTest(testName, vital) && !isNaN(value)) {
+        const isMatch = isMatchingTest(testName, vital);
+        console.log(`    🔗 Checking "${testName}" vs "${vital}": ${isMatch ? '✅ MATCH' : '❌ no match'}`);
+        
+        if (isMatch && !isNaN(value)) {
+          console.log(`      📈 Added data point: ${vital} = ${value} ${unit}`);
           extractedData[vital].push({
             date: testDate,
             value: value,
@@ -2235,13 +2259,16 @@ function extractVitalParameters(reports, labReportType) {
   // Filter out vitals with no data
   Object.keys(extractedData).forEach(vital => {
     if (extractedData[vital].length === 0) {
+      console.log(`❌ No data found for vital: ${vital}`);
       delete extractedData[vital];
     } else {
+      console.log(`✅ Found ${extractedData[vital].length} data points for: ${vital}`);
       // Sort by date
       extractedData[vital].sort((a, b) => new Date(a.date) - new Date(b.date));
     }
   });
   
+  console.log(`🎉 Final extracted vitals:`, Object.keys(extractedData));
   return extractedData;
 }
 
@@ -2260,8 +2287,8 @@ function isMatchingTest(testName, vitalParameter) {
     'triglycerides': ['triglycerides', 'triglyceride'],
     'hemoglobin': ['hemoglobin', 'hgb', 'hb'],
     'hematocrit': ['hematocrit', 'hct'],
-    'whitebloodcell': ['wbc', 'whitebloodcell', 'leukocyte'],
-    'plateletcount': ['platelet', 'plt'],
+    'whitebloodcell': ['wbc', 'whitebloodcell', 'whitebloodcellcount', 'leukocyte'],
+    'plateletcount': ['platelet', 'plt', 'plateletcount'],
     'alt': ['alt', 'alanineaminotransferase'],
     'ast': ['ast', 'aspartateaminotransferase'],
     'bilirubin': ['bilirubin', 'totalbilirubin'],
@@ -2315,7 +2342,22 @@ async function generateTrendData(userId, labReportType, trendAnalysis) {
  */
 function analyzeVitalTrend(vitalName, dataPoints) {
   const values = dataPoints.map(point => point.value);
-  const dates = dataPoints.map(point => new Date(point.date));
+  const dates = dataPoints.map(point => {
+    // Handle both regular dates and Firestore Timestamps
+    if (point.date?.toDate) {
+      return point.date.toDate();
+    } else if (point.date) {
+      return new Date(point.date);
+    } else {
+      return new Date();
+    }
+  });
+  
+  // Verify all dates are valid
+  const validDates = dates.filter(date => !isNaN(date.getTime()));
+  if (validDates.length !== dates.length) {
+    console.warn(`⚠️ Some invalid dates found for ${vitalName}, using valid ones only`);
+  }
   
   // Calculate basic statistics
   const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
@@ -2323,7 +2365,7 @@ function analyzeVitalTrend(vitalName, dataPoints) {
   const stdDev = Math.sqrt(variance);
   
   // Calculate linear trend
-  const trend = calculateLinearTrend(dates, values);
+  const trend = calculateLinearTrend(validDates.length > 0 ? validDates : dates, values);
   
   // Determine trend direction and significance
   const trendDirection = trend.slope > 0.1 ? 'increasing' : 
@@ -2333,6 +2375,9 @@ function analyzeVitalTrend(vitalName, dataPoints) {
   
   // Detect anomalies
   const anomalies = detectAnomalies(values, mean, stdDev);
+  
+  // Use valid dates for date range
+  const useDates = validDates.length > 0 ? validDates : dates;
   
   return {
     vitalName: vitalName,
@@ -2348,8 +2393,8 @@ function analyzeVitalTrend(vitalName, dataPoints) {
     dataPoints: dataPoints,
     unit: dataPoints[0].unit,
     dateRange: {
-      start: dates[0].toISOString(),
-      end: dates[dates.length - 1].toISOString()
+      start: useDates.length > 0 ? useDates[0].toISOString() : new Date().toISOString(),
+      end: useDates.length > 0 ? useDates[useDates.length - 1].toISOString() : new Date().toISOString()
     }
   };
 }
