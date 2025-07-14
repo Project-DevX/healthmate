@@ -13,14 +13,114 @@ class LabDashboard extends StatefulWidget {
 }
 
 class _LabDashboardState extends State<LabDashboard> {
-  bool isDarkMode = false;
   int _selectedBottomNav = 0;
   bool _isLoading = false;
 
-  // Placeholder data for KPIs
-  int totalTests = 120;
-  int pendingUploads = 8;
-  int todaysAppointments = 15;
+  // Sample test data
+  List<Map<String, dynamic>> testResults = [
+    {
+      'id': 'LAB001',
+      'patientName': 'John Doe',
+      'testType': 'Complete Blood Count',
+      'status': 'Completed',
+      'date': '2025-07-14',
+      'priority': 'Normal',
+      'results': 'Normal values within range',
+      'technician': 'Tech. Sarah Wilson',
+    },
+    {
+      'id': 'LAB002',
+      'patientName': 'Jane Smith',
+      'testType': 'Cardiac Markers',
+      'status': 'In Progress',
+      'date': '2025-07-14',
+      'priority': 'Urgent',
+      'results': 'Pending analysis',
+      'technician': 'Tech. Mike Johnson',
+    },
+    {
+      'id': 'LAB003',
+      'patientName': 'Bob Miller',
+      'testType': 'Liver Function',
+      'status': 'Pending',
+      'date': '2025-07-13',
+      'priority': 'Normal',
+      'results': 'Awaiting sample processing',
+      'technician': 'Tech. Emily Davis',
+    },
+  ];
+
+  // Sample staff data
+  List<Map<String, dynamic>> labStaff = [
+    {
+      'id': 'TECH001',
+      'name': 'Sarah Wilson',
+      'role': 'Senior Lab Technician',
+      'department': 'Hematology',
+      'shift': 'Morning',
+      'status': 'Active',
+      'experience': '6 years',
+    },
+    {
+      'id': 'TECH002',
+      'name': 'Mike Johnson',
+      'role': 'Lab Technician',
+      'department': 'Chemistry',
+      'shift': 'Evening',
+      'status': 'Active',
+      'experience': '3 years',
+    },
+    {
+      'id': 'TECH003',
+      'name': 'Emily Davis',
+      'role': 'Lab Assistant',
+      'department': 'Microbiology',
+      'shift': 'Night',
+      'status': 'On Break',
+      'experience': '2 years',
+    },
+  ];
+
+  // Sample appointment data
+  List<Map<String, dynamic>> labAppointments = [
+    {
+      'id': 'LAPT001',
+      'patientName': 'Alice Brown',
+      'testType': 'Blood Work',
+      'time': '09:00 AM',
+      'date': '2025-07-14',
+      'status': 'Scheduled',
+      'fasting': true,
+    },
+    {
+      'id': 'LAPT002',
+      'patientName': 'David Lee',
+      'testType': 'Urine Analysis',
+      'time': '10:30 AM',
+      'date': '2025-07-14',
+      'status': 'Checked In',
+      'fasting': false,
+    },
+    {
+      'id': 'LAPT003',
+      'patientName': 'Lisa Wang',
+      'testType': 'X-Ray',
+      'time': '02:00 PM',
+      'date': '2025-07-14',
+      'status': 'Completed',
+      'fasting': false,
+    },
+  ];
+
+  // KPI calculations
+  int get totalTests => testResults.length;
+  int get pendingUploads =>
+      testResults.where((t) => t['status'] == 'Pending').length;
+  int get todaysAppointments => labAppointments.length;
+  int get completedTests =>
+      testResults.where((t) => t['status'] == 'Completed').length;
+  int get urgentTests =>
+      testResults.where((t) => t['priority'] == 'Urgent').length;
 
   final List<_LabDashboardFeature> _features = [
     _LabDashboardFeature('Report Upload', Icons.upload_file),
@@ -35,27 +135,180 @@ class _LabDashboardState extends State<LabDashboard> {
   void _onFeatureTap(String feature) {
     switch (feature) {
       case 'Report Upload':
-        _showFeatureModal('Report Upload Module');
-        return;
+        _showReportUpload();
+        break;
       case 'Report Management':
-        _showFeatureModal('Report Management Table');
-        return;
+        _showReportManagement();
+        break;
       case 'Test Requests':
-        _showFeatureModal('Test Request Viewer');
-        return;
+        _showTestRequests();
+        break;
       case 'Patient Search':
-        _showFeatureModal('Patient Search Tool');
-        return;
+        _showPatientSearch();
+        break;
       case 'Appointment Calendar':
-        _showFeatureModal('Appointment Calendar');
-        return;
+        _showAppointmentCalendar();
+        break;
       case 'Staff Assignment':
-        _showFeatureModal('Lab Staff Assignment');
-        return;
+        _showStaffAssignment();
+        break;
       case 'Notifications':
-        _showFeatureModal('Notifications Panel');
-        return;
+        _showNotifications();
+        break;
+      default:
+        _showFeatureModal(feature);
     }
+  }
+
+  void _showReportUpload() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Upload Test Results',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Upload New Results',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              decoration: const InputDecoration(
+                                labelText: 'Patient ID',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              decoration: const InputDecoration(
+                                labelText: 'Test Type',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            DropdownButtonFormField<String>(
+                              decoration: const InputDecoration(
+                                labelText: 'Priority',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: ['Normal', 'Urgent', 'Critical']
+                                  .map(
+                                    (priority) => DropdownMenuItem(
+                                      value: priority,
+                                      child: Text(priority),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) {},
+                            ),
+                            const SizedBox(height: 12),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                // Simulate file upload
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'File upload functionality would be implemented here',
+                                    ),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.attach_file),
+                              label: const Text('Attach Report File'),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Results uploaded successfully!',
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    child: const Text('Upload Results'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Recent Uploads',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ...testResults
+                        .take(3)
+                        .map(
+                          (test) => Card(
+                            child: ListTile(
+                              leading: const Icon(Icons.description),
+                              title: Text(
+                                '${test['id']} - ${test['testType']}',
+                              ),
+                              subtitle: Text('Patient: ${test['patientName']}'),
+                              trailing: Chip(
+                                label: Text(test['status']),
+                                backgroundColor: _getStatusColor(
+                                  test['status'],
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showFeatureModal(String title) {
@@ -73,7 +326,10 @@ class _LabDashboardState extends State<LabDashboard> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
@@ -101,24 +357,704 @@ class _LabDashboardState extends State<LabDashboard> {
     try {
       await FirebaseAuth.instance.signOut();
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/login', (route) => false);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Logout failed: \\$e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Logout failed: \\$e')));
       }
     }
     if (mounted) setState(() => _isLoading = false);
   }
 
+  void _showReportManagement() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Report Management',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    decoration: const InputDecoration(
+                      labelText: 'Filter by Status',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: ['All', 'Pending', 'In Progress', 'Completed']
+                        .map(
+                          (status) => DropdownMenuItem(
+                            value: status,
+                            child: Text(status),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {},
+                  ),
+                ),
+                const SizedBox(width: 16),
+                ElevatedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Refresh'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                itemCount: testResults.length,
+                itemBuilder: (context, index) {
+                  final test = testResults[index];
+                  return Card(
+                    child: ExpansionTile(
+                      leading: Icon(
+                        _getTestIcon(test['testType']),
+                        color: test['priority'] == 'Urgent'
+                            ? Colors.red
+                            : Colors.blue,
+                      ),
+                      title: Text('${test['id']} - ${test['patientName']}'),
+                      subtitle: Text('${test['testType']} | ${test['date']}'),
+                      trailing: Chip(
+                        label: Text(test['status']),
+                        backgroundColor: _getStatusColor(test['status']),
+                      ),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Priority: ${test['priority']}'),
+                              Text('Technician: ${test['technician']}'),
+                              Text('Results: ${test['results']}'),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  ElevatedButton.icon(
+                                    onPressed: () {},
+                                    icon: const Icon(Icons.visibility),
+                                    label: const Text('View'),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ElevatedButton.icon(
+                                    onPressed: () {},
+                                    icon: const Icon(Icons.edit),
+                                    label: const Text('Edit'),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  ElevatedButton.icon(
+                                    onPressed: () {},
+                                    icon: const Icon(Icons.download),
+                                    label: const Text('Download'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTestRequests() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Test Requests',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                itemCount: testResults.length,
+                itemBuilder: (context, index) {
+                  final test = testResults[index];
+                  return Card(
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: test['priority'] == 'Urgent'
+                            ? Colors.red
+                            : Colors.blue,
+                        child: Text(test['id'].substring(3)),
+                      ),
+                      title: Text(test['patientName']),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Test: ${test['testType']}'),
+                          Text('Priority: ${test['priority']}'),
+                          Text('Date: ${test['date']}'),
+                        ],
+                      ),
+                      trailing: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Chip(
+                            label: Text(test['status']),
+                            backgroundColor: _getStatusColor(test['status']),
+                          ),
+                        ],
+                      ),
+                      onTap: () {
+                        _showTestRequestDetails(test);
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPatientSearch() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Patient Search',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              decoration: const InputDecoration(
+                hintText: 'Search by patient name, ID, or test type...',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) {
+                // Implement search functionality
+              },
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Search Results:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                itemCount: testResults.length,
+                itemBuilder: (context, index) {
+                  final test = testResults[index];
+                  return Card(
+                    child: ListTile(
+                      leading: const CircleAvatar(child: Icon(Icons.person)),
+                      title: Text(test['patientName']),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('ID: ${test['id']}'),
+                          Text('Test: ${test['testType']}'),
+                          Text('Date: ${test['date']}'),
+                        ],
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.arrow_forward),
+                        onPressed: () {
+                          _showPatientDetails(test);
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAppointmentCalendar() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Lab Appointments',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Text(
+                  'Today\'s Appointments',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const Spacer(),
+                ElevatedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.add),
+                  label: const Text('New Appointment'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                itemCount: labAppointments.length,
+                itemBuilder: (context, index) {
+                  final appointment = labAppointments[index];
+                  return Card(
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: _getAppointmentStatusColor(
+                          appointment['status'],
+                        ),
+                        child: Text(appointment['time'].substring(0, 2)),
+                      ),
+                      title: Text(appointment['patientName']),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Test: ${appointment['testType']}'),
+                          Text('Time: ${appointment['time']}'),
+                          if (appointment['fasting'])
+                            const Text(
+                              '⚠️ Fasting Required',
+                              style: TextStyle(color: Colors.orange),
+                            ),
+                        ],
+                      ),
+                      trailing: Chip(
+                        label: Text(appointment['status']),
+                        backgroundColor: _getAppointmentStatusColor(
+                          appointment['status'],
+                        ),
+                      ),
+                      onTap: () {
+                        _showAppointmentDetails(appointment);
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showStaffAssignment() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Lab Staff Assignment',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                itemCount: labStaff.length,
+                itemBuilder: (context, index) {
+                  final staff = labStaff[index];
+                  return Card(
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: staff['status'] == 'Active'
+                            ? Colors.green
+                            : Colors.orange,
+                        child: Text(staff['name'].substring(0, 1)),
+                      ),
+                      title: Text(staff['name']),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Role: ${staff['role']}'),
+                          Text('Department: ${staff['department']}'),
+                          Text('Shift: ${staff['shift']}'),
+                          Text('Experience: ${staff['experience']}'),
+                        ],
+                      ),
+                      trailing: Chip(
+                        label: Text(staff['status']),
+                        backgroundColor: staff['status'] == 'Active'
+                            ? Colors.green.withOpacity(0.3)
+                            : Colors.orange.withOpacity(0.3),
+                      ),
+                      onTap: () {
+                        _showStaffDetails(staff);
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showNotifications() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Lab Notifications',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView(
+                children: [
+                  Card(
+                    child: ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: Colors.red,
+                        child: Icon(Icons.priority_high, color: Colors.white),
+                      ),
+                      title: const Text('Urgent Test Request'),
+                      subtitle: const Text(
+                        'Cardiac markers needed for ICU patient',
+                      ),
+                      trailing: const Text('5 min ago'),
+                      onTap: () {},
+                    ),
+                  ),
+                  Card(
+                    child: ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: Colors.blue,
+                        child: Icon(Icons.assignment, color: Colors.white),
+                      ),
+                      title: const Text('New Test Assignment'),
+                      subtitle: const Text(
+                        'Blood work assigned to Tech. Sarah Wilson',
+                      ),
+                      trailing: const Text('15 min ago'),
+                      onTap: () {},
+                    ),
+                  ),
+                  Card(
+                    child: ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: Colors.green,
+                        child: Icon(Icons.check_circle, color: Colors.white),
+                      ),
+                      title: const Text('Results Uploaded'),
+                      subtitle: const Text(
+                        'LAB001 results uploaded successfully',
+                      ),
+                      trailing: const Text('30 min ago'),
+                      onTap: () {},
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Helper methods for lab dashboard
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'Pending':
+        return Colors.orange.withOpacity(0.3);
+      case 'In Progress':
+        return Colors.blue.withOpacity(0.3);
+      case 'Completed':
+        return Colors.green.withOpacity(0.3);
+      default:
+        return Colors.grey.withOpacity(0.3);
+    }
+  }
+
+  Color _getAppointmentStatusColor(String status) {
+    switch (status) {
+      case 'Scheduled':
+        return Colors.blue.withOpacity(0.3);
+      case 'Checked In':
+        return Colors.orange.withOpacity(0.3);
+      case 'Completed':
+        return Colors.green.withOpacity(0.3);
+      default:
+        return Colors.grey.withOpacity(0.3);
+    }
+  }
+
+  IconData _getTestIcon(String testType) {
+    if (testType.toLowerCase().contains('blood')) {
+      return Icons.water_drop;
+    } else if (testType.toLowerCase().contains('cardiac')) {
+      return Icons.favorite;
+    } else if (testType.toLowerCase().contains('liver')) {
+      return Icons.health_and_safety;
+    } else {
+      return Icons.science;
+    }
+  }
+
+  void _showTestRequestDetails(Map<String, dynamic> test) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Test Request ${test['id']}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Patient: ${test['patientName']}'),
+            Text('Test Type: ${test['testType']}'),
+            Text('Priority: ${test['priority']}'),
+            Text('Status: ${test['status']}'),
+            Text('Technician: ${test['technician']}'),
+            Text('Date: ${test['date']}'),
+            Text('Results: ${test['results']}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          if (test['status'] == 'Pending')
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  test['status'] = 'In Progress';
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('${test['id']} started processing')),
+                );
+              },
+              child: const Text('Start Processing'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showPatientDetails(Map<String, dynamic> test) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Patient: ${test['patientName']}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Patient ID: ${test['id']}'),
+            Text('Test Type: ${test['testType']}'),
+            Text('Date: ${test['date']}'),
+            Text('Status: ${test['status']}'),
+            Text('Results: ${test['results']}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('View Full History'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAppointmentDetails(Map<String, dynamic> appointment) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Appointment ${appointment['id']}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Patient: ${appointment['patientName']}'),
+            Text('Test Type: ${appointment['testType']}'),
+            Text('Time: ${appointment['time']}'),
+            Text('Date: ${appointment['date']}'),
+            Text('Status: ${appointment['status']}'),
+            if (appointment['fasting'])
+              const Text(
+                '⚠️ Fasting Required',
+                style: TextStyle(color: Colors.orange),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          if (appointment['status'] == 'Scheduled')
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  appointment['status'] = 'Checked In';
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${appointment['patientName']} checked in'),
+                  ),
+                );
+              },
+              child: const Text('Check In'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showStaffDetails(Map<String, dynamic> staff) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(staff['name']),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('ID: ${staff['id']}'),
+            Text('Role: ${staff['role']}'),
+            Text('Department: ${staff['department']}'),
+            Text('Shift: ${staff['shift']}'),
+            Text('Experience: ${staff['experience']}'),
+            Text('Status: ${staff['status']}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Assign Task'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final Color mainBlue = const Color(0xFF7B61FF);
-    final Color scaffoldBg = isDarkMode ? Colors.black : Colors.grey.shade50;
-    final Color textColor = isDarkMode ? Colors.white : Colors.black87;
-    final Color subTextColor = isDarkMode ? Colors.grey.shade400 : Colors.grey.shade600;
+    final theme = Theme.of(context);
+    final Color mainBlue = theme.primaryColor;
+    final Color scaffoldBg = theme.scaffoldBackgroundColor;
+    final Color textColor = theme.textTheme.bodyLarge?.color ?? Colors.black;
+    final Color subTextColor = theme.textTheme.bodyMedium?.color ?? Colors.grey;
 
     return Scaffold(
       backgroundColor: scaffoldBg,
@@ -129,11 +1065,17 @@ class _LabDashboardState extends State<LabDashboard> {
         elevation: 0,
         actions: [
           IconButton(
-            icon: Icon(isDarkMode ? Icons.dark_mode : Icons.light_mode),
+            icon: Icon(
+              theme.brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
             onPressed: () {
-              setState(() {
-                isDarkMode = !isDarkMode;
-              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Theme toggle requires app restart'),
+                ),
+              );
             },
           ),
           IconButton(icon: const Icon(Icons.logout), onPressed: _logout),
@@ -142,162 +1084,165 @@ class _LabDashboardState extends State<LabDashboard> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _selectedBottomNav == 0
-              ? Container(
-                  color: scaffoldBg,
-                  child: ListView(
-                    padding: const EdgeInsets.all(20),
+          ? Container(
+              color: scaffoldBg,
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  // Welcome Card
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor: mainBlue,
+                            child: Icon(
+                              Icons.science,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Welcome, Lab Staff!',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: textColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Laboratory Department',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    color: subTextColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // Statistics Cards
+                  Row(
                     children: [
-                      // Welcome Card
-                      Card(
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 28,
-                                backgroundColor: mainBlue,
-                                child: Icon(
-                                  Icons.science,
-                                  color: Colors.white,
-                                  size: 28,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Welcome, Lab Staff!',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: textColor,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Laboratory Department',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        color: subTextColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
+                      Expanded(
+                        child: _buildStatCard(
+                          'Total Tests',
+                          '$totalTests',
+                          Icons.assignment_turned_in,
+                          Colors.green,
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      // Statistics Cards
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildStatCard(
-                              'Total Tests',
-                              '$totalTests',
-                              Icons.assignment_turned_in,
-                              Colors.green,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildStatCard(
-                              'Pending Uploads',
-                              '$pendingUploads',
-                              Icons.upload_file,
-                              Colors.orange,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildStatCard(
-                              "Today's Appointments",
-                              '$todaysAppointments',
-                              Icons.calendar_today,
-                              Colors.blue,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildStatCard(
-                              'Completed',
-                              '${totalTests - pendingUploads}',
-                              Icons.check_circle,
-                              Colors.teal,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      // Quick Actions
-                      Text(
-                        'Quick Actions',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          'Pending Uploads',
+                          '$pendingUploads',
+                          Icons.upload_file,
+                          Colors.orange,
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                          "Today's Appointments",
+                          '$todaysAppointments',
+                          Icons.calendar_today,
+                          Colors.blue,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          'Completed',
+                          '${totalTests - pendingUploads}',
+                          Icons.check_circle,
+                          Colors.teal,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  // Quick Actions
+                  Text(
+                    'Quick Actions',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
                           childAspectRatio: 1.2,
                         ),
-                        itemCount: _features.length,
-                        itemBuilder: (context, index) {
-                          final feature = _features[index];
-                          return GestureDetector(
-                            onTap: () => _onFeatureTap(feature.label),
-                            child: Card(
-                              elevation: 2,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(feature.icon, size: 32, color: mainBlue),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      feature.label,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                        color: textColor,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
+                    itemCount: _features.length,
+                    itemBuilder: (context, index) {
+                      final feature = _features[index];
+                      return GestureDetector(
+                        onTap: () => _onFeatureTap(feature.label),
+                        child: Card(
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(feature.icon, size: 32, color: mainBlue),
+                                const SizedBox(height: 8),
+                                Text(
+                                  feature.label,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: textColor,
+                                  ),
+                                  textAlign: TextAlign.center,
                                 ),
-                              ),
+                              ],
                             ),
-                          );
-                        },
-                      ),
-                    ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                )
-              : _selectedBottomNav == 1
-                  ? const Center(child: Text('Chat System (Stub)', style: TextStyle(fontSize: 20)))
-                  : const LabProfilePage(),
+                ],
+              ),
+            )
+          : _selectedBottomNav == 1
+          ? const Center(
+              child: Text('Chat System (Stub)', style: TextStyle(fontSize: 20)),
+            )
+          : const LabProfilePage(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedBottomNav,
         onTap: (index) => setState(() => _selectedBottomNav = index),
@@ -309,10 +1254,7 @@ class _LabDashboardState extends State<LabDashboard> {
             icon: Icon(Icons.dashboard),
             label: 'Dashboard',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat),
-            label: 'Chat',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
@@ -427,15 +1369,15 @@ class _LabProfilePageState extends State<LabProfilePage> {
       );
       await _loadLabData();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile photo updated!')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Profile photo updated!')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update photo: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to update photo: $e')));
       }
     }
     if (mounted) setState(() => _isUploading = false);
@@ -487,7 +1429,9 @@ class _LabProfilePageState extends State<LabProfilePage> {
               // Lab Details
               TextField(
                 controller: _institutionNameController,
-                decoration: const InputDecoration(labelText: 'Institution Name'),
+                decoration: const InputDecoration(
+                  labelText: 'Institution Name',
+                ),
               ),
               TextField(
                 controller: _hotlineController,
@@ -503,7 +1447,10 @@ class _LabProfilePageState extends State<LabProfilePage> {
               ),
               const SizedBox(height: 12),
               // Authorized Representative
-              Text('Authorized Representative', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                'Authorized Representative',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               TextField(
                 controller: _repNameController,
                 decoration: const InputDecoration(labelText: 'Name'),
@@ -528,11 +1475,15 @@ class _LabProfilePageState extends State<LabProfilePage> {
               ),
               TextField(
                 controller: _testTypesController,
-                decoration: const InputDecoration(labelText: 'Test Types Offered'),
+                decoration: const InputDecoration(
+                  labelText: 'Test Types Offered',
+                ),
               ),
               TextField(
                 controller: _turnaroundController,
-                decoration: const InputDecoration(labelText: 'Report Turnaround Time'),
+                decoration: const InputDecoration(
+                  labelText: 'Report Turnaround Time',
+                ),
               ),
             ],
           ),
@@ -598,8 +1549,12 @@ class _LabProfilePageState extends State<LabProfilePage> {
     final Brightness brightness = Theme.of(context).brightness;
     final bool isDarkMode = brightness == Brightness.dark;
     final Color mainBlue = const Color(0xFF7B61FF);
-    final Color cardBg = isDarkMode ? const Color(0xFF232A34) : const Color(0xFFF5F9FF);
-    final Color scaffoldBg = isDarkMode ? const Color(0xFF181C22) : Colors.white;
+    final Color cardBg = isDarkMode
+        ? const Color(0xFF232A34)
+        : const Color(0xFFF5F9FF);
+    final Color scaffoldBg = isDarkMode
+        ? const Color(0xFF181C22)
+        : Colors.white;
     final Color textColor = isDarkMode ? Colors.white : mainBlue;
     return Scaffold(
       appBar: AppBar(
@@ -624,97 +1579,163 @@ class _LabProfilePageState extends State<LabProfilePage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : labData == null
-              ? const Center(child: Text('No profile data found.'))
-              : ListView(
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    Center(
-                      child: Stack(
-                        children: [
-                          GestureDetector(
-                            onTap: _isUploading ? null : _pickAndUploadPhoto,
-                            child: CircleAvatar(
-                              radius: 48,
-                              backgroundImage: NetworkImage(
-                                labData?['photoURL'] ??
-                                    'https://ui-avatars.com/api/?name=${Uri.encodeComponent(labData?['institutionName'] ?? 'Lab')}&background=7B61FF&color=fff',
-                              ),
-                              child: _isUploading
-                                  ? const CircularProgressIndicator()
-                                  : null,
-                            ),
+          ? const Center(child: Text('No profile data found.'))
+          : ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                Center(
+                  child: Stack(
+                    children: [
+                      GestureDetector(
+                        onTap: _isUploading ? null : _pickAndUploadPhoto,
+                        child: CircleAvatar(
+                          radius: 48,
+                          backgroundImage: NetworkImage(
+                            labData?['photoURL'] ??
+                                'https://ui-avatars.com/api/?name=${Uri.encodeComponent(labData?['institutionName'] ?? 'Lab')}&background=7B61FF&color=fff',
                           ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: CircleAvatar(
-                              radius: 16,
-                              backgroundColor: mainBlue,
-                              child: const Icon(Icons.camera_alt, color: Colors.white, size: 18),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Center(
-                      child: Text(
-                        labData?['institutionName'] ?? 'Lab Name',
-                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: Text(
-                        labData?['officialEmail'] ?? 'Email not set',
-                        style: const TextStyle(fontSize: 16, color: Colors.grey),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Card(
-                      color: cardBg,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Lab Details', style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 16)),
-                            const SizedBox(height: 8),
-                            _profileRow('Institution Name', labData?['institutionName']),
-                            _profileRow('License Number', labData?['licenseNumber']),
-                            _profileRow('Hotline', labData?['hotline']),
-                            _profileRow('Address', labData?['address']),
-                            _profileRow('Website', labData?['website']),
-                            const SizedBox(height: 16),
-                            Text('Authorized Representative', style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 16)),
-                            const SizedBox(height: 8),
-                            _profileRow('Name', labData?['repName']),
-                            _profileRow('Designation', labData?['repDesignation']),
-                            _profileRow('Contact', labData?['repContact']),
-                            _profileRow('Email', labData?['repEmail']),
-                            const SizedBox(height: 16),
-                            Text('Operating Hours:', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-                            const SizedBox(height: 4),
-                            Text(labData?['operatingHours'] ?? 'Not set', style: const TextStyle(color: Colors.grey)),
-                            const SizedBox(height: 12),
-                            Text('Test Types Offered:', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-                            const SizedBox(height: 4),
-                            Text((labData?['testTypes'] as String? ?? 'Not set'), style: const TextStyle(color: Colors.grey)),
-                            const SizedBox(height: 12),
-                            Text('Report Turnaround Time:', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-                            const SizedBox(height: 4),
-                            Text(labData?['turnaroundTime'] ?? 'Not set', style: const TextStyle(color: Colors.grey)),
-                            const SizedBox(height: 16),
-                            Text('User Management:', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-                            const SizedBox(height: 4),
-                            Text('Add/remove lab technicians (admin only) - Coming soon', style: const TextStyle(color: Colors.grey)),
-                          ],
+                          child: _isUploading
+                              ? const CircularProgressIndicator()
+                              : null,
                         ),
                       ),
-                    ),
-                  ],
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: CircleAvatar(
+                          radius: 16,
+                          backgroundColor: mainBlue,
+                          child: const Icon(
+                            Icons.camera_alt,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(height: 16),
+                Center(
+                  child: Text(
+                    labData?['institutionName'] ?? 'Lab Name',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Center(
+                  child: Text(
+                    labData?['officialEmail'] ?? 'Email not set',
+                    style: const TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Card(
+                  color: cardBg,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Lab Details',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _profileRow(
+                          'Institution Name',
+                          labData?['institutionName'],
+                        ),
+                        _profileRow(
+                          'License Number',
+                          labData?['licenseNumber'],
+                        ),
+                        _profileRow('Hotline', labData?['hotline']),
+                        _profileRow('Address', labData?['address']),
+                        _profileRow('Website', labData?['website']),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Authorized Representative',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _profileRow('Name', labData?['repName']),
+                        _profileRow('Designation', labData?['repDesignation']),
+                        _profileRow('Contact', labData?['repContact']),
+                        _profileRow('Email', labData?['repEmail']),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Operating Hours:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          labData?['operatingHours'] ?? 'Not set',
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Test Types Offered:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          (labData?['testTypes'] as String? ?? 'Not set'),
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Report Turnaround Time:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          labData?['turnaroundTime'] ?? 'Not set',
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'User Management:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Add/remove lab technicians (admin only) - Coming soon',
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
@@ -722,9 +1743,15 @@ class _LabProfilePageState extends State<LabProfilePage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-        Text(value?.toString() ?? 'Not set', style: const TextStyle(color: Colors.grey)),
+        Text(
+          label,
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+        ),
+        Text(
+          value?.toString() ?? 'Not set',
+          style: const TextStyle(color: Colors.grey),
+        ),
       ],
     );
   }
-} 
+}

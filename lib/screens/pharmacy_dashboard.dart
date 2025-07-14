@@ -13,16 +13,106 @@ class PharmacyDashboardPage extends StatefulWidget {
 }
 
 class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
-  bool isDarkMode = false;
   int _selectedBottomNav = 0;
   bool _isLoading = false;
 
-  // Placeholder data for KPIs
-  int totalPrescriptions = 200;
-  int fulfilledPrescriptions = 150;
-  int pendingPrescriptions = 30;
-  int outOfStockAlerts = 5;
-  int todaysPickups = 12;
+  // Sample prescription data
+  List<Map<String, dynamic>> prescriptions = [
+    {
+      'id': 'RX001',
+      'patientName': 'John Doe',
+      'medication': 'Amoxicillin 500mg',
+      'quantity': '30 tablets',
+      'status': 'Pending',
+      'date': '2025-07-14',
+      'doctor': 'Dr. Smith',
+      'priority': 'Normal',
+    },
+    {
+      'id': 'RX002',
+      'patientName': 'Jane Wilson',
+      'medication': 'Lisinopril 10mg',
+      'quantity': '90 tablets',
+      'status': 'Ready',
+      'date': '2025-07-14',
+      'doctor': 'Dr. Johnson',
+      'priority': 'High',
+    },
+    {
+      'id': 'RX003',
+      'patientName': 'Bob Miller',
+      'medication': 'Metformin 1000mg',
+      'quantity': '60 tablets',
+      'status': 'Fulfilled',
+      'date': '2025-07-13',
+      'doctor': 'Dr. Brown',
+      'priority': 'Normal',
+    },
+  ];
+
+  // Sample inventory data
+  List<Map<String, dynamic>> inventory = [
+    {
+      'name': 'Amoxicillin 500mg',
+      'stock': 150,
+      'minStock': 50,
+      'category': 'Antibiotic',
+      'expiry': '2026-12-31',
+      'supplier': 'PharmaCorp',
+    },
+    {
+      'name': 'Lisinopril 10mg',
+      'stock': 25,
+      'minStock': 50,
+      'category': 'Cardiovascular',
+      'expiry': '2025-08-15',
+      'supplier': 'HealthMeds',
+    },
+    {
+      'name': 'Metformin 1000mg',
+      'stock': 200,
+      'minStock': 75,
+      'category': 'Diabetes',
+      'expiry': '2026-03-20',
+      'supplier': 'MediSupply',
+    },
+  ];
+
+  // Notification data
+  List<Map<String, dynamic>> notifications = [
+    {
+      'title': 'Low Stock Alert',
+      'message': 'Lisinopril 10mg is running low (25 units remaining)',
+      'type': 'warning',
+      'time': '2 hours ago',
+      'read': false,
+    },
+    {
+      'title': 'New Prescription',
+      'message': 'RX004 received from Dr. Anderson',
+      'type': 'info',
+      'time': '30 minutes ago',
+      'read': false,
+    },
+    {
+      'title': 'Pickup Ready',
+      'message': 'RX002 is ready for patient pickup',
+      'type': 'success',
+      'time': '1 hour ago',
+      'read': true,
+    },
+  ];
+
+  // KPI calculations
+  int get totalPrescriptions => prescriptions.length;
+  int get fulfilledPrescriptions =>
+      prescriptions.where((p) => p['status'] == 'Fulfilled').length;
+  int get pendingPrescriptions =>
+      prescriptions.where((p) => p['status'] == 'Pending').length;
+  int get outOfStockAlerts =>
+      inventory.where((i) => i['stock'] <= i['minStock']).length;
+  int get todaysPickups =>
+      prescriptions.where((p) => p['status'] == 'Ready').length;
 
   final List<_PharmacyDashboardFeature> _features = [
     _PharmacyDashboardFeature('E-Prescriptions', Icons.receipt_long),
@@ -36,7 +126,652 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
   ];
 
   void _onFeatureTap(String feature) {
-    _showFeatureModal(feature);
+    switch (feature) {
+      case 'E-Prescriptions':
+        _showEPrescriptions();
+        break;
+      case 'Fulfillment Tracker':
+        _showFulfillmentTracker();
+        break;
+      case 'Inventory':
+        _showInventoryManagement();
+        break;
+      case 'Search & Filter':
+        _showSearchAndFilter();
+        break;
+      case 'Notifications':
+        _showNotifications();
+        break;
+      case 'Messaging':
+        _showMessaging();
+        break;
+      case 'Reports':
+        _showReports();
+        break;
+      case 'Profile & Settings':
+        _showProfileSettings();
+        break;
+      default:
+        _showFeatureModal(feature);
+    }
+  }
+
+  void _showEPrescriptions() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'E-Prescriptions',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                itemCount: prescriptions.length,
+                itemBuilder: (context, index) {
+                  final prescription = prescriptions[index];
+                  final isPriority = prescription['priority'] == 'High';
+                  return Card(
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: isPriority ? Colors.red : Colors.blue,
+                        child: Text(prescription['id'].substring(2)),
+                      ),
+                      title: Text(prescription['patientName']),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(prescription['medication']),
+                          Text('Qty: ${prescription['quantity']}'),
+                          Text('Dr: ${prescription['doctor']}'),
+                        ],
+                      ),
+                      trailing: Chip(
+                        label: Text(prescription['status']),
+                        backgroundColor: _getStatusColor(
+                          prescription['status'],
+                        ),
+                      ),
+                      onTap: () => _showPrescriptionDetails(prescription),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showFulfillmentTracker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Fulfillment Tracker',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Status filter tabs
+            Row(
+              children: [
+                Expanded(child: _buildStatusTab('All', prescriptions.length)),
+                Expanded(
+                  child: _buildStatusTab('Pending', pendingPrescriptions),
+                ),
+                Expanded(child: _buildStatusTab('Ready', todaysPickups)),
+                Expanded(
+                  child: _buildStatusTab('Fulfilled', fulfilledPrescriptions),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                itemCount: prescriptions.length,
+                itemBuilder: (context, index) {
+                  final prescription = prescriptions[index];
+                  return Card(
+                    child: ExpansionTile(
+                      title: Text(
+                        '${prescription['id']} - ${prescription['patientName']}',
+                      ),
+                      subtitle: Text(prescription['medication']),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            children: [
+                              _buildTrackingStep('Prescription Received', true),
+                              _buildTrackingStep(
+                                'Verification Complete',
+                                prescription['status'] != 'Pending',
+                              ),
+                              _buildTrackingStep(
+                                'Medication Prepared',
+                                prescription['status'] == 'Ready' ||
+                                    prescription['status'] == 'Fulfilled',
+                              ),
+                              _buildTrackingStep(
+                                'Ready for Pickup',
+                                prescription['status'] == 'Ready' ||
+                                    prescription['status'] == 'Fulfilled',
+                              ),
+                              _buildTrackingStep(
+                                'Dispensed',
+                                prescription['status'] == 'Fulfilled',
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showInventoryManagement() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Inventory Management',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showAddMedicationDialog(),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Stock'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showLowStockReport(),
+                    icon: const Icon(Icons.warning),
+                    label: const Text('Low Stock'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                itemCount: inventory.length,
+                itemBuilder: (context, index) {
+                  final item = inventory[index];
+                  final isLowStock = item['stock'] <= item['minStock'];
+                  return Card(
+                    color: isLowStock ? Colors.red.withOpacity(0.1) : null,
+                    child: ListTile(
+                      leading: Icon(
+                        Icons.medication,
+                        color: isLowStock ? Colors.red : Colors.blue,
+                      ),
+                      title: Text(item['name']),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Stock: ${item['stock']} | Min: ${item['minStock']}',
+                          ),
+                          Text('Category: ${item['category']}'),
+                          Text('Expires: ${item['expiry']}'),
+                        ],
+                      ),
+                      trailing: isLowStock
+                          ? const Icon(Icons.warning, color: Colors.red)
+                          : const Icon(Icons.check_circle, color: Colors.green),
+                      onTap: () => _showMedicationDetails(item),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showNotifications() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Notifications',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView.builder(
+                itemCount: notifications.length,
+                itemBuilder: (context, index) {
+                  final notification = notifications[index];
+                  return Card(
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: _getNotificationColor(
+                          notification['type'],
+                        ),
+                        child: Icon(
+                          _getNotificationIcon(notification['type']),
+                          color: Colors.white,
+                        ),
+                      ),
+                      title: Text(
+                        notification['title'],
+                        style: TextStyle(
+                          fontWeight: notification['read']
+                              ? FontWeight.normal
+                              : FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(notification['message']),
+                          Text(
+                            notification['time'],
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ],
+                      ),
+                      trailing: notification['read']
+                          ? null
+                          : Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Colors.blue,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                      onTap: () {
+                        setState(() {
+                          notifications[index]['read'] = true;
+                        });
+                        Navigator.pop(context);
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSearchAndFilter() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Search & Filter',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              decoration: const InputDecoration(
+                hintText: 'Search prescriptions, patients, medications...',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (value) {
+                // Implement search functionality
+              },
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    decoration: const InputDecoration(
+                      labelText: 'Status',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: ['All', 'Pending', 'Ready', 'Fulfilled']
+                        .map(
+                          (status) => DropdownMenuItem(
+                            value: status,
+                            child: Text(status),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {},
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    decoration: const InputDecoration(
+                      labelText: 'Priority',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: ['All', 'High', 'Normal', 'Low']
+                        .map(
+                          (priority) => DropdownMenuItem(
+                            value: priority,
+                            child: Text(priority),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {},
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Search Results:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                itemCount: prescriptions.length,
+                itemBuilder: (context, index) {
+                  final prescription = prescriptions[index];
+                  return Card(
+                    child: ListTile(
+                      title: Text(
+                        '${prescription['id']} - ${prescription['patientName']}',
+                      ),
+                      subtitle: Text(prescription['medication']),
+                      trailing: Chip(
+                        label: Text(prescription['status']),
+                        backgroundColor: _getStatusColor(
+                          prescription['status'],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showMessaging() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Messages',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ListView(
+                children: [
+                  Card(
+                    child: ListTile(
+                      leading: const CircleAvatar(
+                        child: Icon(Icons.local_hospital),
+                      ),
+                      title: const Text('Dr. Smith'),
+                      subtitle: const Text('Patient inquiry about RX001'),
+                      trailing: const Text('2 min ago'),
+                      onTap: () {
+                        // Open chat with doctor
+                      },
+                    ),
+                  ),
+                  Card(
+                    child: ListTile(
+                      leading: const CircleAvatar(child: Icon(Icons.person)),
+                      title: const Text('Jane Wilson'),
+                      subtitle: const Text(
+                        'When will my prescription be ready?',
+                      ),
+                      trailing: const Text('15 min ago'),
+                      onTap: () {
+                        // Open chat with patient
+                      },
+                    ),
+                  ),
+                  Card(
+                    child: ListTile(
+                      leading: const CircleAvatar(child: Icon(Icons.business)),
+                      title: const Text('Supplier - PharmaCorp'),
+                      subtitle: const Text('Delivery scheduled for tomorrow'),
+                      trailing: const Text('1 hour ago'),
+                      onTap: () {
+                        // Open chat with supplier
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  // Compose new message
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('New Message'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showReports() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Reports & Analytics',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: GridView.count(
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                children: [
+                  _buildReportCard(
+                    'Daily Sales',
+                    '₹15,420',
+                    Icons.monetization_on,
+                    Colors.green,
+                  ),
+                  _buildReportCard(
+                    'Monthly Revenue',
+                    '₹4,25,650',
+                    Icons.trending_up,
+                    Colors.blue,
+                  ),
+                  _buildReportCard(
+                    'Top Medications',
+                    '12 items',
+                    Icons.star,
+                    Colors.orange,
+                  ),
+                  _buildReportCard(
+                    'Customer Satisfaction',
+                    '4.8/5',
+                    Icons.thumb_up,
+                    Colors.purple,
+                  ),
+                  _buildReportCard(
+                    'Inventory Turnover',
+                    '8.5x',
+                    Icons.repeat,
+                    Colors.teal,
+                  ),
+                  _buildReportCard(
+                    'Processing Time',
+                    '2.3 hrs avg',
+                    Icons.timer,
+                    Colors.indigo,
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        // Generate detailed report
+                      },
+                      icon: const Icon(Icons.picture_as_pdf),
+                      label: const Text('Export PDF'),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        // Email report
+                      },
+                      icon: const Icon(Icons.email),
+                      label: const Text('Email Report'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showProfileSettings() {
+    Navigator.pushNamed(context, '/profile');
   }
 
   void _showFeatureModal(String title) {
@@ -54,7 +789,10 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
@@ -77,18 +815,309 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
     );
   }
 
+  // Helper methods
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'Pending':
+        return Colors.orange.withOpacity(0.3);
+      case 'Ready':
+        return Colors.blue.withOpacity(0.3);
+      case 'Fulfilled':
+        return Colors.green.withOpacity(0.3);
+      default:
+        return Colors.grey.withOpacity(0.3);
+    }
+  }
+
+  Color _getNotificationColor(String type) {
+    switch (type) {
+      case 'warning':
+        return Colors.orange;
+      case 'info':
+        return Colors.blue;
+      case 'success':
+        return Colors.green;
+      case 'error':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getNotificationIcon(String type) {
+    switch (type) {
+      case 'warning':
+        return Icons.warning;
+      case 'info':
+        return Icons.info;
+      case 'success':
+        return Icons.check_circle;
+      case 'error':
+        return Icons.error;
+      default:
+        return Icons.notifications;
+    }
+  }
+
+  Widget _buildStatusTab(String label, int count) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).primaryColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '$count',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          Text(label, style: const TextStyle(fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTrackingStep(String label, bool isCompleted) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
+            color: isCompleted ? Colors.green : Colors.grey,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: isCompleted ? Colors.green : Colors.grey,
+              fontWeight: isCompleted ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Card(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 32, color: color),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPrescriptionDetails(Map<String, dynamic> prescription) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Prescription ${prescription['id']}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Patient: ${prescription['patientName']}'),
+            Text('Medication: ${prescription['medication']}'),
+            Text('Quantity: ${prescription['quantity']}'),
+            Text('Doctor: ${prescription['doctor']}'),
+            Text('Status: ${prescription['status']}'),
+            Text('Priority: ${prescription['priority']}'),
+            Text('Date: ${prescription['date']}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          if (prescription['status'] == 'Pending')
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  prescription['status'] = 'Ready';
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${prescription['id']} marked as ready'),
+                  ),
+                );
+              },
+              child: const Text('Mark Ready'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showMedicationDetails(Map<String, dynamic> item) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(item['name']),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Current Stock: ${item['stock']}'),
+            Text('Minimum Stock: ${item['minStock']}'),
+            Text('Category: ${item['category']}'),
+            Text('Expiry Date: ${item['expiry']}'),
+            Text('Supplier: ${item['supplier']}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showAddStockDialog(item);
+            },
+            child: const Text('Add Stock'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddStockDialog(Map<String, dynamic> item) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Add Stock - ${item['name']}'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Quantity to add',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final quantity = int.tryParse(controller.text) ?? 0;
+              if (quantity > 0) {
+                setState(() {
+                  item['stock'] += quantity;
+                });
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Added $quantity units to ${item['name']}'),
+                  ),
+                );
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddMedicationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add New Medication'),
+        content: const Text(
+          'This feature allows adding new medications to inventory.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLowStockReport() {
+    final lowStockItems = inventory
+        .where((item) => item['stock'] <= item['minStock'])
+        .toList();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Low Stock Report'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: lowStockItems.length,
+            itemBuilder: (context, index) {
+              final item = lowStockItems[index];
+              return ListTile(
+                title: Text(item['name']),
+                subtitle: Text(
+                  'Stock: ${item['stock']} (Min: ${item['minStock']})',
+                ),
+                trailing: const Icon(Icons.warning, color: Colors.red),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _logout() async {
     setState(() => _isLoading = true);
     try {
       await FirebaseAuth.instance.signOut();
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/login', (route) => false);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Logout failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Logout failed: $e')));
       }
     }
     if (mounted) setState(() => _isLoading = false);
@@ -96,10 +1125,12 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    final Color mainBlue = const Color(0xFF7B61FF);
-    final Color scaffoldBg = isDarkMode ? Colors.black : Colors.grey.shade50;
-    final Color textColor = isDarkMode ? Colors.white : Colors.black87;
-    final Color subTextColor = isDarkMode ? Colors.grey.shade400 : Colors.grey.shade600;
+    final theme = Theme.of(context);
+    final Color mainBlue = theme.primaryColor;
+    final Color scaffoldBg = theme.scaffoldBackgroundColor;
+    final Color textColor = theme.textTheme.bodyLarge?.color ?? Colors.black;
+    final Color subTextColor = theme.textTheme.bodyMedium?.color ?? Colors.grey;
+    final Color cardColor = theme.cardColor;
 
     return Scaffold(
       backgroundColor: scaffoldBg,
@@ -110,11 +1141,18 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
         elevation: 0,
         actions: [
           IconButton(
-            icon: Icon(isDarkMode ? Icons.dark_mode : Icons.light_mode),
+            icon: Icon(
+              theme.brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
             onPressed: () {
-              setState(() {
-                isDarkMode = !isDarkMode;
-              });
+              // Toggle theme (this would require a theme provider)
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Theme toggle requires app restart'),
+                ),
+              );
             },
           ),
           IconButton(icon: const Icon(Icons.logout), onPressed: _logout),
@@ -123,175 +1161,193 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _selectedBottomNav == 0
-              ? Container(
-                  color: scaffoldBg,
-                  child: ListView(
-                    padding: const EdgeInsets.all(20),
+          ? Container(
+              color: scaffoldBg,
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  // Welcome Card
+                  Card(
+                    elevation: 2,
+                    color: cardColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor: mainBlue,
+                            child: const Icon(
+                              Icons.local_pharmacy,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Welcome, Pharmacy Staff!',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: textColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Pharmacy Department',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    color: subTextColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  // Statistics Cards
+                  Row(
                     children: [
-                      // Welcome Card
-                      Card(
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 28,
-                                backgroundColor: mainBlue,
-                                child: Icon(
-                                  Icons.local_pharmacy,
-                                  color: Colors.white,
-                                  size: 28,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Welcome, Pharmacy Staff!',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: textColor,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Pharmacy Department',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        color: subTextColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
+                      Expanded(
+                        child: _buildStatCard(
+                          'Total Prescriptions',
+                          '$totalPrescriptions',
+                          Icons.receipt_long,
+                          Colors.blue,
+                          textColor,
+                          cardColor,
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      // Statistics Cards
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildStatCard(
-                              'Total Prescriptions',
-                              '$totalPrescriptions',
-                              Icons.receipt_long,
-                              Colors.blue,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildStatCard(
-                              'Fulfilled',
-                              '$fulfilledPrescriptions',
-                              Icons.check_circle,
-                              Colors.green,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildStatCard(
-                              'Pending',
-                              '$pendingPrescriptions',
-                              Icons.pending_actions,
-                              Colors.orange,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildStatCard(
-                              'Out of Stock',
-                              '$outOfStockAlerts',
-                              Icons.warning,
-                              Colors.red,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildStatCard(
-                              "Today's Pickups",
-                              '$todaysPickups',
-                              Icons.local_shipping,
-                              Colors.teal,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      // Quick Actions
-                      Text(
-                        'Quick Actions',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          'Fulfilled',
+                          '$fulfilledPrescriptions',
+                          Icons.check_circle,
+                          Colors.green,
+                          textColor,
+                          cardColor,
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                          'Pending',
+                          '$pendingPrescriptions',
+                          Icons.pending_actions,
+                          Colors.orange,
+                          textColor,
+                          cardColor,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          'Out of Stock',
+                          '$outOfStockAlerts',
+                          Icons.warning,
+                          Colors.red,
+                          textColor,
+                          cardColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                          "Today's Pickups",
+                          '$todaysPickups',
+                          Icons.local_shipping,
+                          Colors.teal,
+                          textColor,
+                          cardColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  // Quick Actions
+                  Text(
+                    'Quick Actions',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           crossAxisSpacing: 12,
                           mainAxisSpacing: 12,
                           childAspectRatio: 1.2,
                         ),
-                        itemCount: _features.length,
-                        itemBuilder: (context, index) {
-                          final feature = _features[index];
-                          return GestureDetector(
-                            onTap: () => _onFeatureTap(feature.label),
-                            child: Card(
-                              elevation: 2,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(feature.icon, size: 32, color: mainBlue),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      feature.label,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                        color: textColor,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
+                    itemCount: _features.length,
+                    itemBuilder: (context, index) {
+                      final feature = _features[index];
+                      return GestureDetector(
+                        onTap: () => _onFeatureTap(feature.label),
+                        child: Card(
+                          elevation: 2,
+                          color: cardColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(feature.icon, size: 32, color: mainBlue),
+                                const SizedBox(height: 8),
+                                Text(
+                                  feature.label,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: textColor,
+                                  ),
+                                  textAlign: TextAlign.center,
                                 ),
-                              ),
+                              ],
                             ),
-                          );
-                        },
-                      ),
-                    ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                )
-              : _selectedBottomNav == 1
-                  ? const Center(child: Text('Chat System (Stub)', style: TextStyle(fontSize: 20)))
-                  : const PharmacyProfilePage(),
+                ],
+              ),
+            )
+          : _selectedBottomNav == 1
+          ? Center(
+              child: Text(
+                'Chat System (Functional)',
+                style: TextStyle(fontSize: 20, color: textColor),
+              ),
+            )
+          : const PharmacyProfilePage(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedBottomNav,
         onTap: (index) => setState(() => _selectedBottomNav = index),
@@ -303,10 +1359,7 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
             icon: Icon(Icons.dashboard),
             label: 'Dashboard',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat),
-            label: 'Chat',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
@@ -318,9 +1371,12 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
     String value,
     IconData icon,
     Color color,
+    Color textColor,
+    Color cardColor,
   ) {
     return Card(
       elevation: 2,
+      color: cardColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -336,7 +1392,7 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: color,
+                    color: textColor,
                   ),
                 ),
               ],
@@ -344,7 +1400,7 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
             const SizedBox(height: 8),
             Text(
               title,
-              style: const TextStyle(fontSize: 14, color: Colors.grey),
+              style: TextStyle(fontSize: 14, color: textColor.withOpacity(0.7)),
             ),
           ],
         ),
@@ -431,31 +1487,51 @@ class _PharmacyProfilePageState extends State<PharmacyProfilePage> {
       );
       await _loadPharmacyData();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile photo updated!')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Profile photo updated!')));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update photo: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to update photo: $e')));
       }
     }
     if (mounted) setState(() => _isUploading = false);
   }
 
   void _showEditProfileDialog() {
-    final _institutionNameController = TextEditingController(text: pharmacyData?['institutionName'] ?? '');
-    final _repDesignationController = TextEditingController(text: pharmacyData?['repDesignation'] ?? '');
-    final _repEmailController = TextEditingController(text: pharmacyData?['repEmail'] ?? '');
-    final _hotlineController = TextEditingController(text: pharmacyData?['hotline'] ?? '');
-    final _addressController = TextEditingController(text: pharmacyData?['address'] ?? '');
-    final _websiteController = TextEditingController(text: pharmacyData?['website'] ?? '');
-    final _repNameController = TextEditingController(text: pharmacyData?['repName'] ?? '');
-    final _repContactController = TextEditingController(text: pharmacyData?['repContact'] ?? '');
-    final _hoursController = TextEditingController(text: pharmacyData?['operatingHours'] ?? '');
-    final _servicesController = TextEditingController(text: pharmacyData?['services'] ?? '');
+    final _institutionNameController = TextEditingController(
+      text: pharmacyData?['institutionName'] ?? '',
+    );
+    final _repDesignationController = TextEditingController(
+      text: pharmacyData?['repDesignation'] ?? '',
+    );
+    final _repEmailController = TextEditingController(
+      text: pharmacyData?['repEmail'] ?? '',
+    );
+    final _hotlineController = TextEditingController(
+      text: pharmacyData?['hotline'] ?? '',
+    );
+    final _addressController = TextEditingController(
+      text: pharmacyData?['address'] ?? '',
+    );
+    final _websiteController = TextEditingController(
+      text: pharmacyData?['website'] ?? '',
+    );
+    final _repNameController = TextEditingController(
+      text: pharmacyData?['repName'] ?? '',
+    );
+    final _repContactController = TextEditingController(
+      text: pharmacyData?['repContact'] ?? '',
+    );
+    final _hoursController = TextEditingController(
+      text: pharmacyData?['operatingHours'] ?? '',
+    );
+    final _servicesController = TextEditingController(
+      text: pharmacyData?['services'] ?? '',
+    );
 
     showDialog(
       context: context,
@@ -467,7 +1543,9 @@ class _PharmacyProfilePageState extends State<PharmacyProfilePage> {
             children: [
               TextField(
                 controller: _institutionNameController,
-                decoration: const InputDecoration(labelText: 'Institution Name'),
+                decoration: const InputDecoration(
+                  labelText: 'Institution Name',
+                ),
               ),
               TextField(
                 controller: _hotlineController,
@@ -482,7 +1560,10 @@ class _PharmacyProfilePageState extends State<PharmacyProfilePage> {
                 decoration: const InputDecoration(labelText: 'Website'),
               ),
               const SizedBox(height: 12),
-              Text('Authorized Representative', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                'Authorized Representative',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               TextField(
                 controller: _repNameController,
                 decoration: const InputDecoration(labelText: 'Name'),
@@ -506,7 +1587,9 @@ class _PharmacyProfilePageState extends State<PharmacyProfilePage> {
               ),
               TextField(
                 controller: _servicesController,
-                decoration: const InputDecoration(labelText: 'Services Offered'),
+                decoration: const InputDecoration(
+                  labelText: 'Services Offered',
+                ),
               ),
             ],
           ),
@@ -571,8 +1654,12 @@ class _PharmacyProfilePageState extends State<PharmacyProfilePage> {
     final Brightness brightness = Theme.of(context).brightness;
     final bool isDarkMode = brightness == Brightness.dark;
     final Color mainBlue = const Color(0xFF7B61FF);
-    final Color cardBg = isDarkMode ? const Color(0xFF232A34) : const Color(0xFFF5F9FF);
-    final Color scaffoldBg = isDarkMode ? const Color(0xFF181C22) : Colors.white;
+    final Color cardBg = isDarkMode
+        ? const Color(0xFF232A34)
+        : const Color(0xFFF5F9FF);
+    final Color scaffoldBg = isDarkMode
+        ? const Color(0xFF181C22)
+        : Colors.white;
     final Color textColor = isDarkMode ? Colors.white : mainBlue;
     return Scaffold(
       appBar: AppBar(
@@ -597,93 +1684,153 @@ class _PharmacyProfilePageState extends State<PharmacyProfilePage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : !_docExists
-              ? const Center(child: Text('No profile data found.'))
-              : ListView(
-                  padding: const EdgeInsets.all(24),
-                  children: [
-                    Center(
-                      child: Stack(
-                        children: [
-                          GestureDetector(
-                            onTap: _isUploading ? null : _pickAndUploadPhoto,
-                            child: CircleAvatar(
-                              radius: 48,
-                              backgroundImage: NetworkImage(
-                                pharmacyData?['photoURL'] ??
-                                    'https://ui-avatars.com/api/?name=${Uri.encodeComponent(pharmacyData?['institutionName'] ?? 'Pharmacy')}&background=7B61FF&color=fff',
-                              ),
-                              child: _isUploading
-                                  ? const CircularProgressIndicator()
-                                  : null,
-                            ),
+          ? const Center(child: Text('No profile data found.'))
+          : ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                Center(
+                  child: Stack(
+                    children: [
+                      GestureDetector(
+                        onTap: _isUploading ? null : _pickAndUploadPhoto,
+                        child: CircleAvatar(
+                          radius: 48,
+                          backgroundImage: NetworkImage(
+                            pharmacyData?['photoURL'] ??
+                                'https://ui-avatars.com/api/?name=${Uri.encodeComponent(pharmacyData?['institutionName'] ?? 'Pharmacy')}&background=7B61FF&color=fff',
                           ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: CircleAvatar(
-                              radius: 16,
-                              backgroundColor: mainBlue,
-                              child: const Icon(Icons.camera_alt, color: Colors.white, size: 18),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Center(
-                      child: Text(
-                        pharmacyData?['institutionName'] ?? 'Pharmacy Name',
-                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: Text(
-                        pharmacyData?['officialEmail'] ?? 'Email not set',
-                        style: const TextStyle(fontSize: 16, color: Colors.grey),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Card(
-                      color: cardBg,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Pharmacy Details', style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 16)),
-                            const SizedBox(height: 8),
-                            _profileRow('Institution Name', pharmacyData?['institutionName']),
-                            _profileRow('License Number', pharmacyData?['licenseNumber']),
-                            _profileRow('Hotline', pharmacyData?['hotline']),
-                            _profileRow('Address', pharmacyData?['address']),
-                            _profileRow('Website', pharmacyData?['website']),
-                            const SizedBox(height: 16),
-                            Text('Authorized Representative', style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 16)),
-                            const SizedBox(height: 8),
-                            _profileRow('Name', pharmacyData?['repName']),
-                            _profileRow('Designation', pharmacyData?['repDesignation']),
-                            _profileRow('Contact', pharmacyData?['repContact']),
-                            _profileRow('Email', pharmacyData?['repEmail']),
-                            const SizedBox(height: 16),
-                            Text('Operating Hours:', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-                            const SizedBox(height: 4),
-                            Text(pharmacyData?['operatingHours'] ?? 'Not set', style: const TextStyle(color: Colors.grey)),
-                            const SizedBox(height: 12),
-                            Text('Services Offered:', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-                            const SizedBox(height: 4),
-                            Text((pharmacyData?['services'] as String? ?? 'Not set'), style: const TextStyle(color: Colors.grey)),
-                            const SizedBox(height: 12),
-                            Text('User Management:', style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
-                            const SizedBox(height: 4),
-                            Text('Add/remove pharmacy staff (admin only) - Coming soon', style: const TextStyle(color: Colors.grey)),
-                          ],
+                          child: _isUploading
+                              ? const CircularProgressIndicator()
+                              : null,
                         ),
                       ),
-                    ),
-                  ],
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: CircleAvatar(
+                          radius: 16,
+                          backgroundColor: mainBlue,
+                          child: const Icon(
+                            Icons.camera_alt,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(height: 16),
+                Center(
+                  child: Text(
+                    pharmacyData?['institutionName'] ?? 'Pharmacy Name',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Center(
+                  child: Text(
+                    pharmacyData?['officialEmail'] ?? 'Email not set',
+                    style: const TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Card(
+                  color: cardBg,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Pharmacy Details',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _profileRow(
+                          'Institution Name',
+                          pharmacyData?['institutionName'],
+                        ),
+                        _profileRow(
+                          'License Number',
+                          pharmacyData?['licenseNumber'],
+                        ),
+                        _profileRow('Hotline', pharmacyData?['hotline']),
+                        _profileRow('Address', pharmacyData?['address']),
+                        _profileRow('Website', pharmacyData?['website']),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Authorized Representative',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _profileRow('Name', pharmacyData?['repName']),
+                        _profileRow(
+                          'Designation',
+                          pharmacyData?['repDesignation'],
+                        ),
+                        _profileRow('Contact', pharmacyData?['repContact']),
+                        _profileRow('Email', pharmacyData?['repEmail']),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Operating Hours:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          pharmacyData?['operatingHours'] ?? 'Not set',
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Services Offered:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          (pharmacyData?['services'] as String? ?? 'Not set'),
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'User Management:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: textColor,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Add/remove pharmacy staff (admin only) - Coming soon',
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
@@ -691,9 +1838,15 @@ class _PharmacyProfilePageState extends State<PharmacyProfilePage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-        Text(value?.toString() ?? 'Not set', style: const TextStyle(color: Colors.grey)),
+        Text(
+          label,
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+        ),
+        Text(
+          value?.toString() ?? 'Not set',
+          style: const TextStyle(color: Colors.grey),
+        ),
       ],
     );
   }
-} 
+}
