@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
@@ -10,6 +11,7 @@ import 'screens/medical_summary_screen.dart';
 import 'screens/lab_report_content_screen.dart';
 import 'screens/trend_analysis_screen.dart';
 import 'services/trend_analysis_service.dart';
+import 'widgets/trend_test_data_widget.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -346,6 +348,11 @@ class DashboardContent extends StatelessWidget {
               ),
             ),
           ),
+
+          const SizedBox(height: 16),
+
+          // Test Data Widget (only in debug mode)
+          if (kDebugMode) const TrendTestDataWidget(),
 
           const SizedBox(height: 16),
 

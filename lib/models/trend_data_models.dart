@@ -269,7 +269,7 @@ class PredictionData {
 
   factory PredictionData.fromMap(Map<String, dynamic> data) {
     return PredictionData(
-      date: DateTime.parse(data['date']),
+      date: _parseDateTime(data['date']),
       predictedValue: (data['predictedValue'] ?? 0).toDouble(),
       confidenceInterval: ConfidenceIntervalData.fromMap(
         Map<String, dynamic>.from(data['confidenceInterval'] ?? {}),
@@ -277,6 +277,25 @@ class PredictionData {
       confidence: (data['confidence'] ?? 0).toDouble(),
       monthsAhead: data['monthsAhead'] ?? 0,
     );
+  }
+
+  /// Helper method to parse DateTime from various formats
+  static DateTime _parseDateTime(dynamic dateValue) {
+    if (dateValue == null) {
+      return DateTime.now();
+    } else if (dateValue is Timestamp) {
+      return dateValue.toDate();
+    } else if (dateValue is String) {
+      try {
+        return DateTime.parse(dateValue);
+      } catch (e) {
+        return DateTime.now();
+      }
+    } else if (dateValue is DateTime) {
+      return dateValue;
+    } else {
+      return DateTime.now();
+    }
   }
 
   /// Get formatted date string
@@ -332,13 +351,28 @@ class TimeSpanData {
     return TimeSpanData(
       days: data['days'] ?? 0,
       months: data['months'] ?? 0,
-      startDate: DateTime.parse(
-        data['startDate'] ?? DateTime.now().toIso8601String(),
-      ),
-      endDate: DateTime.parse(
-        data['endDate'] ?? DateTime.now().toIso8601String(),
-      ),
+      startDate: _parseDateTime(data['startDate']),
+      endDate: _parseDateTime(data['endDate']),
     );
+  }
+
+  /// Helper method to parse DateTime from various formats
+  static DateTime _parseDateTime(dynamic dateValue) {
+    if (dateValue == null) {
+      return DateTime.now();
+    } else if (dateValue is Timestamp) {
+      return dateValue.toDate();
+    } else if (dateValue is String) {
+      try {
+        return DateTime.parse(dateValue);
+      } catch (e) {
+        return DateTime.now();
+      }
+    } else if (dateValue is DateTime) {
+      return dateValue;
+    } else {
+      return DateTime.now();
+    }
   }
 
   /// Get formatted time span
@@ -441,12 +475,31 @@ class DataPointData {
 
   factory DataPointData.fromMap(Map<String, dynamic> data) {
     return DataPointData(
-      date: DateTime.parse(data['date']),
+      date: _parseDateTime(data['date']),
       value: (data['value'] ?? 0).toDouble(),
       unit: data['unit'] ?? '',
       status: data['status'] ?? 'normal',
       reportId: data['reportId'] ?? '',
     );
+  }
+
+  /// Helper method to parse DateTime from various formats
+  static DateTime _parseDateTime(dynamic dateValue) {
+    if (dateValue == null) {
+      return DateTime.now();
+    } else if (dateValue is Timestamp) {
+      return dateValue.toDate();
+    } else if (dateValue is String) {
+      try {
+        return DateTime.parse(dateValue);
+      } catch (e) {
+        return DateTime.now();
+      }
+    } else if (dateValue is DateTime) {
+      return dateValue;
+    } else {
+      return DateTime.now();
+    }
   }
 
   /// Get formatted date
@@ -496,9 +549,28 @@ class DateRangeData {
 
   factory DateRangeData.fromMap(Map<String, dynamic> data) {
     return DateRangeData(
-      start: DateTime.parse(data['start'] ?? DateTime.now().toIso8601String()),
-      end: DateTime.parse(data['end'] ?? DateTime.now().toIso8601String()),
+      start: _parseDateTime(data['start']),
+      end: _parseDateTime(data['end']),
     );
+  }
+
+  /// Helper method to parse DateTime from various formats
+  static DateTime _parseDateTime(dynamic dateValue) {
+    if (dateValue == null) {
+      return DateTime.now();
+    } else if (dateValue is Timestamp) {
+      return dateValue.toDate();
+    } else if (dateValue is String) {
+      try {
+        return DateTime.parse(dateValue);
+      } catch (e) {
+        return DateTime.now();
+      }
+    } else if (dateValue is DateTime) {
+      return dateValue;
+    } else {
+      return DateTime.now();
+    }
   }
 
   /// Get duration in days
