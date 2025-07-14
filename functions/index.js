@@ -2185,6 +2185,10 @@ function extractVitalParameters(reports, labReportType) {
     // Blood Sugar / Glucose
     'blood_sugar': ['glucose', 'blood_glucose', 'fasting_glucose', 'random_glucose'],
     'Blood Sugar': ['glucose', 'blood_glucose', 'fasting_glucose', 'random_glucose'],
+    'Random Blood Sugar Test': ['glucose', 'blood_glucose', 'fasting_glucose', 'random_glucose'],
+    
+    // Hemoglobin A1c
+    'Hemoglobin A1c': ['hemoglobin_a1c', 'hba1c', 'glycated_hemoglobin'],
     
     // Cholesterol / Lipid Panel
     'cholesterol': ['total_cholesterol', 'ldl', 'hdl', 'triglycerides'],
@@ -2280,12 +2284,18 @@ function isMatchingTest(testName, vitalParameter) {
   const vitalNormalized = vitalParameter.toLowerCase().replace(/_/g, '');
   
   const mappings = {
-    'glucose': ['glucose', 'bloodglucose', 'fastingglucose', 'randomglucose'],
+    'glucose': ['glucose', 'bloodglucose', 'fastingglucose', 'randomglucose', 'randombloodsugar'],
+    'bloodglucose': ['glucose', 'bloodglucose', 'fastingglucose', 'randomglucose', 'randombloodsugar'],
+    'fastingglucose': ['glucose', 'bloodglucose', 'fastingglucose', 'randomglucose', 'randombloodsugar'],
+    'randomglucose': ['glucose', 'bloodglucose', 'fastingglucose', 'randomglucose', 'randombloodsugar'],
+    'hemoglobina1c': ['hemoglobina1c', 'hba1c', 'glycatedhemoglobin', 'hemoglobin'],
+    'hba1c': ['hemoglobina1c', 'hba1c', 'glycatedhemoglobin'],
+    'glycatedhemoglobin': ['hemoglobina1c', 'hba1c', 'glycatedhemoglobin'],
     'totalcholesterol': ['totalcholesterol', 'cholesterol'],
     'ldl': ['ldl', 'ldlcholesterol', 'lowdensity'],
     'hdl': ['hdl', 'hdlcholesterol', 'highdensity'],
     'triglycerides': ['triglycerides', 'triglyceride'],
-    'hemoglobin': ['hemoglobin', 'hgb', 'hb'],
+    'hemoglobin': ['hemoglobin', 'hgb', 'hb', 'hemoglobina1c'],
     'hematocrit': ['hematocrit', 'hct'],
     'whitebloodcell': ['wbc', 'whitebloodcell', 'whitebloodcellcount', 'leukocyte'],
     'plateletcount': ['platelet', 'plt', 'plateletcount'],
