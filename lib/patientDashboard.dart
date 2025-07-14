@@ -8,6 +8,8 @@ import 'services/gemini_service.dart';
 import 'screens/medical_records_screen.dart';
 import 'screens/medical_summary_screen.dart';
 import 'screens/lab_report_content_screen.dart';
+import 'screens/trend_analysis_screen.dart';
+import 'services/trend_analysis_service.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -59,7 +61,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
   }
 
   List<Widget> get _pages => [
-    DashboardContent(userData: userData),
+    DashboardContent(userData: userData, onNavigateToTrends: _navigateToTrends),
     const Center(child: Text('Appointments')),
     MedicalRecordsScreen(userId: userData?['uid'] ?? ''),
     UserProfileContent(
@@ -288,12 +290,24 @@ class _PatientDashboardState extends State<PatientDashboard> {
       ),
     );
   }
+
+  void _navigateToTrends() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const TrendAnalysisScreen()),
+    );
+  }
 }
 
 class DashboardContent extends StatelessWidget {
   final Map<String, dynamic>? userData;
+  final VoidCallback? onNavigateToTrends;
 
-  const DashboardContent({super.key, required this.userData});
+  const DashboardContent({
+    super.key,
+    required this.userData,
+    this.onNavigateToTrends,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -337,6 +351,16 @@ class DashboardContent extends StatelessWidget {
 
           // Medical Summary Card
           _buildMedicalSummaryCard(context, userData?['uid']),
+
+          const SizedBox(height: 16),
+
+          // Trend Analysis Card
+          _buildTrendAnalysisCard(),
+
+          const SizedBox(height: 16),
+
+          // Trend Notifications
+          _buildTrendNotifications(),
 
           const SizedBox(height: 16),
 
@@ -718,6 +742,88 @@ class DashboardContent extends StatelessWidget {
     } else {
       return 'Good Evening';
     }
+  }
+
+  Widget _buildTrendAnalysisCard() {
+    return Card(
+      elevation: 3,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: InkWell(
+        onTap: onNavigateToTrends,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue[100],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.trending_up,
+                  color: Colors.blue[700],
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Health Trends',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'View patterns in your lab reports',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.arrow_forward_ios, color: Colors.grey[400], size: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrendNotifications() {
+    return FutureBuilder<List<TrendNotification>>(
+      future: TrendAnalysisService.getTrendNotifications(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        final unreadNotifications = snapshot.data!
+            .where((notification) => !notification.read)
+            .toList();
+
+        if (unreadNotifications.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return Card(
+          color: Colors.blue[50],
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: ListTile(
+            leading: Icon(Icons.notifications, color: Colors.blue[700]),
+            title: const Text('New Health Trends Available'),
+            subtitle: Text('${unreadNotifications.length} new analysis'),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: onNavigateToTrends,
+          ),
+        );
+      },
+    );
   }
 }
 

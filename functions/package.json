@@ -7,12 +7,20 @@
     "shell": "firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "test": "node test-data.js",
+    "test:performance": "node ../scripts/load_test.js",
+    "test:staging": "firebase use staging && npm run test",
+    "test:production": "firebase use production && npm run test"
   },
   "engines": {
     "node": "22"
   },
   "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./trend": "./trendDetection.js"
+  },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "firebase-admin": "^12.6.0",

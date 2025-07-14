@@ -13,6 +13,8 @@ import 'screens/hospital_dashboard.dart';
 import 'screens/caregiver_dashboard.dart';
 import 'screens/lab_dashboard.dart';
 import 'screens/pharmacy_dashboard.dart';
+import 'screens/trend_analysis_screen.dart';
+import 'theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -28,10 +30,18 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'HealthMate',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.system,
+
+      // Global error handling
+      builder: (context, widget) {
+        ErrorWidget.builder = (FlutterErrorDetails errorDetails) {
+          return CustomErrorWidget(errorDetails: errorDetails);
+        };
+        return widget!;
+      },
+
       initialRoute: '/',
       onGenerateRoute: (settings) {
         if (settings.name == '/register') {
@@ -63,7 +73,17 @@ class MyApp extends StatelessWidget {
         } else if (settings.name == '/labDashboard') {
           return MaterialPageRoute(builder: (_) => const LabDashboard());
         } else if (settings.name == '/pharmacyDashboard') {
-          return MaterialPageRoute(builder: (_) => const PharmacyDashboardPage());
+          return MaterialPageRoute(
+            builder: (_) => const PharmacyDashboardPage(),
+          );
+        } else if (settings.name == '/trends') {
+          return MaterialPageRoute(builder: (_) => const TrendAnalysisScreen());
+        } else if (settings.name == '/trends/lab-type') {
+          final args = settings.arguments as Map<String, String>?;
+          return MaterialPageRoute(
+            builder: (_) =>
+                TrendAnalysisScreen(labReportType: args?['labReportType']),
+          );
         }
         // Handle unknown routes
         return MaterialPageRoute(builder: (_) => const AuthWrapper());
@@ -82,7 +102,39 @@ class MyApp extends StatelessWidget {
         '/caregiverDashboard': (context) => const CaregiverDashboard(),
         '/labDashboard': (context) => const LabDashboard(),
         '/pharmacyDashboard': (context) => const PharmacyDashboardPage(),
+        '/trends': (context) => const TrendAnalysisScreen(),
       },
+    );
+  }
+}
+
+class CustomErrorWidget extends StatelessWidget {
+  final FlutterErrorDetails errorDetails;
+
+  const CustomErrorWidget({Key? key, required this.errorDetails})
+    : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      child: Container(
+        color: Colors.red[50],
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error, size: 48, color: Colors.red[700]),
+              const SizedBox(height: 16),
+              const Text('Something went wrong'),
+              const SizedBox(height: 8),
+              Text(
+                'Please try again later',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
