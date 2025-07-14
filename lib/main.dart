@@ -7,7 +7,9 @@ import 'patientDashboard.dart'; // Import the patient dashboard
 import 'auth_wrapper.dart';
 import 'doctorReg.dart';
 import 'caregiverReg.dart';
-import 'hospitalReg.dart';
+import 'hospitalRegNew.dart';
+import 'pharmacyReg.dart';
+import 'labReg.dart';
 import 'screens/doctor_dashboard.dart';
 import 'screens/hospital_dashboard.dart';
 import 'screens/caregiver_dashboard.dart';
@@ -64,6 +66,12 @@ class MyApp extends StatelessWidget {
           return MaterialPageRoute(
             builder: (_) => const HospitalRegistrationPage(),
           );
+        } else if (settings.name == '/pharmacyRegister') {
+          return MaterialPageRoute(
+            builder: (_) => const PharmacyRegistrationPage(),
+          );
+        } else if (settings.name == '/labRegister') {
+          return MaterialPageRoute(builder: (_) => const LabRegistrationPage());
         } else if (settings.name == '/doctorDashboard') {
           return MaterialPageRoute(builder: (_) => const DoctorDashboard());
         } else if (settings.name == '/hospitalDashboard') {
@@ -97,6 +105,8 @@ class MyApp extends StatelessWidget {
         '/doctorRegister': (context) => const DoctorRegistrationPage(),
         '/caregiverRegister': (context) => const CaregiverRegistrationPage(),
         '/hospitalRegister': (context) => const HospitalRegistrationPage(),
+        '/pharmacyRegister': (context) => const PharmacyRegistrationPage(),
+        '/labRegister': (context) => const LabRegistrationPage(),
         '/doctorDashboard': (context) => const DoctorDashboard(),
         '/hospitalDashboard': (context) => const HospitalDashboard(),
         '/caregiverDashboard': (context) => const CaregiverDashboard(),
