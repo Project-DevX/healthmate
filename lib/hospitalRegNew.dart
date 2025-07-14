@@ -18,23 +18,15 @@ class HospitalRegistrationPage extends StatefulWidget {
 
 class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
   final _formKey = GlobalKey<FormState>();
-  final _hospitalNameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _addressController = TextEditingController();
-  final _registrationNumberController = TextEditingController();
   bool _isLoading = false;
   bool _acceptedTerms = false;
 
-  final _institutionNameController = TextEditingController();
+  // Hospital Details
+  final _hospitalNameController = TextEditingController();
   final _licenseNumberController = TextEditingController();
-
-  // Contact Information
   final _officialEmailController = TextEditingController();
   final _hotlineController = TextEditingController();
-  final _institutionAddressController = TextEditingController();
+  final _addressController = TextEditingController();
   final _websiteController = TextEditingController();
 
   // Authorized Representative
@@ -43,102 +35,106 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
   final _repContactController = TextEditingController();
   final _repEmailController = TextEditingController();
 
+  // Additional Hospital-Specific Fields
+  final _specialtiesController = TextEditingController();
+  final _bedsController = TextEditingController();
+  final _emergencyServicesController = TextEditingController();
+  final _facilityTypeController = TextEditingController();
+
+  // Password
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
   // Document Uploads
+  File? _hospitalLicenseFile;
+  String? _hospitalLicenseFileName;
   File? _businessCertFile;
   String? _businessCertFileName;
-  File? _healthDeptApprovalFile;
-  String? _healthDeptApprovalFileName;
-  File? _pharmacyLicenseFile;
-  String? _pharmacyLicenseFileName;
+  File? _accreditationFile;
+  String? _accreditationFileName;
 
   final List<Map<String, dynamic>> _sampleHospitals = [
     {
-      'institutionName': 'City General Hospital',
-      'institutionType': 'Hospital',
+      'hospitalName': 'City General Hospital',
       'licenseNumber': 'HOSP001',
       'officialEmail': 'admin.citygeneral@gmail.com',
-      'hotline': '+1234567820',
+      'hotline': '+1234567890',
       'address': '123 Medical Drive, Healthcare City, HC 12345',
       'website': 'www.citygeneral.com',
       'repName': 'Dr. John Smith',
       'repDesignation': 'Chief Medical Officer',
-      'repContact': '+1234567821',
+      'repContact': '+1234567891',
       'repEmail': 'cmo.citygeneral@gmail.com',
-      'password': 'password123',
+      'specialties':
+          'Cardiology, Neurology, Oncology, Emergency Medicine, Surgery',
+      'beds': '250',
+      'emergencyServices': '24/7 Emergency Room, Trauma Center, ICU, CCU',
+      'facilityType': 'Tertiary Care Hospital',
+      'password': 'hospital123',
     },
     {
-      'institutionName': 'Metro Medical Laboratory',
-      'institutionType': 'Laboratory',
-      'licenseNumber': 'LAB002',
-      'officialEmail': 'info.metrolab@gmail.com',
-      'hotline': '+1234567822',
-      'address': '456 Lab Avenue, Metro City, MC 67890',
-      'website': 'www.metrolab.com',
+      'hospitalName': 'Metro Medical Center',
+      'licenseNumber': 'HOSP002',
+      'officialEmail': 'info.metromedical@gmail.com',
+      'hotline': '+1234567892',
+      'address': '456 Health Avenue, Metro City, MC 67890',
+      'website': 'www.metromedical.com',
       'repName': 'Dr. Sarah Johnson',
-      'repDesignation': 'Laboratory Director',
-      'repContact': '+1234567823',
-      'repEmail': 'director.metrolab@gmail.com',
-      'password': 'password123',
+      'repDesignation': 'Medical Director',
+      'repContact': '+1234567893',
+      'repEmail': 'sarah.johnson@metromedical.com',
+      'specialties':
+          'Pediatrics, Obstetrics, Orthopedics, Radiology, Laboratory Services',
+      'beds': '180',
+      'emergencyServices':
+          'Emergency Department, Ambulance Services, Surgical Suites',
+      'facilityType': 'Secondary Care Hospital',
+      'password': 'hospital123',
     },
     {
-      'institutionName': 'HealthCare Pharmacy',
-      'institutionType': 'Pharmacy',
-      'licenseNumber': 'PHARM003',
-      'officialEmail': 'contact.healthcarepharm@gmail.com',
-      'hotline': '+1234567824',
-      'address': '789 Pharmacy Lane, Health Town, HT 54321',
-      'website': 'www.healthcarepharm.com',
-      'repName': 'PharmD Mike Wilson',
-      'repDesignation': 'Chief Pharmacist',
-      'repContact': '+1234567825',
-      'repEmail': 'chief.healthcarepharm@gmail.com',
-      'password': 'password123',
+      'hospitalName': 'Community Health Hospital',
+      'licenseNumber': 'HOSP003',
+      'officialEmail': 'contact.communityhealth@gmail.com',
+      'hotline': '+1234567894',
+      'address': '789 Community Road, Health Town, HT 54321',
+      'website': 'www.communityhealth.com',
+      'repName': 'Dr. Michael Rodriguez',
+      'repDesignation': 'Hospital Administrator',
+      'repContact': '+1234567895',
+      'repEmail': 'michael.rodriguez@communityhealth.com',
+      'specialties':
+          'Family Medicine, Internal Medicine, Psychiatry, Rehabilitation',
+      'beds': '120',
+      'emergencyServices':
+          'Urgent Care, Mental Health Crisis Support, Outpatient Services',
+      'facilityType': 'Community Hospital',
+      'password': 'hospital123',
     },
   ];
 
   @override
   void dispose() {
     _hospitalNameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
-    _phoneController.dispose();
-    _addressController.dispose();
-    _registrationNumberController.dispose();
-    _institutionNameController.dispose();
     _licenseNumberController.dispose();
     _officialEmailController.dispose();
     _hotlineController.dispose();
-    _institutionAddressController.dispose();
+    _addressController.dispose();
     _websiteController.dispose();
     _repNameController.dispose();
     _repDesignationController.dispose();
     _repContactController.dispose();
     _repEmailController.dispose();
-    _businessCertFile = null;
-    _businessCertFileName = null;
-    _healthDeptApprovalFile = null;
-    _healthDeptApprovalFileName = null;
-    _pharmacyLicenseFile = null;
-    _pharmacyLicenseFileName = null;
-    _selectedInstitutionType = null;
+    _specialtiesController.dispose();
+    _bedsController.dispose();
+    _emergencyServicesController.dispose();
+    _facilityTypeController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<String?> _uploadFile(File file, String fileName) async {
-    try {
-      final ref = FirebaseStorage.instance.ref().child(
-        'hospital_certificates/$fileName',
-      );
-      await ref.putFile(file);
-      return await ref.getDownloadURL();
-    } catch (e) {
-      return null;
-    }
-  }
-
   Future<void> _pickFile(
-    Function(File, String) setter,
+    Function(File, String) onFilePicked,
     List<String> allowedExtensions,
   ) async {
     try {
@@ -146,8 +142,11 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
         type: FileType.custom,
         allowedExtensions: allowedExtensions,
       );
-      if (result != null) {
-        setter(File(result.files.single.path!), result.files.single.name);
+
+      if (result != null && result.files.single.path != null) {
+        File file = File(result.files.single.path!);
+        String fileName = result.files.single.name;
+        onFilePicked(file, fileName);
       }
     } catch (e) {
       ScaffoldMessenger.of(
@@ -156,23 +155,31 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
     }
   }
 
+  Future<String> _uploadFile(File file, String fileName) async {
+    try {
+      final storageRef = FirebaseStorage.instance.ref().child(
+        'hospital_documents/$fileName',
+      );
+      await storageRef.putFile(file);
+      return await storageRef.getDownloadURL();
+    } catch (e) {
+      throw Exception('Failed to upload file: $e');
+    }
+  }
+
   Future<void> _registerHospital() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-    if (_selectedInstitutionType == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select institution type')),
-      );
-      return;
-    }
 
     // Skip document upload requirements in testing mode
-    print('🧪 Testing Mode Check: ${TestingConfig.isTestingMode}');
-    print('📁 Skip Document Uploads: ${TestingConfig.skipDocumentUploads}');
-
     if (!TestingConfig.skipDocumentUploads) {
-      print('📋 Checking document upload requirements...');
+      if (_hospitalLicenseFile == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please upload your hospital license')),
+        );
+        return;
+      }
       if (_businessCertFile == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -183,26 +190,8 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
         );
         return;
       }
-      if ((_selectedInstitutionType == 'Hospital' ||
-              _selectedInstitutionType == 'Laboratory') &&
-          _healthDeptApprovalFile == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please upload Health Department Approval'),
-          ),
-        );
-        return;
-      }
-      if (_selectedInstitutionType == 'Pharmacy' &&
-          _pharmacyLicenseFile == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please upload Pharmacy License')),
-        );
-        return;
-      }
-    } else {
-      print('🧪 TESTING MODE: Skipping document upload requirements');
     }
+
     if (!_acceptedTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -211,65 +200,71 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
       );
       return;
     }
+
     setState(() {
       _isLoading = true;
     });
+
     try {
       final userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
             email: _officialEmailController.text.trim(),
             password: _passwordController.text,
           );
+
+      String? hospitalLicenseUrl;
       String? businessCertUrl;
-      String? healthDeptApprovalUrl;
-      String? pharmacyLicenseUrl;
+      String? accreditationUrl;
+
+      if (_hospitalLicenseFile != null) {
+        hospitalLicenseUrl = await _uploadFile(
+          _hospitalLicenseFile!,
+          _hospitalLicenseFileName!,
+        );
+      }
       if (_businessCertFile != null) {
         businessCertUrl = await _uploadFile(
           _businessCertFile!,
           _businessCertFileName!,
         );
       }
-      if (_healthDeptApprovalFile != null) {
-        healthDeptApprovalUrl = await _uploadFile(
-          _healthDeptApprovalFile!,
-          _healthDeptApprovalFileName!,
+      if (_accreditationFile != null) {
+        accreditationUrl = await _uploadFile(
+          _accreditationFile!,
+          _accreditationFileName!,
         );
       }
-      if (_pharmacyLicenseFile != null) {
-        pharmacyLicenseUrl = await _uploadFile(
-          _pharmacyLicenseFile!,
-          _pharmacyLicenseFileName!,
-        );
-      }
+
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user!.uid)
           .set({
-            'institutionName': _institutionNameController.text.trim(),
-            'institutionType': _selectedInstitutionType,
+            'institutionName': _hospitalNameController.text.trim(),
+            'institutionType': 'Hospital',
             'licenseNumber': _licenseNumberController.text.trim(),
             'officialEmail': _officialEmailController.text.trim(),
             'hotline': _hotlineController.text.trim(),
-            'address': _institutionAddressController.text.trim(),
+            'address': _addressController.text.trim(),
             'website': _websiteController.text.trim(),
             'repName': _repNameController.text.trim(),
             'repDesignation': _repDesignationController.text.trim(),
             'repContact': _repContactController.text.trim(),
             'repEmail': _repEmailController.text.trim(),
+            'specialties': _specialtiesController.text.trim(),
+            'beds': _bedsController.text.trim(),
+            'emergencyServices': _emergencyServicesController.text.trim(),
+            'facilityType': _facilityTypeController.text.trim(),
+            'hospitalLicenseUrl': hospitalLicenseUrl,
             'businessCertUrl': businessCertUrl,
-            'healthDeptApprovalUrl': healthDeptApprovalUrl,
-            'pharmacyLicenseUrl': pharmacyLicenseUrl,
-            'userType': _selectedInstitutionType == 'Pharmacy'
-                ? 'pharmacy'
-                : _selectedInstitutionType == 'Laboratory'
-                ? 'lab'
-                : 'hospital',
+            'accreditationUrl': accreditationUrl,
+            'userType': 'hospital',
             'createdAt': FieldValue.serverTimestamp(),
             'lastLogin': FieldValue.serverTimestamp(),
           });
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Registration successful!')),
+          const SnackBar(content: Text('Hospital registration successful!')),
         );
 
         // In testing mode, redirect to login with pre-filled credentials
@@ -279,34 +274,12 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
             '/login',
             arguments: {
               'email': _officialEmailController.text.trim(),
-              'password': _passwordController.text,
-              'message':
-                  '🧪 Testing Mode: Credentials auto-filled from registration',
+              'userType': 'hospital',
             },
           );
         } else {
-          if (_selectedInstitutionType == 'Laboratory') {
-            Navigator.pushReplacementNamed(context, '/labDashboard');
-          } else if (_selectedInstitutionType == 'Hospital') {
-            Navigator.pushReplacementNamed(context, '/hospitalDashboard');
-          } else {
-            Navigator.pushReplacementNamed(context, '/home');
-          }
+          Navigator.pushReplacementNamed(context, '/login');
         }
-      }
-    } on FirebaseAuthException catch (e) {
-      String errorMessage = 'Registration failed';
-      if (e.code == 'weak-password') {
-        errorMessage = 'The password provided is too weak';
-      } else if (e.code == 'email-already-in-use') {
-        errorMessage = 'An account already exists for this email';
-      } else if (e.code == 'invalid-email') {
-        errorMessage = 'Please enter a valid email address';
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(errorMessage)));
       }
     } catch (e) {
       if (mounted) {
@@ -329,35 +302,28 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
         _sampleHospitals[random.nextInt(_sampleHospitals.length)];
 
     setState(() {
-      // Institution Details
-      _institutionNameController.text = sampleData['institutionName'];
-      _selectedInstitutionType = sampleData['institutionType'];
+      _hospitalNameController.text = sampleData['hospitalName'];
       _licenseNumberController.text = sampleData['licenseNumber'];
-
-      // Contact Information
       _officialEmailController.text = sampleData['officialEmail'];
       _hotlineController.text = sampleData['hotline'];
-      _institutionAddressController.text = sampleData['address'];
+      _addressController.text = sampleData['address'];
       _websiteController.text = sampleData['website'];
-
-      // Authorized Representative
       _repNameController.text = sampleData['repName'];
       _repDesignationController.text = sampleData['repDesignation'];
       _repContactController.text = sampleData['repContact'];
       _repEmailController.text = sampleData['repEmail'];
-
-      // Password
+      _specialtiesController.text = sampleData['specialties'];
+      _bedsController.text = sampleData['beds'];
+      _emergencyServicesController.text = sampleData['emergencyServices'];
+      _facilityTypeController.text = sampleData['facilityType'];
       _passwordController.text = sampleData['password'];
       _confirmPasswordController.text = sampleData['password'];
-
-      // Accept terms for testing
       _acceptedTerms = true;
     });
 
-    // Show confirmation that testing mode is active
     if (TestingConfig.skipDocumentUploads) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
             '🧪 Sample data filled! Testing mode: Document uploads bypassed',
           ),
@@ -371,7 +337,11 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Institution Registration')),
+      appBar: AppBar(
+        title: const Text('Hospital Registration'),
+        backgroundColor: Colors.red,
+        foregroundColor: Colors.white,
+      ),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -380,172 +350,226 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Header
+                const Icon(Icons.local_hospital, size: 80, color: Colors.red),
+                const SizedBox(height: 16),
                 const Text(
-                  'Register Your Institution',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  'Register Your Hospital',
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center,
                 ),
-
-                // Testing mode indicator
-                if (TestingConfig.isTestingMode) ...[
-                  Container(
-                    margin: const EdgeInsets.only(top: 8, bottom: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.orange),
-                    ),
-                    child: const Text(
-                      '🧪 TESTING MODE - Document uploads bypassed',
-                      style: TextStyle(
-                        color: Colors.orange,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 24),
+                const SizedBox(height: 8),
+                const Text(
+                  'Join our network to provide healthcare services',
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
 
                 // Debug button for testing
                 if (kDebugMode || TestingConfig.showDebugUI) ...[
                   Container(
                     width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    child: ElevatedButton.icon(
-                      onPressed: _fillSampleData,
-                      icon: const Icon(Icons.auto_fix_high),
-                      label: const Text('Fill Sample Data (DEBUG)'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 24),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      border: Border.all(color: Colors.orange),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          '🧪 TESTING MODE ACTIVE',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        ElevatedButton.icon(
+                          onPressed: _fillSampleData,
+                          icon: const Icon(Icons.auto_fix_high),
+                          label: const Text('Fill Sample Hospital Data'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
 
-                // Institution Details
+                // Hospital Information Section
+                const Text(
+                  'Hospital Information',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+
                 TextFormField(
-                  controller: _institutionNameController,
+                  controller: _hospitalNameController,
                   decoration: const InputDecoration(
-                    labelText: 'Institution Name',
+                    labelText: 'Hospital Name *',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.local_hospital),
                   ),
                   validator: (value) => value == null || value.isEmpty
-                      ? 'Please enter institution name'
+                      ? 'Please enter hospital name'
                       : null,
                 ),
                 const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: _selectedInstitutionType,
-                  decoration: const InputDecoration(
-                    labelText: 'Type',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.category),
-                  ),
-                  items: _institutionTypeOptions.map((String type) {
-                    return DropdownMenuItem<String>(
-                      value: type,
-                      child: Text(type),
-                    );
-                  }).toList(),
-                  onChanged: (String? newValue) {
-                    setState(() {
-                      _selectedInstitutionType = newValue;
-                    });
-                  },
-                  validator: (value) => value == null || value.isEmpty
-                      ? 'Please select institution type'
-                      : null,
-                ),
-                const SizedBox(height: 16),
+
                 TextFormField(
                   controller: _licenseNumberController,
                   decoration: const InputDecoration(
-                    labelText: 'License/Registration Number',
+                    labelText: 'Hospital License Number *',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.confirmation_number),
+                    prefixIcon: Icon(Icons.badge),
                   ),
                   validator: (value) => value == null || value.isEmpty
-                      ? 'Please enter license/registration number'
+                      ? 'Please enter license number'
                       : null,
                 ),
-                const SizedBox(height: 24),
-                // Contact Information
+                const SizedBox(height: 16),
+
                 TextFormField(
                   controller: _officialEmailController,
                   decoration: const InputDecoration(
-                    labelText: 'Official Email Address',
+                    labelText: 'Official Email *',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.email),
                   ),
-                  keyboardType: TextInputType.emailAddress,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Please enter an email address';
+                      return 'Please enter email';
                     }
-                    if (!RegExp(
-                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                    ).hasMatch(value)) {
-                      return 'Please enter a valid email address';
+                    if (!value.contains('@')) {
+                      return 'Please enter a valid email';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 16),
+
                 TextFormField(
                   controller: _hotlineController,
                   decoration: const InputDecoration(
-                    labelText: 'Hotline/Phone Number',
+                    labelText: 'Hotline Number *',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.phone),
                   ),
-                  keyboardType: TextInputType.phone,
                   validator: (value) => value == null || value.isEmpty
-                      ? 'Please enter hotline/phone number'
+                      ? 'Please enter hotline number'
                       : null,
                 ),
                 const SizedBox(height: 16),
+
                 TextFormField(
-                  controller: _institutionAddressController,
+                  controller: _addressController,
                   decoration: const InputDecoration(
-                    labelText: 'Institution Address',
+                    labelText: 'Hospital Address *',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.location_on),
                   ),
+                  maxLines: 2,
                   validator: (value) => value == null || value.isEmpty
                       ? 'Please enter address'
                       : null,
                 ),
                 const SizedBox(height: 16),
+
                 TextFormField(
                   controller: _websiteController,
                   decoration: const InputDecoration(
-                    labelText: 'Website URL (optional)',
+                    labelText: 'Website (Optional)',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.language),
+                    prefixIcon: Icon(Icons.web),
                   ),
-                  keyboardType: TextInputType.url,
                 ),
                 const SizedBox(height: 24),
-                // Authorized Representative
-                Text(
-                  'Authorized Representative',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+
+                // Hospital Facilities
+                const Text(
+                  'Hospital Facilities & Services',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
+
+                TextFormField(
+                  controller: _facilityTypeController,
+                  decoration: const InputDecoration(
+                    labelText: 'Facility Type *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.apartment),
+                    hintText:
+                        'e.g., Tertiary Care, Secondary Care, Community Hospital',
+                  ),
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Please enter facility type'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+
+                TextFormField(
+                  controller: _bedsController,
+                  decoration: const InputDecoration(
+                    labelText: 'Number of Beds *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.bed),
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Please enter number of beds'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+
+                TextFormField(
+                  controller: _specialtiesController,
+                  decoration: const InputDecoration(
+                    labelText: 'Medical Specialties *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.medical_services),
+                    hintText:
+                        'e.g., Cardiology, Neurology, Oncology, Emergency Medicine',
+                  ),
+                  maxLines: 3,
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Please enter medical specialties'
+                      : null,
+                ),
+                const SizedBox(height: 16),
+
+                TextFormField(
+                  controller: _emergencyServicesController,
+                  decoration: const InputDecoration(
+                    labelText: 'Emergency Services *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.emergency),
+                    hintText:
+                        'e.g., 24/7 Emergency Room, Trauma Center, ICU, CCU',
+                  ),
+                  maxLines: 2,
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Please enter emergency services'
+                      : null,
+                ),
+                const SizedBox(height: 24),
+
+                // Authorized Representative Section
+                const Text(
+                  'Authorized Representative',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+
                 TextFormField(
                   controller: _repNameController,
                   decoration: const InputDecoration(
-                    labelText: 'Full Name',
+                    labelText: 'Representative Name *',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.person),
                   ),
@@ -554,52 +578,53 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
                       : null,
                 ),
                 const SizedBox(height: 16),
+
                 TextFormField(
                   controller: _repDesignationController,
                   decoration: const InputDecoration(
-                    labelText: 'Designation',
+                    labelText: 'Designation *',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.badge),
+                    prefixIcon: Icon(Icons.work),
+                    hintText: 'e.g., Chief Medical Officer, Medical Director',
                   ),
                   validator: (value) => value == null || value.isEmpty
                       ? 'Please enter designation'
                       : null,
                 ),
                 const SizedBox(height: 16),
+
                 TextFormField(
                   controller: _repContactController,
                   decoration: const InputDecoration(
-                    labelText: 'Contact Number',
+                    labelText: 'Contact Number *',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.phone_android),
+                    prefixIcon: Icon(Icons.phone),
                   ),
-                  keyboardType: TextInputType.phone,
                   validator: (value) => value == null || value.isEmpty
                       ? 'Please enter contact number'
                       : null,
                 ),
                 const SizedBox(height: 16),
+
                 TextFormField(
                   controller: _repEmailController,
                   decoration: const InputDecoration(
-                    labelText: 'Official Email',
+                    labelText: 'Representative Email *',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.email_outlined),
+                    prefixIcon: Icon(Icons.email),
                   ),
-                  keyboardType: TextInputType.emailAddress,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Please enter an email address';
+                      return 'Please enter representative email';
                     }
-                    if (!RegExp(
-                      r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                    ).hasMatch(value)) {
-                      return 'Please enter a valid email address';
+                    if (!value.contains('@')) {
+                      return 'Please enter a valid email';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 24),
+
                 // Document Uploads
                 if (TestingConfig.isTestingMode) ...[
                   Container(
@@ -631,17 +656,31 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
                   ),
                   const SizedBox(height: 8),
                 ] else ...[
-                  Text(
+                  const Text(
                     'Required Document Uploads',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 16),
                 ],
+
                 ElevatedButton.icon(
                   icon: const Icon(Icons.upload_file),
                   label: Text(
-                    _businessCertFileName ??
-                        'Upload Business Registration Certificate',
+                    _hospitalLicenseFileName ?? 'Upload Hospital License',
+                  ),
+                  onPressed: () => _pickFile((file, name) {
+                    setState(() {
+                      _hospitalLicenseFile = file;
+                      _hospitalLicenseFileName = name;
+                    });
+                  }, ['pdf', 'jpg', 'jpeg', 'png']),
+                ),
+                const SizedBox(height: 16),
+
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.upload_file),
+                  label: Text(
+                    _businessCertFileName ?? 'Upload Business Registration',
                   ),
                   onPressed: () => _pickFile((file, name) {
                     setState(() {
@@ -651,79 +690,84 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
                   }, ['pdf', 'jpg', 'jpeg', 'png']),
                 ),
                 const SizedBox(height: 16),
-                if (_selectedInstitutionType == 'Hospital' ||
-                    _selectedInstitutionType == 'Laboratory')
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.upload_file),
-                    label: Text(
-                      _healthDeptApprovalFileName ??
-                          'Upload Health Department Approval',
-                    ),
-                    onPressed: () => _pickFile((file, name) {
-                      setState(() {
-                        _healthDeptApprovalFile = file;
-                        _healthDeptApprovalFileName = name;
-                      });
-                    }, ['pdf', 'jpg', 'jpeg', 'png']),
+
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.upload_file),
+                  label: Text(
+                    _accreditationFileName ??
+                        'Upload Accreditation Certificates (Optional)',
                   ),
-                if (_selectedInstitutionType == 'Hospital' ||
-                    _selectedInstitutionType == 'Laboratory')
-                  const SizedBox(height: 16),
-                if (_selectedInstitutionType == 'Pharmacy')
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.upload_file),
-                    label: Text(
-                      _pharmacyLicenseFileName ?? 'Upload Pharmacy License',
-                    ),
-                    onPressed: () => _pickFile((file, name) {
-                      setState(() {
-                        _pharmacyLicenseFile = file;
-                        _pharmacyLicenseFileName = name;
-                      });
-                    }, ['pdf', 'jpg', 'jpeg', 'png']),
-                  ),
-                if (_selectedInstitutionType == 'Pharmacy')
-                  const SizedBox(height: 16),
-                // Password fields
+                  onPressed: () => _pickFile((file, name) {
+                    setState(() {
+                      _accreditationFile = file;
+                      _accreditationFileName = name;
+                    });
+                  }, ['pdf', 'jpg', 'jpeg', 'png']),
+                ),
+                const SizedBox(height: 24),
+
+                // Password Section
+                const Text(
+                  'Account Security',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+
                 TextFormField(
                   controller: _passwordController,
                   obscureText: true,
                   decoration: const InputDecoration(
-                    labelText: 'Password',
+                    labelText: 'Password *',
                     border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lock),
                   ),
                   validator: (value) => value == null || value.isEmpty
                       ? 'Please enter a password'
                       : null,
                 ),
                 const SizedBox(height: 16),
+
                 TextFormField(
                   controller: _confirmPasswordController,
                   obscureText: true,
                   decoration: const InputDecoration(
-                    labelText: 'Confirm Password',
+                    labelText: 'Confirm Password *',
                     border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lock_outline),
                   ),
-                  validator: (value) => value == null || value.isEmpty
-                      ? 'Please confirm your password'
-                      : null,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Please confirm your password';
+                    }
+                    if (value != _passwordController.text) {
+                      return 'Passwords do not match';
+                    }
+                    return null;
+                  },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
+
+                // Terms and Conditions
                 CheckboxListTile(
+                  title: const Text('I accept the Terms & Conditions'),
                   value: _acceptedTerms,
                   onChanged: (value) {
                     setState(() {
                       _acceptedTerms = value ?? false;
                     });
                   },
-                  title: const Text('I accept the Terms & Conditions'),
                   controlAffinity: ListTileControlAffinity.leading,
                 ),
+                const SizedBox(height: 24),
+
+                // Register Button
                 SizedBox(
                   height: 50,
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _registerHospital,
                     style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -735,12 +779,14 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Text(
-                            'Register',
+                            'Register Hospital',
                             style: TextStyle(fontSize: 16),
                           ),
                   ),
                 ),
                 const SizedBox(height: 16),
+
+                // Back to login
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
