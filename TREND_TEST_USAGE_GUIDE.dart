@@ -1,13 +1,17 @@
-// HOW TO USE THE TREND TEST DATA GENERATOR
-// =======================================
+/*
+HOW TO USE THE TREND TEST DATA GENERATOR
+=======================================
 
-// OPTION 1: Add the test widget to your patient dashboard
-// -------------------------------------------------------
+OPTION 1: Add the test widget to your patient dashboard
+-------------------------------------------------------
 
-// In your patientDashboard.dart or any screen, add this import:
+In your patientDashboard.dart or any screen, add this import:
+```dart
 import 'widgets/trend_test_data_widget.dart';
+```
 
-// Then add the widget to your screen:
+Then add the widget to your screen:
+```dart
 class PatientDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -26,11 +30,13 @@ class PatientDashboard extends StatelessWidget {
     );
   }
 }
+```
 
-// OPTION 2: Add a floating action button
-// --------------------------------------
+OPTION 2: Add a floating action button
+--------------------------------------
 
-// In any screen, add a FAB for quick testing:
+In any screen, add a FAB for quick testing:
+```dart
 class SomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -42,24 +48,31 @@ class SomeScreen extends StatelessWidget {
     );
   }
 }
+```
 
-// OPTION 3: Call the service directly from code
-// ----------------------------------------------
+OPTION 3: Call the service directly from code
+----------------------------------------------
 
+```dart
 import 'services/test_data_service.dart';
 
-// Generate all test data:
-await TrendAnalysisTestData.generateTestData();
+// In an async function:
+void generateTestDataExample() async {
+  // Generate all test data:
+  await TrendAnalysisTestData.generateTestData();
 
-// Generate just blood sugar data (fastest):
-await TrendAnalysisTestData.generateQuickBloodSugarData();
+  // Generate just blood sugar data (fastest):
+  await TrendAnalysisTestData.generateQuickBloodSugarData();
 
-// Clear test data:
-await TrendAnalysisTestData.clearTestData();
+  // Clear test data:
+  await TrendAnalysisTestData.clearTestData();
+}
+```
 
-// OPTION 4: Add to developer settings screen
-// ------------------------------------------
+OPTION 4: Add to developer settings screen
+------------------------------------------
 
+```dart
 class DeveloperSettings extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -76,11 +89,11 @@ class DeveloperSettings extends StatelessWidget {
     );
   }
 }
+```
 
-// WHAT THE TEST DATA GENERATES:
-// ============================
+WHAT THE TEST DATA GENERATES:
+============================
 
-/*
 1. Random Blood Sugar Test (15 reports over 12 months):
    - Values start at ~85 mg/dl and gradually increase to ~140 mg/dl
    - Shows pre-diabetic progression trend
@@ -105,12 +118,10 @@ The data includes realistic:
 - Clinically relevant anomalies
 - Multiple trend patterns (increasing, decreasing, stable)
 - Proper medical units and reference ranges
-*/
 
-// TESTING WORKFLOW:
-// ================
+TESTING WORKFLOW:
+================
 
-/*
 1. Add TrendTestDataWidget to your dashboard
 2. Tap "Generate Full Data" or "Quick Test"
 3. Wait for confirmation message
@@ -130,4 +141,26 @@ The data includes realistic:
    - Verify trend direction detection
 
 7. When done testing, use "Clear Test Data" to clean up
+
+TROUBLESHOOTING:
+===============
+
+If trend analysis doesn't appear after generating data:
+1. Wait 10-30 seconds for backend processing
+2. Use the "Trigger Trend Analysis" button manually
+3. Refresh the Health Trends screen
+4. Check that you have at least 5 reports of the same type
+5. Verify Firebase Functions are working properly
+
+CURRENT IMPLEMENTATION STATUS:
+=============================
+
+✅ Test data generation service
+✅ UI widget with buttons
+✅ Automatic trend analysis triggering
+✅ Manual trigger button
+✅ Realistic medical data patterns
+✅ Integration with patient dashboard
+✅ Debug mode visibility controls
+✅ Clear test data functionality
 */

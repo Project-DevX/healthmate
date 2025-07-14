@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/test_data_service.dart';
 
 /// Test Data Generation Widget
@@ -88,6 +90,12 @@ class _TrendTestDataWidgetState extends State<TrendTestDataWidget> {
               icon: const Icon(Icons.clear_all, size: 16),
               label: const Text('Clear Test Data'),
               style: TextButton.styleFrom(foregroundColor: Colors.red[600]),
+            ),
+            TextButton.icon(
+              onPressed: _isGenerating ? null : _triggerTrendAnalysis,
+              icon: const Icon(Icons.trending_up, size: 16),
+              label: const Text('Trigger Trend Analysis'),
+              style: TextButton.styleFrom(foregroundColor: Colors.green[600]),
             ),
           ],
         ),
@@ -231,6 +239,65 @@ class _TrendTestDataWidgetState extends State<TrendTestDataWidget> {
         if (mounted) {
           setState(() => _isGenerating = false);
         }
+      }
+    }
+  }
+
+  Future<void> _triggerTrendAnalysis() async {
+    setState(() => _isGenerating = true);
+
+    try {
+      // Import Firebase Functions
+      final functions = FirebaseFunctions.instance;
+
+      // Get current user
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('User must be logged in');
+      }
+
+      // List of lab types to trigger analysis for
+      final labTypes = [
+        'Random Blood Sugar Test',
+        'Hemoglobin A1c',
+        'Complete Blood Count',
+      ];
+
+      for (final labType in labTypes) {
+        try {
+          final callable = functions.httpsCallable('detectLabTrends');
+          await callable.call({'userId': user.uid, 'labReportType': labType});
+
+          // Wait between calls
+          await Future.delayed(const Duration(seconds: 1));
+        } catch (e) {
+          print('Failed to trigger analysis for $labType: $e');
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '🔄 Trend analysis triggered! Check Health Trends in a moment.',
+            ),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error triggering analysis: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isGenerating = false);
       }
     }
   }

@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 /// Simple test function to generate trend analysis data from within your Flutter app
 class TrendAnalysisTestData {
@@ -26,6 +27,11 @@ class TrendAnalysisTestData {
 
     print('✅ Test data generation completed!');
     print('📊 Generated data for 3 lab types with realistic trends');
+
+    // Automatically trigger trend analysis for the generated data
+    print('🔄 Triggering trend analysis...');
+    await _triggerTrendAnalysis(user.uid);
+
     print('🎯 Go to Health Trends screen to see the analysis!');
   }
 
@@ -298,5 +304,38 @@ class TrendAnalysisTestData {
     }
 
     print('✅ Test data cleared!');
+  }
+
+  /// Trigger trend analysis for generated test data
+  static Future<void> _triggerTrendAnalysis(String userId) async {
+    try {
+      final functions = FirebaseFunctions.instance;
+
+      // Trigger analysis for each lab type we generated
+      final labTypes = [
+        'Random Blood Sugar Test',
+        'Hemoglobin A1c',
+        'Complete Blood Count',
+      ];
+
+      for (final labType in labTypes) {
+        try {
+          print('🔄 Triggering analysis for $labType...');
+          final callable = functions.httpsCallable('detectLabTrends');
+          await callable.call({'userId': userId, 'labReportType': labType});
+          print('   ✅ Triggered analysis for $labType');
+
+          // Wait a bit between calls to avoid overwhelming the server
+          await Future.delayed(const Duration(seconds: 2));
+        } catch (e) {
+          print('   ❌ Failed to trigger analysis for $labType: $e');
+        }
+      }
+
+      print('🎉 Trend analysis triggered for all lab types!');
+      print('⏰ Analysis may take a few moments to complete...');
+    } catch (e) {
+      print('❌ Error triggering trend analysis: $e');
+    }
   }
 }
