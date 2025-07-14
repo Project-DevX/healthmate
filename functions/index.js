@@ -2444,14 +2444,44 @@ function detectAnomalies(values, mean, stdDev) {
  * Calculate timespan of reports
  */
 function calculateTimespan(reports) {
-  if (reports.length < 2) return { days: 0, months: 0 };
-  
-  const dates = reports
-    .map(r => new Date(r.testDate || r.createdAt))
+  if (reports.length < 2) {
+    return {
+      days: 0,
+      months: 0,
+      startDate: null,
+      endDate: null
+    };
+  }
+
+  // Filter out reports with invalid dates and create valid Date objects
+  const validDates = reports
+    .map(r => {
+      const dateValue = r.testDate || r.createdAt;
+      if (!dateValue) return null;
+      
+      // Handle Firestore Timestamp objects
+      if (dateValue && typeof dateValue.toDate === 'function') {
+        return dateValue.toDate();
+      }
+      
+      // Handle ISO strings or other date formats
+      const date = new Date(dateValue);
+      return isNaN(date.getTime()) ? null : date;
+    })
+    .filter(date => date !== null)
     .sort((a, b) => a - b);
   
-  const startDate = dates[0];
-  const endDate = dates[dates.length - 1];
+  if (validDates.length < 2) {
+    return {
+      days: 0,
+      months: 0,
+      startDate: null,
+      endDate: null
+    };
+  }
+  
+  const startDate = validDates[0];
+  const endDate = validDates[validDates.length - 1];
   const diffTime = Math.abs(endDate - startDate);
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   const diffMonths = Math.round(diffDays / 30.44); // Average days per month
