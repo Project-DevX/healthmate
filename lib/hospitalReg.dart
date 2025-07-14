@@ -30,6 +30,14 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
 
   final _institutionNameController = TextEditingController();
   final _licenseNumberController = TextEditingController();
+  String? _selectedInstitutionType;
+
+  // Institution type options
+  final List<String> _institutionTypeOptions = [
+    'Hospital',
+    'Pharmacy',
+    'Laboratory',
+  ];
 
   // Contact Information
   final _officialEmailController = TextEditingController();
