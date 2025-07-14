@@ -14,14 +14,150 @@ class HospitalDashboard extends StatefulWidget {
 }
 
 class _HospitalDashboardState extends State<HospitalDashboard> {
-  bool isDarkMode = false;
   int _selectedBottomNav = 0;
 
   Map<String, dynamic>? hospitalData;
-  List<Map<String, dynamic>> doctors = [];
-  List<Map<String, dynamic>> patients = [];
-  List<Map<String, dynamic>> appointments = [];
   bool _isLoading = true;
+
+  // Sample data for enhanced functionality
+  List<Map<String, dynamic>> staff = [
+    {
+      'id': 'DOC001',
+      'fullName': 'Dr. Sarah Johnson',
+      'specialization': 'Cardiology',
+      'experience': '8 years',
+      'department': 'Cardiology',
+      'status': 'Active',
+      'shift': 'Morning',
+      'photoURL':
+          'https://ui-avatars.com/api/?name=Sarah+Johnson&background=4CAF50&color=fff',
+    },
+    {
+      'id': 'NUR001',
+      'fullName': 'Emily Rodriguez',
+      'specialization': 'ICU Nursing',
+      'experience': '5 years',
+      'department': 'ICU',
+      'status': 'Active',
+      'shift': 'Night',
+      'photoURL':
+          'https://ui-avatars.com/api/?name=Emily+Rodriguez&background=2196F3&color=fff',
+    },
+    {
+      'id': 'DOC002',
+      'fullName': 'Dr. Michael Chen',
+      'specialization': 'Neurology',
+      'experience': '12 years',
+      'department': 'Neurology',
+      'status': 'On Leave',
+      'shift': 'Evening',
+      'photoURL':
+          'https://ui-avatars.com/api/?name=Michael+Chen&background=FF9800&color=fff',
+    },
+  ];
+
+  List<Map<String, dynamic>> patients = [
+    {
+      'id': 'PAT001',
+      'fullName': 'John Smith',
+      'age': 45,
+      'condition': 'Hypertension',
+      'ward': 'Cardiology - Room 201',
+      'admissionDate': '2025-07-10',
+      'status': 'Stable',
+      'assignedDoctor': 'Dr. Sarah Johnson',
+    },
+    {
+      'id': 'PAT002',
+      'fullName': 'Maria Garcia',
+      'age': 32,
+      'condition': 'Post-surgery recovery',
+      'ward': 'ICU - Bed 5',
+      'admissionDate': '2025-07-12',
+      'status': 'Critical',
+      'assignedDoctor': 'Dr. Michael Chen',
+    },
+    {
+      'id': 'PAT003',
+      'fullName': 'Robert Wilson',
+      'age': 67,
+      'condition': 'Diabetes management',
+      'ward': 'General - Room 105',
+      'admissionDate': '2025-07-13',
+      'status': 'Improving',
+      'assignedDoctor': 'Dr. Sarah Johnson',
+    },
+  ];
+
+  List<Map<String, dynamic>> appointments = [
+    {
+      'id': 'APT001',
+      'patientName': 'Alice Brown',
+      'doctorName': 'Dr. Sarah Johnson',
+      'time': '09:00 AM',
+      'date': '2025-07-14',
+      'type': 'Consultation',
+      'status': 'Scheduled',
+    },
+    {
+      'id': 'APT002',
+      'patientName': 'David Lee',
+      'doctorName': 'Dr. Michael Chen',
+      'time': '11:30 AM',
+      'date': '2025-07-14',
+      'type': 'Follow-up',
+      'status': 'In Progress',
+    },
+    {
+      'id': 'APT003',
+      'patientName': 'Lisa Wang',
+      'doctorName': 'Dr. Sarah Johnson',
+      'time': '02:00 PM',
+      'date': '2025-07-14',
+      'type': 'Surgery',
+      'status': 'Scheduled',
+    },
+  ];
+
+  List<Map<String, dynamic>> inventory = [
+    {
+      'name': 'Surgical Masks',
+      'category': 'PPE',
+      'currentStock': 500,
+      'minStock': 100,
+      'unit': 'pieces',
+      'supplier': 'MedSupply Co',
+      'lastRestocked': '2025-07-10',
+    },
+    {
+      'name': 'Ventilator',
+      'category': 'Equipment',
+      'currentStock': 8,
+      'minStock': 10,
+      'unit': 'units',
+      'supplier': 'MedTech Inc',
+      'lastRestocked': '2025-06-15',
+    },
+    {
+      'name': 'Blood Pressure Monitor',
+      'category': 'Equipment',
+      'currentStock': 25,
+      'minStock': 15,
+      'unit': 'units',
+      'supplier': 'HealthCare Ltd',
+      'lastRestocked': '2025-07-05',
+    },
+  ];
+
+  // KPI calculations
+  int get totalStaff => staff.length;
+  int get activeStaff => staff.where((s) => s['status'] == 'Active').length;
+  int get totalPatients => patients.length;
+  int get criticalPatients =>
+      patients.where((p) => p['status'] == 'Critical').length;
+  int get todaysAppointments => appointments.length;
+  int get lowStockItems =>
+      inventory.where((i) => i['currentStock'] <= i['minStock']).length;
 
   final List<_DashboardFeature> _features = [
     _DashboardFeature('Staff Management', Icons.people),
@@ -65,7 +201,7 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
           .where('affiliation', isEqualTo: hospitalData?['institutionName'])
           .limit(10)
           .get();
-      doctors = doctorsSnap.docs.map((d) => d.data()).toList();
+      staff.addAll(doctorsSnap.docs.map((d) => d.data()).toList());
 
       // Fetch patients
       final patientsSnap = await FirebaseFirestore.instance
@@ -147,12 +283,12 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: doctors.isEmpty
+              child: staff.isEmpty
                   ? const Center(child: Text('No staff members found'))
                   : ListView.builder(
-                      itemCount: doctors.length,
+                      itemCount: staff.length,
                       itemBuilder: (context, index) {
-                        final doctor = doctors[index];
+                        final doctor = staff[index];
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           child: ListTile(
@@ -380,12 +516,12 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final Color mainBlue = const Color(0xFF7B61FF);
-    final Color scaffoldBg = isDarkMode ? Colors.black : Colors.grey.shade50;
-    final Color textColor = isDarkMode ? Colors.white : Colors.black87;
-    final Color subTextColor = isDarkMode
-        ? Colors.grey.shade400
-        : Colors.grey.shade600;
+    final theme = Theme.of(context);
+    final Color mainBlue = theme.primaryColor;
+    final Color scaffoldBg = theme.scaffoldBackgroundColor;
+    final Color textColor = theme.textTheme.bodyLarge?.color ?? Colors.black;
+    final Color subTextColor = theme.textTheme.bodyMedium?.color ?? Colors.grey;
+    final Color cardColor = theme.cardColor;
 
     return Scaffold(
       backgroundColor: scaffoldBg,
@@ -396,11 +532,17 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
         elevation: 0,
         actions: [
           IconButton(
-            icon: Icon(isDarkMode ? Icons.dark_mode : Icons.light_mode),
+            icon: Icon(
+              theme.brightness == Brightness.dark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
             onPressed: () {
-              setState(() {
-                isDarkMode = !isDarkMode;
-              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Theme toggle requires app restart'),
+                ),
+              );
             },
           ),
           IconButton(icon: const Icon(Icons.logout), onPressed: _logout),
@@ -409,171 +551,173 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _selectedBottomNav == 0
-              ? Container(
-                  color: scaffoldBg,
-                  child: ListView(
-                    padding: const EdgeInsets.all(20),
+          ? Container(
+              color: scaffoldBg,
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  // Welcome Card
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor: mainBlue,
+                            child: Icon(
+                              Icons.local_hospital,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Welcome, ${hospitalData?['institutionName'] ?? 'Hospital'}!',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: textColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  hospitalData?['institutionType'] ??
+                                      'Healthcare Institution',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    color: subTextColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Statistics Cards
+                  Row(
                     children: [
-                      // Welcome Card
-                      Card(
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 28,
-                                backgroundColor: mainBlue,
-                                child: Icon(
-                                  Icons.local_hospital,
-                                  color: Colors.white,
-                                  size: 28,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Welcome, ${hospitalData?['institutionName'] ?? 'Hospital'}!',
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: textColor,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      hospitalData?['institutionType'] ??
-                                          'Healthcare Institution',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        color: subTextColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
+                      Expanded(
+                        child: _buildStatCard(
+                          'Staff',
+                          '${totalStaff}',
+                          Icons.people,
+                          Colors.blue,
                         ),
                       ),
-
-                      const SizedBox(height: 24),
-
-                      // Statistics Cards
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildStatCard(
-                              'Staff',
-                              '${doctors.length}',
-                              Icons.people,
-                              Colors.blue,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildStatCard(
-                              'Patients',
-                              '${patients.length}',
-                              Icons.person,
-                              Colors.green,
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildStatCard(
-                              'Appointments',
-                              '${appointments.length}',
-                              Icons.calendar_today,
-                              Colors.orange,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildStatCard(
-                              'Revenue',
-                              '\$0',
-                              Icons.attach_money,
-                              Colors.purple,
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // Quick Actions
-                      Text(
-                        'Quick Actions',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          'Patients',
+                          '${patients.length}',
+                          Icons.person,
+                          Colors.green,
                         ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                              childAspectRatio: 1.2,
-                            ),
-                        itemCount: _features.length,
-                        itemBuilder: (context, index) {
-                          final feature = _features[index];
-                          return GestureDetector(
-                            onTap: () => _onFeatureTap(feature.label),
-                            child: Card(
-                              elevation: 2,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(feature.icon, size: 32, color: mainBlue),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      feature.label,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                        color: textColor,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
                       ),
                     ],
                   ),
-                )
-              : _selectedBottomNav == 1
-                  ? const Center(child: Text('Chat System (Stub)', style: TextStyle(fontSize: 20)))
-                  : const ProfilePage(),
+
+                  const SizedBox(height: 12),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                          'Appointments',
+                          '${appointments.length}',
+                          Icons.calendar_today,
+                          Colors.orange,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          'Revenue',
+                          '\$0',
+                          Icons.attach_money,
+                          Colors.purple,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // Quick Actions
+                  Text(
+                    'Quick Actions',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 1.2,
+                        ),
+                    itemCount: _features.length,
+                    itemBuilder: (context, index) {
+                      final feature = _features[index];
+                      return GestureDetector(
+                        onTap: () => _onFeatureTap(feature.label),
+                        child: Card(
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(feature.icon, size: 32, color: mainBlue),
+                                const SizedBox(height: 8),
+                                Text(
+                                  feature.label,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: textColor,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            )
+          : _selectedBottomNav == 1
+          ? const Center(
+              child: Text('Chat System (Stub)', style: TextStyle(fontSize: 20)),
+            )
+          : const ProfilePage(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedBottomNav,
         onTap: (index) => setState(() => _selectedBottomNav = index),
@@ -585,10 +729,7 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
             icon: Icon(Icons.dashboard),
             label: 'Dashboard',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat),
-            label: 'Chat',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
