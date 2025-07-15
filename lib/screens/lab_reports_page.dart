@@ -17,24 +17,51 @@ class _LabReportsPageState extends State<LabReportsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
     return Scaffold(
       appBar: AppBar(title: const Text('Lab Reports')),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('Lab Reports Page (Placeholder)'),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _isUploading
-                  ? null
-                  : () => _pickAndUploadPhoto(context),
-              child: _isUploading
-                  ? const CircularProgressIndicator()
-                  : const Text('Upload Lab Profile Photo'),
+      body: user == null
+          ? const Center(child: Text('Not logged in'))
+          : StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('lab_reports')
+                  .where('patientId', isEqualTo: user.uid)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text('No lab reports found.'));
+                }
+                final reports = snapshot.data!.docs;
+                return ListView.builder(
+                  itemCount: reports.length,
+                  itemBuilder: (context, index) {
+                    final report =
+                        reports[index].data() as Map<String, dynamic>;
+                    return ListTile(
+                      title: Text(report['testName'] ?? 'Lab Report'),
+                      subtitle: Text('Date: ${report['testDate'] ?? ''}'),
+                      trailing: report['reportUrl'] != null
+                          ? IconButton(
+                              icon: const Icon(Icons.download),
+                              onPressed: () {
+                                // Open/download the report
+                                // You can use url_launcher or similar package
+                              },
+                            )
+                          : null,
+                    );
+                  },
+                );
+              },
             ),
-          ],
-        ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: user == null ? null : () => _pickAndUploadPhoto(context),
+        child: _isUploading
+            ? const CircularProgressIndicator(color: Colors.white)
+            : const Icon(Icons.upload_file),
       ),
     );
   }

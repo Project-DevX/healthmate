@@ -19,145 +19,24 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
   Map<String, dynamic>? hospitalData;
   bool _isLoading = true;
 
-  // Sample data for enhanced functionality
-  List<Map<String, dynamic>> staff = [
-    {
-      'id': 'DOC001',
-      'fullName': 'Dr. Sarah Johnson',
-      'specialization': 'Cardiology',
-      'experience': '8 years',
-      'department': 'Cardiology',
-      'status': 'Active',
-      'shift': 'Morning',
-      'photoURL':
-          'https://ui-avatars.com/api/?name=Sarah+Johnson&background=4CAF50&color=fff',
-    },
-    {
-      'id': 'NUR001',
-      'fullName': 'Emily Rodriguez',
-      'specialization': 'ICU Nursing',
-      'experience': '5 years',
-      'department': 'ICU',
-      'status': 'Active',
-      'shift': 'Night',
-      'photoURL':
-          'https://ui-avatars.com/api/?name=Emily+Rodriguez&background=2196F3&color=fff',
-    },
-    {
-      'id': 'DOC002',
-      'fullName': 'Dr. Michael Chen',
-      'specialization': 'Neurology',
-      'experience': '12 years',
-      'department': 'Neurology',
-      'status': 'On Leave',
-      'shift': 'Evening',
-      'photoURL':
-          'https://ui-avatars.com/api/?name=Michael+Chen&background=FF9800&color=fff',
-    },
-  ];
-
-  List<Map<String, dynamic>> patients = [
-    {
-      'id': 'PAT001',
-      'fullName': 'John Smith',
-      'age': 45,
-      'condition': 'Hypertension',
-      'ward': 'Cardiology - Room 201',
-      'admissionDate': '2025-07-10',
-      'status': 'Stable',
-      'assignedDoctor': 'Dr. Sarah Johnson',
-    },
-    {
-      'id': 'PAT002',
-      'fullName': 'Maria Garcia',
-      'age': 32,
-      'condition': 'Post-surgery recovery',
-      'ward': 'ICU - Bed 5',
-      'admissionDate': '2025-07-12',
-      'status': 'Critical',
-      'assignedDoctor': 'Dr. Michael Chen',
-    },
-    {
-      'id': 'PAT003',
-      'fullName': 'Robert Wilson',
-      'age': 67,
-      'condition': 'Diabetes management',
-      'ward': 'General - Room 105',
-      'admissionDate': '2025-07-13',
-      'status': 'Improving',
-      'assignedDoctor': 'Dr. Sarah Johnson',
-    },
-  ];
-
-  List<Map<String, dynamic>> appointments = [
-    {
-      'id': 'APT001',
-      'patientName': 'Alice Brown',
-      'doctorName': 'Dr. Sarah Johnson',
-      'time': '09:00 AM',
-      'date': '2025-07-14',
-      'type': 'Consultation',
-      'status': 'Scheduled',
-    },
-    {
-      'id': 'APT002',
-      'patientName': 'David Lee',
-      'doctorName': 'Dr. Michael Chen',
-      'time': '11:30 AM',
-      'date': '2025-07-14',
-      'type': 'Follow-up',
-      'status': 'In Progress',
-    },
-    {
-      'id': 'APT003',
-      'patientName': 'Lisa Wang',
-      'doctorName': 'Dr. Sarah Johnson',
-      'time': '02:00 PM',
-      'date': '2025-07-14',
-      'type': 'Surgery',
-      'status': 'Scheduled',
-    },
-  ];
-
-  List<Map<String, dynamic>> inventory = [
-    {
-      'name': 'Surgical Masks',
-      'category': 'PPE',
-      'currentStock': 500,
-      'minStock': 100,
-      'unit': 'pieces',
-      'supplier': 'MedSupply Co',
-      'lastRestocked': '2025-07-10',
-    },
-    {
-      'name': 'Ventilator',
-      'category': 'Equipment',
-      'currentStock': 8,
-      'minStock': 10,
-      'unit': 'units',
-      'supplier': 'MedTech Inc',
-      'lastRestocked': '2025-06-15',
-    },
-    {
-      'name': 'Blood Pressure Monitor',
-      'category': 'Equipment',
-      'currentStock': 25,
-      'minStock': 15,
-      'unit': 'units',
-      'supplier': 'HealthCare Ltd',
-      'lastRestocked': '2025-07-05',
-    },
-  ];
+  // Remove sample data lists
+  List<Map<String, dynamic>> staff = [];
+  List<Map<String, dynamic>> patients = [];
+  List<Map<String, dynamic>> appointments = [];
+  List<Map<String, dynamic>> inventory = [];
 
   // KPI calculations
   int get totalStaff => staff.length;
-  int get activeStaff => staff.where((s) => s['status'] == 'Active').length;
+  int get activeStaff =>
+      staff.where((s) => (s['status'] ?? '').toLowerCase() == 'active').length;
   int get totalPatients => patients.length;
-  int get criticalPatients =>
-      patients.where((p) => p['status'] == 'Critical').length;
+  int get criticalPatients => patients
+      .where((p) => (p['status'] ?? '').toLowerCase() == 'critical')
+      .length;
   int get todaysAppointments => appointments.length;
-  int get lowStockItems =>
-      inventory.where((i) => i['currentStock'] <= i['minStock']).length;
+  int get lowStockItems => inventory
+      .where((i) => (i['currentStock'] ?? 0) <= (i['minStock'] ?? 0))
+      .length;
 
   final List<_DashboardFeature> _features = [
     _DashboardFeature('Staff Management', Icons.people),
@@ -174,6 +53,7 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
   void initState() {
     super.initState();
     _loadDashboardData();
+    _loadInventory();
   }
 
   Future<void> _loadDashboardData() async {
@@ -194,20 +74,19 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
         hospitalData = docSnap.data();
       }
 
-      // Fetch related doctors (if any)
-      final doctorsSnap = await FirebaseFirestore.instance
+      // Fetch related doctors and nurses (staff)
+      final staffSnap = await FirebaseFirestore.instance
           .collection('users')
-          .where('userType', isEqualTo: 'doctor')
           .where('affiliation', isEqualTo: hospitalData?['institutionName'])
-          .limit(10)
+          .where('userType', whereIn: ['doctor', 'nurse'])
           .get();
-      staff.addAll(doctorsSnap.docs.map((d) => d.data()).toList());
+      staff = staffSnap.docs.map((d) => d.data()).toList();
 
       // Fetch patients
       final patientsSnap = await FirebaseFirestore.instance
           .collection('users')
           .where('userType', isEqualTo: 'patient')
-          .limit(10)
+          .where('hospitalId', isEqualTo: uid)
           .get();
       patients = patientsSnap.docs.map((d) => d.data()).toList();
 
@@ -215,14 +94,35 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
       final appointmentsSnap = await FirebaseFirestore.instance
           .collection('appointments')
           .where('hospitalId', isEqualTo: uid)
-          .orderBy('date', descending: true)
-          .limit(5)
           .get();
-      appointments = appointmentsSnap.docs.map((d) => d.data()).toList();
+      final allAppointments = appointmentsSnap.docs
+          .map((d) => d.data())
+          .toList();
+      allAppointments.sort(
+        (a, b) => (b['date'] as String).compareTo(a['date'] as String),
+      );
+      appointments = allAppointments.take(5).toList();
     } catch (e) {
       print('Error loading hospital dashboard data: $e');
     }
     setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadInventory() async {
+    // If you have an inventory collection in Firestore, fetch it here
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final uid = user.uid;
+    try {
+      final inventorySnap = await FirebaseFirestore.instance
+          .collection('inventory')
+          .where('hospitalId', isEqualTo: uid)
+          .get();
+      inventory = inventorySnap.docs.map((d) => d.data()).toList();
+      setState(() {});
+    } catch (e) {
+      print('Error loading inventory: $e');
+    }
   }
 
   void _onFeatureTap(String feature) {
@@ -622,7 +522,7 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
                       Expanded(
                         child: _buildStatCard(
                           'Patients',
-                          '${patients.length}',
+                          '${totalPatients}',
                           Icons.person,
                           Colors.green,
                         ),
@@ -637,7 +537,7 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
                       Expanded(
                         child: _buildStatCard(
                           'Appointments',
-                          '${appointments.length}',
+                          '${todaysAppointments}',
                           Icons.calendar_today,
                           Colors.orange,
                         ),

@@ -5,6 +5,9 @@ import 'package:intl/intl.dart';
 import 'services/auth_service.dart';
 import 'services/document_service.dart';
 import 'services/gemini_service.dart';
+import 'services/interconnect_service.dart';
+import 'models/shared_models.dart';
+import 'widgets/doctor_booking_widget.dart';
 import 'screens/medical_records_screen.dart';
 import 'screens/medical_summary_screen.dart';
 import 'screens/lab_report_content_screen.dart';
@@ -21,8 +24,6 @@ class PatientDashboard extends StatefulWidget {
 class _PatientDashboardState extends State<PatientDashboard> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final AuthService _authService = AuthService();
-  final DocumentService _documentService = DocumentService();
 
   Map<String, dynamic>? userData;
   bool _isLoading = true;
@@ -43,26 +44,34 @@ class _PatientDashboardState extends State<PatientDashboard> {
             .doc(user.uid)
             .get();
         if (userDoc.exists) {
-          setState(() {
-            userData = userDoc.data();
-            userData!['uid'] = user.uid;
-            _isLoading = false; // Set loading to false here
-          });
+          if (mounted) {
+            setState(() {
+              userData = userDoc.data();
+              userData!['uid'] = user.uid;
+              _isLoading = false; // Set loading to false here
+            });
+          }
         } else {
-          setState(() => _isLoading = false);
+          if (mounted) {
+            setState(() => _isLoading = false);
+          }
         }
       } else {
-        setState(() => _isLoading = false);
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
       }
     } catch (e) {
       print('Error loading user data: $e');
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   List<Widget> get _pages => [
     DashboardContent(userData: userData, onNavigateToTrends: _navigateToTrends),
-    const Center(child: Text('Appointments')),
+    AppointmentsContent(userData: userData),
     MedicalRecordsScreen(userId: userData?['uid'] ?? ''),
     UserProfileContent(
       displayName: _getDisplayName(),
@@ -75,9 +84,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
   ];
 
   void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
+    // Only update state if widget is still mounted
+    if (mounted) {
+      setState(() {
+        _selectedIndex = index;
+      });
+    }
   }
 
   void _showEmergencyOptions() {
@@ -187,24 +199,6 @@ class _PatientDashboardState extends State<PatientDashboard> {
     }
   }
 
-  Future<void> _uploadMedicalRecord() async {
-    final User? user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => MedicalRecordsScreen(userId: user.uid),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('User ID not found. Please try logging in again.'),
-        ),
-      );
-    }
-  }
-
   String _getDisplayName() {
     return userData?['name'] ??
         _auth.currentUser?.displayName ??
@@ -296,6 +290,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
       context,
       MaterialPageRoute(builder: (context) => const TrendAnalysisScreen()),
     );
+  }
+
+  @override
+  void dispose() {
+    // Cancel any pending async operations to prevent setState after dispose
+    super.dispose();
   }
 }
 
@@ -968,6 +968,500 @@ class UserProfileContent extends StatelessWidget {
         title: Text(title),
         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
         onTap: onTap,
+      ),
+    );
+  }
+}
+
+// New Appointments Content Widget
+class AppointmentsContent extends StatefulWidget {
+  final Map<String, dynamic>? userData;
+
+  const AppointmentsContent({Key? key, this.userData}) : super(key: key);
+
+  @override
+  State<AppointmentsContent> createState() => _AppointmentsContentState();
+}
+
+class _AppointmentsContentState extends State<AppointmentsContent> {
+  List<Appointment> _appointments = [];
+  List<LabReport> _labReports = [];
+  List<Prescription> _prescriptions = [];
+  bool _isLoading = true;
+  int _selectedTab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    if (widget.userData == null) return;
+
+    try {
+      final userId = widget.userData!['uid'];
+      
+      // Load all interconnected data
+      final appointments = await InterconnectService.getUserAppointments(userId, 'patient');
+      final labReports = await InterconnectService.getUserLabReports(userId, 'patient');
+      final prescriptions = await InterconnectService.getUserPrescriptions(userId, 'patient');
+
+      if (mounted) {
+        setState(() {
+          _appointments = appointments;
+          _labReports = labReports;
+          _prescriptions = prescriptions;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load data: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Column(
+      children: [
+        // Tab Bar
+        Container(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => DoctorBookingWidget(
+                          patientId: widget.userData!['uid'],
+                          patientName: widget.userData!['name'] ?? '',
+                          patientEmail: widget.userData!['email'] ?? '',
+                        ),
+                      ),
+                    ).then((_) => _loadData()); // Refresh on return
+                  },
+                  icon: const Icon(Icons.add),
+                  label: const Text('Book Appointment'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).primaryColor,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        // Tab Navigation
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => setState(() => _selectedTab = 0),
+                  style: TextButton.styleFrom(
+                    backgroundColor: _selectedTab == 0 ? Theme.of(context).primaryColor : null,
+                    foregroundColor: _selectedTab == 0 ? Colors.white : null,
+                  ),
+                  child: const Text('Appointments'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextButton(
+                  onPressed: () => setState(() => _selectedTab = 1),
+                  style: TextButton.styleFrom(
+                    backgroundColor: _selectedTab == 1 ? Theme.of(context).primaryColor : null,
+                    foregroundColor: _selectedTab == 1 ? Colors.white : null,
+                  ),
+                  child: const Text('Lab Reports'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextButton(
+                  onPressed: () => setState(() => _selectedTab = 2),
+                  style: TextButton.styleFrom(
+                    backgroundColor: _selectedTab == 2 ? Theme.of(context).primaryColor : null,
+                    foregroundColor: _selectedTab == 2 ? Colors.white : null,
+                  ),
+                  child: const Text('Prescriptions'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 16),
+        
+        // Tab Content
+        Expanded(
+          child: _buildTabContent(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTabContent() {
+    switch (_selectedTab) {
+      case 0:
+        return _buildAppointmentsList();
+      case 1:
+        return _buildLabReportsList();
+      case 2:
+        return _buildPrescriptionsList();
+      default:
+        return const SizedBox();
+    }
+  }
+
+  Widget _buildAppointmentsList() {
+    if (_appointments.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.calendar_today, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('No appointments yet'),
+            Text('Book your first appointment with a doctor'),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: _appointments.length,
+      itemBuilder: (context, index) {
+        final appointment = _appointments[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: _getStatusColor(appointment.status),
+              child: Icon(
+                _getStatusIcon(appointment.status),
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            title: Text(
+              'Dr. ${appointment.doctorName}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(appointment.doctorSpecialty),
+                Text(appointment.hospitalName),
+                Text(
+                  '${DateFormat('MMM dd, yyyy').format(appointment.appointmentDate)} at ${appointment.timeSlot}',
+                  style: const TextStyle(fontWeight: FontWeight.w500),
+                ),
+                if (appointment.reason != null)
+                  Text('Reason: ${appointment.reason}'),
+              ],
+            ),
+            trailing: Chip(
+              label: Text(
+                appointment.status.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              backgroundColor: _getStatusColor(appointment.status).withOpacity(0.2),
+              labelStyle: TextStyle(color: _getStatusColor(appointment.status)),
+            ),
+            onTap: () => _showAppointmentDetails(appointment),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLabReportsList() {
+    if (_labReports.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.science, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('No lab reports yet'),
+            Text('Your lab test results will appear here'),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: _labReports.length,
+      itemBuilder: (context, index) {
+        final report = _labReports[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: _getStatusColor(report.status),
+              child: Icon(
+                Icons.assignment,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            title: Text(
+              report.testName,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(report.labName),
+                if (report.doctorName != null)
+                  Text('Requested by: Dr. ${report.doctorName}'),
+                Text(
+                  'Test Date: ${DateFormat('MMM dd, yyyy').format(report.testDate)}',
+                ),
+              ],
+            ),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Chip(
+                  label: Text(
+                    report.status.toUpperCase(),
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                  backgroundColor: _getStatusColor(report.status).withOpacity(0.2),
+                ),
+                if (report.status == 'completed' && report.reportUrl != null)
+                  const Icon(Icons.download, size: 16),
+              ],
+            ),
+            onTap: () => _showLabReportDetails(report),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPrescriptionsList() {
+    if (_prescriptions.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.medication, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('No prescriptions yet'),
+            Text('Your medications will appear here'),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: _prescriptions.length,
+      itemBuilder: (context, index) {
+        final prescription = _prescriptions[index];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ExpansionTile(
+            leading: CircleAvatar(
+              backgroundColor: _getStatusColor(prescription.status),
+              child: Icon(
+                Icons.medication,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            title: Text(
+              'Prescription from Dr. ${prescription.doctorName}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Prescribed: ${DateFormat('MMM dd, yyyy').format(prescription.prescribedDate)}',
+                ),
+                if (prescription.pharmacyName != null)
+                  Text('Pharmacy: ${prescription.pharmacyName}'),
+                Chip(
+                  label: Text(
+                    prescription.status.toUpperCase(),
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                  backgroundColor: _getStatusColor(prescription.status).withOpacity(0.2),
+                ),
+              ],
+            ),
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Medications:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    ...prescription.medicines.map((medicine) => Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              medicine.name,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text('Dosage: ${medicine.dosage}'),
+                            Text('Frequency: ${medicine.frequency}'),
+                            Text('Duration: ${medicine.duration} days'),
+                            if (medicine.instructions.isNotEmpty)
+                              Text('Instructions: ${medicine.instructions}'),
+                          ],
+                        ),
+                      ),
+                    )),
+                    if (prescription.notes != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Notes: ${prescription.notes}',
+                        style: const TextStyle(fontStyle: FontStyle.italic),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'scheduled':
+      case 'requested':
+      case 'prescribed':
+        return Colors.blue;
+      case 'confirmed':
+      case 'in_progress':
+        return Colors.orange;
+      case 'completed':
+      case 'filled':
+        return Colors.green;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status.toLowerCase()) {
+      case 'scheduled':
+      case 'requested':
+        return Icons.schedule;
+      case 'confirmed':
+        return Icons.check_circle_outline;
+      case 'completed':
+        return Icons.check_circle;
+      case 'cancelled':
+        return Icons.cancel;
+      default:
+        return Icons.info;
+    }
+  }
+
+  void _showAppointmentDetails(Appointment appointment) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Appointment with Dr. ${appointment.doctorName}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Specialty: ${appointment.doctorSpecialty}'),
+            Text('Hospital: ${appointment.hospitalName}'),
+            Text('Date: ${DateFormat('MMM dd, yyyy').format(appointment.appointmentDate)}'),
+            Text('Time: ${appointment.timeSlot}'),
+            Text('Status: ${appointment.status.toUpperCase()}'),
+            if (appointment.reason != null)
+              Text('Reason: ${appointment.reason}'),
+            if (appointment.symptoms != null)
+              Text('Symptoms: ${appointment.symptoms}'),
+            if (appointment.notes != null)
+              Text('Notes: ${appointment.notes}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLabReportDetails(LabReport report) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(report.testName),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Lab: ${report.labName}'),
+            if (report.doctorName != null)
+              Text('Requested by: Dr. ${report.doctorName}'),
+            Text('Test Date: ${DateFormat('MMM dd, yyyy').format(report.testDate)}'),
+            Text('Status: ${report.status.toUpperCase()}'),
+            if (report.notes != null)
+              Text('Notes: ${report.notes}'),
+            if (report.status == 'completed' && report.reportUrl != null) ...[
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () {
+                  // Open report URL
+                  // You can implement URL launching here
+                },
+                icon: const Icon(Icons.download),
+                label: const Text('Download Report'),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }

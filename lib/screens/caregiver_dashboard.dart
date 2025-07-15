@@ -3,6 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'chat_page.dart';
 import 'profile_page.dart';
+import '../services/interconnect_service.dart';
+import '../services/medical_records_service.dart';
+import '../services/enhanced_firebase_service.dart';
+import '../models/shared_models.dart';
 
 class CaregiverDashboard extends StatefulWidget {
   const CaregiverDashboard({Key? key}) : super(key: key);
@@ -20,6 +24,13 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
   Map<String, dynamic>? caregiverData;
   List<Map<String, dynamic>> patients = [];
 
+  // Add state for appointments, prescriptions, health tips, and selected patient
+  List<Appointment> _appointments = [];
+  List<Prescription> _prescriptions = [];
+  List<dynamic> _healthTips = [];
+  int _selectedPatientIndex = 0;
+  bool _savingVitals = false;
+
   // Add controllers for vitals input
   final TextEditingController _bpSystolicController = TextEditingController();
   final TextEditingController _bpDiastolicController = TextEditingController();
@@ -31,6 +42,9 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
   void initState() {
     super.initState();
     _loadDashboardData();
+    _loadAppointments();
+    _loadPrescriptions();
+    _loadHealthTips();
   }
 
   Future<void> _loadDashboardData() async {
@@ -60,6 +74,45 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
       print('Error loading dashboard data: $e');
     }
     setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadAppointments() async {
+    if (FirebaseAuth.instance.currentUser == null) return;
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    try {
+      final appts = await InterconnectService.getUserAppointments(
+        uid,
+        'caregiver',
+      );
+      setState(() => _appointments = appts);
+    } catch (e) {
+      print('Error loading appointments: $e');
+    }
+  }
+
+  Future<void> _loadPrescriptions() async {
+    if (patients.isEmpty) return;
+    final patientId =
+        patients[_selectedPatientIndex]['id'] ??
+        patients[_selectedPatientIndex]['uid'];
+    try {
+      final presc = await InterconnectService.getUserPrescriptions(
+        patientId,
+        'patient',
+      );
+      setState(() => _prescriptions = presc);
+    } catch (e) {
+      print('Error loading prescriptions: $e');
+    }
+  }
+
+  Future<void> _loadHealthTips() async {
+    try {
+      final tips = await EnhancedFirebaseService.getHealthRecommendations();
+      setState(() => _healthTips = tips['recommendations'] ?? []);
+    } catch (e) {
+      print('Error loading health tips: $e');
+    }
   }
 
   void _onNavTap(int index) {
@@ -224,7 +277,11 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
     );
   }
 
-  Widget _buildPatientDetailsCard(Color mainBlue, Color subTextColor, Color cardBg) {
+  Widget _buildPatientDetailsCard(
+    Color mainBlue,
+    Color subTextColor,
+    Color cardBg,
+  ) {
     if (patients.isEmpty) {
       return Card(
         elevation: 2,
@@ -268,14 +325,19 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
                 children: [
                   Text(
                     patient['name'] ?? 'Patient',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: mainBlue),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: mainBlue,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Age: ${patient['age'] ?? '--'}',
                     style: TextStyle(fontSize: 14, color: subTextColor),
                   ),
-                  if (patient['condition'] != null && patient['condition'].toString().isNotEmpty)
+                  if (patient['condition'] != null &&
+                      patient['condition'].toString().isNotEmpty)
                     Text(
                       patient['condition'],
                       style: TextStyle(fontSize: 14, color: subTextColor),
@@ -290,7 +352,29 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
   }
 
   Widget _buildUpcomingAppointmentsCard(Color mainBlue) {
-    // Placeholder for upcoming appointments
+    if (_appointments.isEmpty) {
+      return Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        elevation: 2,
+        child: Padding(
+          padding: const EdgeInsets.all(18.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              Text(
+                'Upcoming Appointments',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              SizedBox(height: 12),
+              Text(
+                'No upcoming appointments',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       elevation: 2,
@@ -307,19 +391,61 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 TextButton(
-                  onPressed: () {},
+                  onPressed: () => _showAllAppointmentsDialog(mainBlue),
                   child: Text('View All', style: TextStyle(color: mainBlue)),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            // TODO: Replace with real data
-            const Text(
-              'No upcoming appointments',
-              style: TextStyle(color: Colors.grey),
-            ),
+            ..._appointments
+                .take(3)
+                .map(
+                  (appt) => ListTile(
+                    leading: const Icon(Icons.calendar_today),
+                    title: Text(
+                      '${appt.patientName} with Dr. ${appt.doctorName}',
+                    ),
+                    subtitle: Text(
+                      '${appt.appointmentDate.toLocal()} - ${appt.status}',
+                    ),
+                  ),
+                ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showAllAppointmentsDialog(Color mainBlue) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('All Appointments'),
+        content: SizedBox(
+          width: 350,
+          child: ListView(
+            shrinkWrap: true,
+            children: _appointments
+                .map(
+                  (appt) => ListTile(
+                    leading: const Icon(Icons.calendar_today),
+                    title: Text(
+                      '${appt.patientName} with Dr. ${appt.doctorName}',
+                    ),
+                    subtitle: Text(
+                      '${appt.appointmentDate.toLocal()} - ${appt.status}',
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }
@@ -440,7 +566,10 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Enter Patient Vitals', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const Text(
+              'Enter Patient Vitals',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
             const SizedBox(height: 18),
             TextField(
               controller: _bpSystolicController,
@@ -451,7 +580,10 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
                 prefixIcon: Icon(Icons.favorite, color: mainBlue),
                 filled: true,
                 fillColor: inputFillColor,
-                border: OutlineInputBorder(borderRadius: borderRadius, borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                  borderRadius: borderRadius,
+                  borderSide: BorderSide.none,
+                ),
                 contentPadding: inputPadding,
               ),
             ),
@@ -465,7 +597,10 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
                 prefixIcon: Icon(Icons.favorite, color: mainBlue),
                 filled: true,
                 fillColor: inputFillColor,
-                border: OutlineInputBorder(borderRadius: borderRadius, borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                  borderRadius: borderRadius,
+                  borderSide: BorderSide.none,
+                ),
                 contentPadding: inputPadding,
               ),
             ),
@@ -479,7 +614,10 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
                 prefixIcon: Icon(Icons.bloodtype, color: mainBlue),
                 filled: true,
                 fillColor: inputFillColor,
-                border: OutlineInputBorder(borderRadius: borderRadius, borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                  borderRadius: borderRadius,
+                  borderSide: BorderSide.none,
+                ),
                 contentPadding: inputPadding,
               ),
             ),
@@ -493,7 +631,10 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
                 prefixIcon: Icon(Icons.thermostat, color: mainBlue),
                 filled: true,
                 fillColor: inputFillColor,
-                border: OutlineInputBorder(borderRadius: borderRadius, borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                  borderRadius: borderRadius,
+                  borderSide: BorderSide.none,
+                ),
                 contentPadding: inputPadding,
               ),
             ),
@@ -507,7 +648,10 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
                 prefixIcon: Icon(Icons.monitor_heart, color: mainBlue),
                 filled: true,
                 fillColor: inputFillColor,
-                border: OutlineInputBorder(borderRadius: borderRadius, borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                  borderRadius: borderRadius,
+                  borderSide: BorderSide.none,
+                ),
                 contentPadding: inputPadding,
               ),
             ),
@@ -520,11 +664,46 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
                 elevation: 1,
                 minimumSize: const Size.fromHeight(48),
               ),
-              onPressed: () {
-                // No backend logic yet
-              },
+              onPressed: _savingVitals
+                  ? null
+                  : () async {
+                      setState(() => _savingVitals = true);
+                      try {
+                        final patientId =
+                            patients[_selectedPatientIndex]['id'] ??
+                            patients[_selectedPatientIndex]['uid'];
+                        await FirebaseFirestore.instance
+                            .collection('vitals')
+                            .add({
+                              'patientId': patientId,
+                              'caregiverId':
+                                  FirebaseAuth.instance.currentUser?.uid,
+                              'bpSystolic': _bpSystolicController.text,
+                              'bpDiastolic': _bpDiastolicController.text,
+                              'glucose': _glucoseController.text,
+                              'temperature': _temperatureController.text,
+                              'heartRate': _heartRateController.text,
+                              'timestamp': DateTime.now(),
+                            });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Vitals saved!')),
+                        );
+                        _bpSystolicController.clear();
+                        _bpDiastolicController.clear();
+                        _glucoseController.clear();
+                        _temperatureController.clear();
+                        _heartRateController.clear();
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Failed to save vitals: $e')),
+                        );
+                      }
+                      setState(() => _savingVitals = false);
+                    },
               icon: Icon(Icons.save, color: mainBlue),
-              label: const Text('Save Vitals'),
+              label: _savingVitals
+                  ? const Text('Saving...')
+                  : const Text('Save Vitals'),
             ),
           ],
         ),
@@ -533,7 +712,14 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
   }
 
   Widget _buildAppointmentManager(Color mainBlue, Color cardBg) {
-    // Placeholder for appointment manager UI
+    // List all appointments for the selected patient
+    final patientId = patients.isNotEmpty
+        ? (patients[_selectedPatientIndex]['id'] ??
+              patients[_selectedPatientIndex]['uid'])
+        : null;
+    final patientAppointments = _appointments
+        .where((a) => a.patientId == patientId)
+        .toList();
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       elevation: 2,
@@ -547,10 +733,30 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 12),
-            // TODO: Implement appointment list and actions
-            Text(
-              'Upcoming appointments list and actions (request, cancel, reschedule)',
-              style: TextStyle(color: mainBlue),
+            if (patientAppointments.isEmpty)
+              const Text(
+                'No appointments for this patient.',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ...patientAppointments.map(
+              (appt) => ListTile(
+                title: Text(
+                  '${appt.appointmentDate.toLocal()} - ${appt.status}',
+                ),
+                subtitle: Text('Doctor: ${appt.doctorName}'),
+                trailing: appt.status == 'scheduled'
+                    ? IconButton(
+                        icon: const Icon(Icons.cancel, color: Colors.red),
+                        onPressed: () async {
+                          await InterconnectService.updateAppointmentStatus(
+                            appt.id,
+                            'cancelled',
+                          );
+                          _loadAppointments();
+                        },
+                      )
+                    : null,
+              ),
             ),
             const SizedBox(height: 8),
             ElevatedButton.icon(
@@ -560,7 +766,7 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
                 textStyle: const TextStyle(fontWeight: FontWeight.bold),
                 elevation: 1,
               ),
-              onPressed: () {},
+              onPressed: () => _showRequestAppointmentDialog(mainBlue),
               icon: Icon(Icons.add, color: mainBlue),
               label: const Text('Request Appointment'),
             ),
@@ -570,34 +776,130 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
     );
   }
 
+  void _showRequestAppointmentDialog(Color mainBlue) {
+    // Implement a dialog to request a new appointment (simplified)
+    final patient = patients[_selectedPatientIndex];
+    final TextEditingController reasonController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Request Appointment'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(labelText: 'Reason'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              // For demo, just book with a sample doctor
+              final doctorList =
+                  await InterconnectService.getAvailableDoctors();
+              if (doctorList.isNotEmpty) {
+                final doctor = doctorList.first;
+                final appointment = Appointment(
+                  id: '',
+                  patientId: patient['id'] ?? patient['uid'],
+                  patientName: patient['name'] ?? '',
+                  patientEmail: patient['email'] ?? '',
+                  doctorId: doctor.id,
+                  doctorName: doctor.name,
+                  doctorSpecialty: doctor.specialty,
+                  hospitalId: doctor.hospitalId,
+                  hospitalName: doctor.hospitalName,
+                  appointmentDate: DateTime.now().add(const Duration(days: 1)),
+                  timeSlot: doctor.timeSlots.isNotEmpty
+                      ? doctor.timeSlots.first
+                      : '09:00 AM',
+                  status: 'scheduled',
+                  reason: reasonController.text,
+                  notes: '',
+                  createdAt: DateTime.now(),
+                  caregiverId: FirebaseAuth.instance.currentUser?.uid,
+                  symptoms: '',
+                  prescriptionId: null,
+                  labTestIds: [],
+                );
+                await InterconnectService.bookAppointment(appointment);
+                _loadAppointments();
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Book'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMedicalRecordsViewer(Color mainBlue, Color cardBg) {
-    // Placeholder for medical records viewer UI
+    // Fetch and display medical records for the selected patient
+    final patientId = patients.isNotEmpty
+        ? (patients[_selectedPatientIndex]['id'] ??
+              patients[_selectedPatientIndex]['uid'])
+        : null;
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       elevation: 2,
       child: Padding(
         padding: const EdgeInsets.all(18.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Patient Medical Records',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(height: 12),
-            // TODO: Implement read-only medical records viewer
-            Text(
-              'Read-only access to medical records, lab reports, prescriptions, and doctor notes.',
-              style: TextStyle(color: mainBlue),
-            ),
-          ],
-        ),
+        child: patientId == null
+            ? const Text('No patient selected.')
+            : StreamBuilder<List>(
+                stream: MedicalRecordsService()
+                    .getDocuments(), // This should be adapted to fetch for patientId
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final docs = snapshot.data ?? [];
+                  if (docs.isEmpty) {
+                    return const Text('No medical records found.');
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: docs
+                        .map(
+                          (doc) => ListTile(
+                            title: Text(
+                              doc is dynamic && doc.fileName != null
+                                  ? doc.fileName
+                                  : 'Unknown',
+                            ),
+                            subtitle: Text(
+                              doc is dynamic && doc.category != null
+                                  ? doc.category
+                                  : '',
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.download),
+                              onPressed: () async {
+                                if (doc is dynamic) {
+                                  await MedicalRecordsService()
+                                      .downloadDocument(doc);
+                                }
+                              },
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  );
+                },
+              ),
       ),
     );
   }
 
   Widget _buildUploadReports(Color mainBlue, Color cardBg) {
-    // Placeholder for upload reports UI
+    // Implement upload functionality for the selected patient
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       elevation: 2,
@@ -611,12 +913,6 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 12),
-            // TODO: Implement upload functionality
-            Text(
-              'Upload test reports, medication charts, or handwritten notes.',
-              style: TextStyle(color: mainBlue),
-            ),
-            const SizedBox(height: 8),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
@@ -624,7 +920,15 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
                 textStyle: const TextStyle(fontWeight: FontWeight.bold),
                 elevation: 1,
               ),
-              onPressed: () {},
+              onPressed: () async {
+                // Use file picker and upload logic here
+                // For brevity, show a snackbar
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Upload logic not implemented in this demo.'),
+                  ),
+                );
+              },
               icon: Icon(Icons.upload_file, color: mainBlue),
               label: const Text('Upload'),
             ),
@@ -635,7 +939,17 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
   }
 
   Widget _buildMedicationTracker(Color mainBlue, Color cardBg) {
-    // Placeholder for medication tracker UI
+    // Fetch and display prescriptions for the selected patient
+    if (_prescriptions.isEmpty) {
+      return Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        elevation: 2,
+        child: Padding(
+          padding: const EdgeInsets.all(18.0),
+          child: const Text('No prescriptions found.'),
+        ),
+      );
+    }
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       elevation: 2,
@@ -649,38 +963,57 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 12),
-            // TODO: Implement medication tracker
-            Text(
-              'View prescribed medicines, dosage, and mark as Taken/Skipped.',
-              style: TextStyle(color: mainBlue),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: mainBlue,
-                    textStyle: const TextStyle(fontWeight: FontWeight.bold),
-                    elevation: 1,
-                  ),
-                  onPressed: () {},
-                  icon: Icon(Icons.check, color: mainBlue),
-                  label: const Text('Taken'),
+            ..._prescriptions.map(
+              (presc) => ListTile(
+                title: Text(
+                  presc.medicines.isNotEmpty
+                      ? presc.medicines.first.name
+                      : 'Medicine',
                 ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: mainBlue,
-                    textStyle: const TextStyle(fontWeight: FontWeight.bold),
-                    elevation: 1,
-                  ),
-                  onPressed: () {},
-                  icon: Icon(Icons.close, color: mainBlue),
-                  label: const Text('Skipped'),
+                subtitle: Text(
+                  'Dosage: ${presc.medicines.isNotEmpty ? presc.medicines.first.dosage : ''}',
                 ),
-              ],
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: mainBlue,
+                        textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                        elevation: 1,
+                      ),
+                      onPressed: () async {
+                        await InterconnectService.updatePrescriptionStatus(
+                          presc.id,
+                          'taken',
+                        );
+                        _loadPrescriptions();
+                      },
+                      icon: Icon(Icons.check, color: mainBlue),
+                      label: const Text('Taken'),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: mainBlue,
+                        textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                        elevation: 1,
+                      ),
+                      onPressed: () async {
+                        await InterconnectService.updatePrescriptionStatus(
+                          presc.id,
+                          'skipped',
+                        );
+                        _loadPrescriptions();
+                      },
+                      icon: Icon(Icons.close, color: mainBlue),
+                      label: const Text('Skipped'),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -689,7 +1022,16 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
   }
 
   Widget _buildHealthTipsSection(Color mainBlue, Color cardBg) {
-    // Placeholder for health tips feed
+    if (_healthTips.isEmpty) {
+      return Card(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        elevation: 2,
+        child: Padding(
+          padding: const EdgeInsets.all(18.0),
+          child: const Text('No health tips available.'),
+        ),
+      );
+    }
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       elevation: 2,
@@ -703,10 +1045,11 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 12),
-            // TODO: Implement health tips feed
-            Text(
-              'Simple health reminders and educational content.',
-              style: TextStyle(color: mainBlue),
+            ..._healthTips.map(
+              (tip) => ListTile(
+                leading: const Icon(Icons.lightbulb),
+                title: Text(tip.toString()),
+              ),
             ),
           ],
         ),
@@ -723,10 +1066,16 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
       final snap = await FirebaseFirestore.instance
           .collection('notifications')
           .where('caregiverId', isEqualTo: uid)
-          .orderBy('timestamp', descending: true)
-          .limit(20)
           .get();
-      notifications = snap.docs.map((d) => d.data()).toList();
+
+      // Sort in memory and limit to 20 most recent
+      final allNotifications = snap.docs.map((d) => d.data()).toList();
+      allNotifications.sort(
+        (a, b) => (b['timestamp'] as Timestamp).compareTo(
+          a['timestamp'] as Timestamp,
+        ),
+      );
+      notifications = allNotifications.take(20).toList();
     } catch (e) {
       print('Error fetching notifications: $e');
     }
@@ -754,11 +1103,14 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
                       trailing: n['timestamp'] != null
                           ? Text(
                               n['timestamp'] is int
-                                  ? DateTime.fromMillisecondsSinceEpoch(n['timestamp'])
-                                      .toLocal()
-                                      .toString()
-                                      .substring(0, 16)
-                                  : n['timestamp'].toDate().toLocal().toString().substring(0, 16),
+                                  ? DateTime.fromMillisecondsSinceEpoch(
+                                      n['timestamp'],
+                                    ).toLocal().toString().substring(0, 16)
+                                  : n['timestamp']
+                                        .toDate()
+                                        .toLocal()
+                                        .toString()
+                                        .substring(0, 16),
                               style: const TextStyle(
                                 fontSize: 11,
                                 color: Colors.grey,
@@ -822,4 +1174,3 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
     );
   }
 }
- 
