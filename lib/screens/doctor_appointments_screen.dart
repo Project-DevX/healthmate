@@ -30,6 +30,22 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
     super.dispose();
   }
 
+  // Helper function to sort appointments by date without requiring Firebase indexes
+  List<QueryDocumentSnapshot> _sortAppointments(
+    List<QueryDocumentSnapshot> appointments, {
+    bool descending = false,
+  }) {
+    appointments.sort((a, b) {
+      final aDate =
+          (a.data() as Map<String, dynamic>)['appointmentDate'] as Timestamp?;
+      final bDate =
+          (b.data() as Map<String, dynamic>)['appointmentDate'] as Timestamp?;
+      if (aDate == null || bDate == null) return 0;
+      return descending ? bDate.compareTo(aDate) : aDate.compareTo(bDate);
+    });
+    return appointments;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -80,15 +96,6 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
       stream: _firestore
           .collection('appointments')
           .where('doctorId', isEqualTo: widget.doctorId)
-          .where(
-            'appointmentDate',
-            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
-          )
-          .where(
-            'appointmentDate',
-            isLessThanOrEqualTo: Timestamp.fromDate(endOfDay),
-          )
-          .orderBy('appointmentDate')
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -99,7 +106,19 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
           return Center(child: Text('Error: ${snapshot.error}'));
         }
 
-        final appointments = snapshot.data?.docs ?? [];
+        final allAppointments = snapshot.data?.docs ?? [];
+
+        // Filter for today's appointments in memory
+        final todaysAppointments = allAppointments.where((doc) {
+          final appointmentDate =
+              (doc.data() as Map<String, dynamic>)['appointmentDate']
+                  as Timestamp?;
+          if (appointmentDate == null) return false;
+          final date = appointmentDate.toDate();
+          return date.isAfter(startOfDay) && date.isBefore(endOfDay);
+        }).toList();
+
+        final appointments = _sortAppointments(todaysAppointments);
 
         if (appointments.isEmpty) {
           return _buildEmptyState(
@@ -133,12 +152,6 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
       stream: _firestore
           .collection('appointments')
           .where('doctorId', isEqualTo: widget.doctorId)
-          .where(
-            'appointmentDate',
-            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfTomorrow),
-          )
-          .orderBy('appointmentDate')
-          .limit(50)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -149,7 +162,21 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
           return Center(child: Text('Error: ${snapshot.error}'));
         }
 
-        final appointments = snapshot.data?.docs ?? [];
+        final allAppointments = snapshot.data?.docs ?? [];
+
+        // Filter for upcoming appointments in memory
+        final upcomingAppointments = allAppointments.where((doc) {
+          final appointmentDate =
+              (doc.data() as Map<String, dynamic>)['appointmentDate']
+                  as Timestamp?;
+          if (appointmentDate == null) return false;
+          final date = appointmentDate.toDate();
+          return date.isAfter(startOfTomorrow);
+        }).toList();
+
+        final appointments = _sortAppointments(
+          upcomingAppointments.take(50).toList(),
+        );
 
         if (appointments.isEmpty) {
           return _buildEmptyState(
@@ -186,12 +213,6 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
       stream: _firestore
           .collection('appointments')
           .where('doctorId', isEqualTo: widget.doctorId)
-          .where(
-            'appointmentDate',
-            isLessThanOrEqualTo: Timestamp.fromDate(endOfYesterday),
-          )
-          .orderBy('appointmentDate', descending: true)
-          .limit(50)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -202,7 +223,22 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
           return Center(child: Text('Error: ${snapshot.error}'));
         }
 
-        final appointments = snapshot.data?.docs ?? [];
+        final allAppointments = snapshot.data?.docs ?? [];
+
+        // Filter for past appointments in memory
+        final pastAppointments = allAppointments.where((doc) {
+          final appointmentDate =
+              (doc.data() as Map<String, dynamic>)['appointmentDate']
+                  as Timestamp?;
+          if (appointmentDate == null) return false;
+          final date = appointmentDate.toDate();
+          return date.isBefore(endOfYesterday);
+        }).toList();
+
+        final appointments = _sortAppointments(
+          pastAppointments.take(50).toList(),
+          descending: true,
+        );
 
         if (appointments.isEmpty) {
           return _buildEmptyState(

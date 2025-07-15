@@ -32,12 +32,14 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
       final querySnapshot = await FirebaseFirestore.instance
           .collection('appointments')
           .where('doctorId', isEqualTo: user.uid)
-          .orderBy('date', descending: false)
           .get();
 
       appointments = querySnapshot.docs
           .map((doc) => {'id': doc.id, ...doc.data()})
           .toList();
+      
+      // Sort in memory to avoid Firebase index requirement
+      appointments.sort((a, b) => (a['date'] as String).compareTo(b['date'] as String));
     } catch (e) {
       print('Error loading appointments: $e');
       // Add some sample data for demonstration

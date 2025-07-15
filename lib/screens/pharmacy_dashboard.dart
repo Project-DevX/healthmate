@@ -3,6 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:intl/intl.dart';
+import '../models/shared_models.dart';
+import '../services/interconnect_service.dart';
 import 'dart:io';
 
 class PharmacyDashboardPage extends StatefulWidget {
@@ -16,103 +19,30 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
   int _selectedBottomNav = 0;
   bool _isLoading = false;
 
-  // Sample prescription data
-  List<Map<String, dynamic>> prescriptions = [
-    {
-      'id': 'RX001',
-      'patientName': 'John Doe',
-      'medication': 'Amoxicillin 500mg',
-      'quantity': '30 tablets',
-      'status': 'Pending',
-      'date': '2025-07-14',
-      'doctor': 'Dr. Smith',
-      'priority': 'Normal',
-    },
-    {
-      'id': 'RX002',
-      'patientName': 'Jane Wilson',
-      'medication': 'Lisinopril 10mg',
-      'quantity': '90 tablets',
-      'status': 'Ready',
-      'date': '2025-07-14',
-      'doctor': 'Dr. Johnson',
-      'priority': 'High',
-    },
-    {
-      'id': 'RX003',
-      'patientName': 'Bob Miller',
-      'medication': 'Metformin 1000mg',
-      'quantity': '60 tablets',
-      'status': 'Fulfilled',
-      'date': '2025-07-13',
-      'doctor': 'Dr. Brown',
-      'priority': 'Normal',
-    },
-  ];
+  // Real-time data
+  List<Prescription> _incomingPrescriptions = [];
+  List<Prescription> _myPrescriptions = [];
+  Map<String, dynamic>? _userData;
+  String? _pharmacyId;
 
-  // Sample inventory data
-  List<Map<String, dynamic>> inventory = [
-    {
-      'name': 'Amoxicillin 500mg',
-      'stock': 150,
-      'minStock': 50,
-      'category': 'Antibiotic',
-      'expiry': '2026-12-31',
-      'supplier': 'PharmaCorp',
-    },
-    {
-      'name': 'Lisinopril 10mg',
-      'stock': 25,
-      'minStock': 50,
-      'category': 'Cardiovascular',
-      'expiry': '2025-08-15',
-      'supplier': 'HealthMeds',
-    },
-    {
-      'name': 'Metformin 1000mg',
-      'stock': 200,
-      'minStock': 75,
-      'category': 'Diabetes',
-      'expiry': '2026-03-20',
-      'supplier': 'MediSupply',
-    },
-  ];
-
-  // Notification data
-  List<Map<String, dynamic>> notifications = [
-    {
-      'title': 'Low Stock Alert',
-      'message': 'Lisinopril 10mg is running low (25 units remaining)',
-      'type': 'warning',
-      'time': '2 hours ago',
-      'read': false,
-    },
-    {
-      'title': 'New Prescription',
-      'message': 'RX004 received from Dr. Anderson',
-      'type': 'info',
-      'time': '30 minutes ago',
-      'read': false,
-    },
-    {
-      'title': 'Pickup Ready',
-      'message': 'RX002 is ready for patient pickup',
-      'type': 'success',
-      'time': '1 hour ago',
-      'read': true,
-    },
-  ];
+  // Remove sample data lists
+  List<Map<String, dynamic>> prescriptions = [];
+  List<Map<String, dynamic>> inventory = [];
+  List<Map<String, dynamic>> notifications = [];
 
   // KPI calculations
   int get totalPrescriptions => prescriptions.length;
-  int get fulfilledPrescriptions =>
-      prescriptions.where((p) => p['status'] == 'Fulfilled').length;
-  int get pendingPrescriptions =>
-      prescriptions.where((p) => p['status'] == 'Pending').length;
+  int get fulfilledPrescriptions => prescriptions
+      .where((p) => (p['status'] ?? '').toLowerCase() == 'fulfilled')
+      .length;
+  int get pendingPrescriptions => prescriptions
+      .where((p) => (p['status'] ?? '').toLowerCase() == 'pending')
+      .length;
   int get outOfStockAlerts =>
-      inventory.where((i) => i['stock'] <= i['minStock']).length;
-  int get todaysPickups =>
-      prescriptions.where((p) => p['status'] == 'Ready').length;
+      inventory.where((i) => (i['stock'] ?? 0) <= (i['minStock'] ?? 0)).length;
+  int get todaysPickups => prescriptions
+      .where((p) => (p['status'] ?? '').toLowerCase() == 'ready')
+      .length;
 
   final List<_PharmacyDashboardFeature> _features = [
     _PharmacyDashboardFeature('E-Prescriptions', Icons.receipt_long),
@@ -1121,6 +1051,115 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
       }
     }
     if (mounted) setState(() => _isLoading = false);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPharmacyDashboardData();
+  }
+
+  Future<void> _loadPharmacyDashboardData() async {
+    setState(() => _isLoading = true);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
+    final uid = user.uid;
+    try {
+      // Fetch prescriptions
+      final prescSnap = await FirebaseFirestore.instance
+          .collection('prescriptions')
+          .where('pharmacyId', isEqualTo: uid)
+          .get();
+      prescriptions = prescSnap.docs.map((d) => d.data()).toList();
+
+      // Fetch inventory
+      final invSnap = await FirebaseFirestore.instance
+          .collection('inventory')
+          .where('pharmacyId', isEqualTo: uid)
+          .get();
+      inventory = invSnap.docs.map((d) => d.data()).toList();
+
+      // Fetch notifications
+      final notifSnap = await FirebaseFirestore.instance
+          .collection('notifications')
+          .where('recipientId', isEqualTo: uid)
+          .get();
+      notifications = notifSnap.docs.map((d) => d.data()).toList();
+    } catch (e) {
+      print('Error loading pharmacy dashboard data: $e');
+    }
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadPrescriptions() async {
+    if (_pharmacyId == null) return;
+
+    try {
+      setState(() => _isLoading = true);
+
+      // Get prescriptions assigned to this pharmacy
+      final prescriptions = await InterconnectService.getUserPrescriptions(
+        _pharmacyId!,
+        'pharmacy',
+      );
+
+      setState(() {
+        _myPrescriptions = prescriptions;
+        _incomingPrescriptions = prescriptions
+            .where((prescription) => prescription.status == 'prescribed')
+            .toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load prescriptions: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _updatePrescriptionStatus(
+    String prescriptionId,
+    String status,
+  ) async {
+    try {
+      // Update pharmacy assignment if not already assigned
+      if (status == 'filled') {
+        await FirebaseFirestore.instance
+            .collection('prescriptions')
+            .doc(prescriptionId)
+            .update({
+              'pharmacyId': _pharmacyId,
+              'pharmacyName': _userData?['name'] ?? 'Pharmacy',
+            });
+      }
+
+      await InterconnectService.updatePrescriptionStatus(
+        prescriptionId,
+        status,
+      );
+      await _loadPrescriptions(); // Refresh data
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Prescription status updated to $status'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update prescription: $e')),
+        );
+      }
+    }
   }
 
   @override

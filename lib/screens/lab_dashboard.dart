@@ -3,6 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:intl/intl.dart';
+import '../models/shared_models.dart';
+import '../services/interconnect_service.dart';
 import 'dart:io';
 
 class LabDashboard extends StatefulWidget {
@@ -16,111 +19,29 @@ class _LabDashboardState extends State<LabDashboard> {
   int _selectedBottomNav = 0;
   bool _isLoading = false;
 
-  // Sample test data
-  List<Map<String, dynamic>> testResults = [
-    {
-      'id': 'LAB001',
-      'patientName': 'John Doe',
-      'testType': 'Complete Blood Count',
-      'status': 'Completed',
-      'date': '2025-07-14',
-      'priority': 'Normal',
-      'results': 'Normal values within range',
-      'technician': 'Tech. Sarah Wilson',
-    },
-    {
-      'id': 'LAB002',
-      'patientName': 'Jane Smith',
-      'testType': 'Cardiac Markers',
-      'status': 'In Progress',
-      'date': '2025-07-14',
-      'priority': 'Urgent',
-      'results': 'Pending analysis',
-      'technician': 'Tech. Mike Johnson',
-    },
-    {
-      'id': 'LAB003',
-      'patientName': 'Bob Miller',
-      'testType': 'Liver Function',
-      'status': 'Pending',
-      'date': '2025-07-13',
-      'priority': 'Normal',
-      'results': 'Awaiting sample processing',
-      'technician': 'Tech. Emily Davis',
-    },
-  ];
+  // Real-time data
+  List<LabReport> _incomingRequests = [];
+  List<LabReport> _myLabReports = [];
+  Map<String, dynamic>? _userData;
+  String? _labId;
 
-  // Sample staff data
-  List<Map<String, dynamic>> labStaff = [
-    {
-      'id': 'TECH001',
-      'name': 'Sarah Wilson',
-      'role': 'Senior Lab Technician',
-      'department': 'Hematology',
-      'shift': 'Morning',
-      'status': 'Active',
-      'experience': '6 years',
-    },
-    {
-      'id': 'TECH002',
-      'name': 'Mike Johnson',
-      'role': 'Lab Technician',
-      'department': 'Chemistry',
-      'shift': 'Evening',
-      'status': 'Active',
-      'experience': '3 years',
-    },
-    {
-      'id': 'TECH003',
-      'name': 'Emily Davis',
-      'role': 'Lab Assistant',
-      'department': 'Microbiology',
-      'shift': 'Night',
-      'status': 'On Break',
-      'experience': '2 years',
-    },
-  ];
-
-  // Sample appointment data
-  List<Map<String, dynamic>> labAppointments = [
-    {
-      'id': 'LAPT001',
-      'patientName': 'Alice Brown',
-      'testType': 'Blood Work',
-      'time': '09:00 AM',
-      'date': '2025-07-14',
-      'status': 'Scheduled',
-      'fasting': true,
-    },
-    {
-      'id': 'LAPT002',
-      'patientName': 'David Lee',
-      'testType': 'Urine Analysis',
-      'time': '10:30 AM',
-      'date': '2025-07-14',
-      'status': 'Checked In',
-      'fasting': false,
-    },
-    {
-      'id': 'LAPT003',
-      'patientName': 'Lisa Wang',
-      'testType': 'X-Ray',
-      'time': '02:00 PM',
-      'date': '2025-07-14',
-      'status': 'Completed',
-      'fasting': false,
-    },
-  ];
+  // Remove sample data lists
+  List<Map<String, dynamic>> testResults = [];
+  List<Map<String, dynamic>> labStaff = [];
+  List<Map<String, dynamic>> labAppointments = [];
 
   // KPI calculations
   int get totalTests => testResults.length;
-  int get pendingUploads =>
-      testResults.where((t) => t['status'] == 'Pending').length;
+  int get pendingUploads => testResults
+      .where((t) => (t['status'] ?? '').toLowerCase() == 'pending')
+      .length;
   int get todaysAppointments => labAppointments.length;
-  int get completedTests =>
-      testResults.where((t) => t['status'] == 'Completed').length;
-  int get urgentTests =>
-      testResults.where((t) => t['priority'] == 'Urgent').length;
+  int get completedTests => testResults
+      .where((t) => (t['status'] ?? '').toLowerCase() == 'completed')
+      .length;
+  int get urgentTests => testResults
+      .where((t) => (t['priority'] ?? '').toLowerCase() == 'urgent')
+      .length;
 
   final List<_LabDashboardFeature> _features = [
     _LabDashboardFeature('Report Upload', Icons.upload_file),
@@ -1046,6 +967,148 @@ class _LabDashboardState extends State<LabDashboard> {
         ],
       ),
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLabDashboardData();
+  }
+
+  Future<void> _loadLabDashboardData() async {
+    setState(() => _isLoading = true);
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
+    final uid = user.uid;
+    try {
+      // Fetch lab reports
+      final reportsSnap = await FirebaseFirestore.instance
+          .collection('lab_reports')
+          .where('labId', isEqualTo: uid)
+          .get();
+      testResults = reportsSnap.docs.map((d) => d.data()).toList();
+
+      // Fetch lab staff
+      final staffSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .where('userType', isEqualTo: 'lab_staff')
+          .where('labId', isEqualTo: uid)
+          .get();
+      labStaff = staffSnap.docs.map((d) => d.data()).toList();
+
+      // Fetch lab appointments
+      final apptSnap = await FirebaseFirestore.instance
+          .collection('appointments')
+          .where('labId', isEqualTo: uid)
+          .get();
+      labAppointments = apptSnap.docs.map((d) => d.data()).toList();
+    } catch (e) {
+      print('Error loading lab dashboard data: $e');
+    }
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _loadLabRequests() async {
+    if (_labId == null) return;
+
+    try {
+      setState(() => _isLoading = true);
+
+      // Get lab reports assigned to this lab
+      final labReports = await InterconnectService.getUserLabReports(
+        _labId!,
+        'lab',
+      );
+
+      setState(() {
+        _myLabReports = labReports;
+        _incomingRequests = labReports
+            .where((report) => report.status == 'requested')
+            .toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load lab requests: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _updateLabReportStatus(String reportId, String status) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('lab_reports')
+          .doc(reportId)
+          .update({'status': status});
+
+      await _loadLabRequests(); // Refresh data
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Test status updated to $status'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to update status: $e')));
+      }
+    }
+  }
+
+  Future<void> _uploadLabResult(LabReport report) async {
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+
+      if (pickedFile != null) {
+        setState(() => _isLoading = true);
+
+        // Upload to Firebase Storage
+        final file = File(pickedFile.path);
+        final storageRef = FirebaseStorage.instance
+            .ref()
+            .child('lab_reports')
+            .child('${report.id}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+        await storageRef.putFile(file);
+        final downloadUrl = await storageRef.getDownloadURL();
+
+        // Update lab report with results
+        await InterconnectService.uploadLabResult(report.id, downloadUrl, {
+          'uploaded_by': _userData?['name'] ?? 'Lab Staff',
+        }, notes: 'Results uploaded by lab staff');
+
+        await _loadLabRequests(); // Refresh data
+        setState(() => _isLoading = false);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Lab results uploaded successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to upload results: $e')));
+      }
+    }
   }
 
   @override
