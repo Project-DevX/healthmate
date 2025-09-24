@@ -182,7 +182,11 @@ class _FriendsScreenState extends State<FriendsScreen>
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.error, size: 64, color: Colors.red),
+                            const Icon(
+                              Icons.error,
+                              size: 64,
+                              color: Colors.red,
+                            ),
                             const SizedBox(height: 16),
                             Text(
                               'Error loading friends: ${snapshot.error}',
@@ -193,94 +197,110 @@ class _FriendsScreenState extends State<FriendsScreen>
                       );
                     }
 
-              if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                return const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.people_outline, size: 64, color: Colors.grey),
-                      SizedBox(height: 16),
-                      Text(
-                        'No friends yet',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Tap the + button to find friends',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              final friends = snapshot.data!;
-              return ListView.builder(
-                itemCount: friends.length,
-                itemBuilder: (context, index) {
-                  final friend = friends[index];
-                  return Card(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
-                    ),
-                    child: ListTile(
-                      leading: _buildUserTypeIcon(friend.friendType),
-                      title: Text(
-                        friend.friendName,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(
-                        friend.friendType.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).textTheme.bodySmall?.color,
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.people_outline,
+                              size: 64,
+                              color: Colors.grey,
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              'No friends yet',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Tap the + button to find friends',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ],
                         ),
-                      ),
-                      trailing: PopupMenuButton<String>(
-                        onSelected: (value) {
-                          if (value == 'remove') {
-                            _removeFriend(friend.friendId, friend.friendName);
-                          } else if (value == 'chat') {
-                            // Navigate to chat
-                            // This will be implemented when integrating with chat
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(
-                            value: 'chat',
-                            child: Row(
-                              children: [
-                                Icon(Icons.chat),
-                                SizedBox(width: 8),
-                                Text('Chat'),
+                      );
+                    }
+
+                    final friends = snapshot.data!;
+                    return ListView.builder(
+                      itemCount: friends.length,
+                      itemBuilder: (context, index) {
+                        final friend = friends[index];
+                        return Card(
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 4,
+                          ),
+                          child: ListTile(
+                            leading: _buildUserTypeIcon(friend.friendType),
+                            title: Text(
+                              friend.friendName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              friend.friendType.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(
+                                  context,
+                                ).textTheme.bodySmall?.color,
+                              ),
+                            ),
+                            trailing: PopupMenuButton<String>(
+                              onSelected: (value) {
+                                if (value == 'remove') {
+                                  _removeFriend(
+                                    friend.friendId,
+                                    friend.friendName,
+                                  );
+                                } else if (value == 'chat') {
+                                  // Navigate to chat
+                                  // This will be implemented when integrating with chat
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'chat',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.chat),
+                                      SizedBox(width: 8),
+                                      Text('Chat'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'remove',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.remove_circle,
+                                        color: Colors.red,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text('Remove Friend'),
+                                    ],
+                                  ),
+                                ),
                               ],
                             ),
                           ),
-                          const PopupMenuItem(
-                            value: 'remove',
-                            child: Row(
-                              children: [
-                                Icon(Icons.remove_circle, color: Colors.red),
-                                SizedBox(width: 8),
-                                Text('Remove Friend'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
+                        );
+                      },
+                    );
+                  },
+                ),
 
           // Received Requests Tab
           _currentUserId == null
               ? const Center(child: CircularProgressIndicator())
               : StreamBuilder<List<FriendRequest>>(
-                  stream: FriendService.getReceivedFriendRequests(_currentUserId!),
+                  stream: FriendService.getReceivedFriendRequests(
+                    _currentUserId!,
+                  ),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
@@ -291,7 +311,11 @@ class _FriendsScreenState extends State<FriendsScreen>
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.error, size: 64, color: Colors.red),
+                            const Icon(
+                              Icons.error,
+                              size: 64,
+                              color: Colors.red,
+                            ),
                             const SizedBox(height: 16),
                             Text(
                               'Error loading requests: ${snapshot.error}',
@@ -336,7 +360,9 @@ class _FriendsScreenState extends State<FriendsScreen>
                             leading: _buildUserTypeIcon(request.senderType),
                             title: Text(
                               request.senderName,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -357,12 +383,20 @@ class _FriendsScreenState extends State<FriendsScreen>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.check, color: Colors.green),
-                                  onPressed: () => _acceptFriendRequest(request.id),
+                                  icon: const Icon(
+                                    Icons.check,
+                                    color: Colors.green,
+                                  ),
+                                  onPressed: () =>
+                                      _acceptFriendRequest(request.id),
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.close, color: Colors.red),
-                                  onPressed: () => _declineFriendRequest(request.id),
+                                  icon: const Icon(
+                                    Icons.close,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: () =>
+                                      _declineFriendRequest(request.id),
                                 ),
                               ],
                             ),
@@ -388,7 +422,11 @@ class _FriendsScreenState extends State<FriendsScreen>
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.error, size: 64, color: Colors.red),
+                            const Icon(
+                              Icons.error,
+                              size: 64,
+                              color: Colors.red,
+                            ),
                             const SizedBox(height: 16),
                             Text(
                               'Error loading requests: ${snapshot.error}',
@@ -429,7 +467,9 @@ class _FriendsScreenState extends State<FriendsScreen>
                             leading: _buildUserTypeIcon(request.receiverType),
                             title: Text(
                               request.receiverName,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
