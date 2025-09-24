@@ -2823,3 +2823,15 @@ exports.onLabReportAdded = onDocumentCreated(
     }
   }
 );
+
+// ==========================================
+// CCAS (Collaborative Clinical Assessment System) Functions
+// ==========================================
+
+const ccasFunctions = require('./ccas/ccas_functions');
+
+// Export CCAS functions
+exports.startCCASAssessment = ccasFunctions.startCCASAssessment;
+exports.getCCASStatus = ccasFunctions.getCCASStatus;
+exports.quickCCASAssessment = ccasFunctions.quickCCASAssessment;
+exports.testCCAS = ccasFunctions.testCCAS;
