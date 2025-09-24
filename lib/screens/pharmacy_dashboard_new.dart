@@ -3,6 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../services/pharmacy_service.dart';
+import '../widgets/add_medicine_form.dart';
+import '../widgets/edit_medicine_form.dart';
+import '../widgets/restock_medicine_dialog.dart';
 
 class PharmacyDashboardNew extends StatefulWidget {
   const PharmacyDashboardNew({Key? key}) : super(key: key);
@@ -267,7 +270,9 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
                 return ListView.builder(
                   itemCount: docs.length,
                   itemBuilder: (context, index) {
-                    final data = docs[index].data() as Map<String, dynamic>;
+                    final doc = docs[index];
+                    final data = doc.data() as Map<String, dynamic>;
+                    data['id'] = doc.id; // Add document ID to the data
                     return _buildInventoryCard(data);
                   },
                 );
@@ -280,7 +285,7 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
   }
 
   Widget _buildInventoryCard(Map<String, dynamic> item) {
-    final lowStock = (item['quantity'] ?? 0) < (item['minThreshold'] ?? 10);
+    final lowStock = (item['quantity'] ?? 0) < (item['minStock'] ?? 10);
 
     return Card(
       color: lowStock ? Colors.red[50] : null,
@@ -294,7 +299,8 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Quantity: ${item['quantity'] ?? 0}'),
-            Text('Price: \$${(item['price'] ?? 0).toStringAsFixed(2)}'),
+            Text('Price: \$${(item['unitPrice'] ?? 0).toStringAsFixed(2)}'),
+            Text('Category: ${item['category'] ?? 'N/A'}'),
             if (lowStock)
               const Text(
                 'LOW STOCK!',
@@ -651,19 +657,14 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
   void _showAddMedicineDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Medicine'),
-        content: const Text('Medicine addition form would go here'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Add'),
-          ),
-        ],
+      barrierDismissible: false,
+      builder: (context) => AddMedicineForm(
+        onMedicineAdded: () {
+          // Refresh inventory data
+          setState(() {
+            // This will trigger a rebuild and refresh the inventory stream
+          });
+        },
       ),
     );
   }
@@ -671,14 +672,111 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
   void _handleInventoryAction(String action, Map<String, dynamic> item) {
     switch (action) {
       case 'edit':
-        // Handle edit
+        _showEditMedicineDialog(item);
         break;
       case 'restock':
-        // Handle restock
+        _showRestockMedicineDialog(item);
         break;
       case 'delete':
-        // Handle delete
+        _showDeleteConfirmationDialog(item);
         break;
+    }
+  }
+
+  void _showEditMedicineDialog(Map<String, dynamic> medicine) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => EditMedicineForm(
+        medicine: medicine,
+        onMedicineUpdated: () {
+          // Refresh inventory data
+          setState(() {
+            // This will trigger a rebuild and refresh the inventory stream
+          });
+        },
+      ),
+    );
+  }
+
+  void _showRestockMedicineDialog(Map<String, dynamic> medicine) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => RestockMedicineDialog(
+        medicine: medicine,
+        onMedicineRestocked: () {
+          // Refresh inventory data
+          setState(() {
+            // This will trigger a rebuild and refresh the inventory stream
+          });
+        },
+      ),
+    );
+  }
+
+  void _showDeleteConfirmationDialog(Map<String, dynamic> medicine) {
+    final medicineName = medicine['name'] ?? 'Unknown Medicine';
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Medicine'),
+        content: Text(
+          'Are you sure you want to delete "$medicineName"?\n\nThis action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => _deleteMedicine(medicine),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteMedicine(Map<String, dynamic> medicine) async {
+    Navigator.pop(context); // Close confirmation dialog
+
+    try {
+      await _pharmacyService.deleteMedicine(medicine['id'] ?? '');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Medicine "${medicine['name']}" deleted successfully!',
+            ),
+            backgroundColor: Colors.green,
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () {},
+            ),
+          ),
+        );
+
+        // Refresh inventory data
+        setState(() {
+          // This will trigger a rebuild and refresh the inventory stream
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting medicine: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 

@@ -192,9 +192,10 @@ class PharmacyService {
 
   // Get inventory stream
   Stream<QuerySnapshot> getInventoryStream() {
-    return FirebaseFirestore.instance
-        .collection('inventory')
-        .where('pharmacyId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+    return _firestore
+        .collection('pharmacy_inventory')
+        .doc(currentPharmacyId)
+        .collection('medicines')
         .snapshots();
   }
 
@@ -297,6 +298,145 @@ class PharmacyService {
     } catch (e) {
       print('Error getting inventory: $e');
       return [];
+    }
+  }
+
+  /// Add medicine to inventory
+  Future<void> addMedicine({
+    required String name,
+    required String category,
+    required int quantity,
+    required double unitPrice,
+    required DateTime expiryDate,
+    required String batchNumber,
+    required String supplier,
+    required int minStock,
+    String? dosage,
+    String? instructions,
+  }) async {
+    try {
+      // Generate a unique ID for the medicine
+      final medicineRef = _firestore
+          .collection('pharmacy_inventory')
+          .doc(currentPharmacyId)
+          .collection('medicines')
+          .doc();
+
+      await medicineRef.set({
+        'name': name,
+        'category': category,
+        'quantity': quantity,
+        'unitPrice': unitPrice,
+        'expiryDate': Timestamp.fromDate(expiryDate),
+        'batchNumber': batchNumber,
+        'supplier': supplier,
+        'minStock': minStock,
+        'dosage': dosage,
+        'instructions': instructions,
+        'lastUpdated': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      print('✅ Medicine added successfully: $name');
+    } catch (e) {
+      print('❌ Error adding medicine: $e');
+      throw e;
+    }
+  }
+
+  /// Update medicine in inventory
+  Future<void> updateMedicine({
+    required String medicineId,
+    required String name,
+    required String category,
+    required int quantity,
+    required double unitPrice,
+    required DateTime expiryDate,
+    required String batchNumber,
+    required String supplier,
+    required int minStock,
+    String? dosage,
+    String? instructions,
+  }) async {
+    try {
+      final medicineRef = _firestore
+          .collection('pharmacy_inventory')
+          .doc(currentPharmacyId)
+          .collection('medicines')
+          .doc(medicineId);
+
+      await medicineRef.update({
+        'name': name,
+        'category': category,
+        'quantity': quantity,
+        'unitPrice': unitPrice,
+        'expiryDate': Timestamp.fromDate(expiryDate),
+        'batchNumber': batchNumber,
+        'supplier': supplier,
+        'minStock': minStock,
+        'dosage': dosage,
+        'instructions': instructions,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+
+      print('✅ Medicine updated successfully: $name');
+    } catch (e) {
+      print('❌ Error updating medicine: $e');
+      throw e;
+    }
+  }
+
+  /// Restock medicine inventory
+  Future<void> restockMedicine({
+    required String medicineId,
+    required int additionalQuantity,
+    String? newBatchNumber,
+    DateTime? newExpiryDate,
+  }) async {
+    try {
+      final medicineRef = _firestore
+          .collection('pharmacy_inventory')
+          .doc(currentPharmacyId)
+          .collection('medicines')
+          .doc(medicineId);
+
+      final updateData = <String, dynamic>{
+        'quantity': FieldValue.increment(additionalQuantity),
+        'lastUpdated': FieldValue.serverTimestamp(),
+      };
+
+      if (newBatchNumber != null) {
+        updateData['batchNumber'] = newBatchNumber;
+      }
+
+      if (newExpiryDate != null) {
+        updateData['expiryDate'] = Timestamp.fromDate(newExpiryDate);
+      }
+
+      await medicineRef.update(updateData);
+
+      print('✅ Medicine restocked successfully: +$additionalQuantity units');
+    } catch (e) {
+      print('❌ Error restocking medicine: $e');
+      throw e;
+    }
+  }
+
+  /// Delete medicine from inventory
+  Future<void> deleteMedicine(String medicineId) async {
+    try {
+      final medicineRef = _firestore
+          .collection('pharmacy_inventory')
+          .doc(currentPharmacyId)
+          .collection('medicines')
+          .doc(medicineId);
+
+      await medicineRef.delete();
+
+      print('✅ Medicine deleted successfully');
+    } catch (e) {
+      print('❌ Error deleting medicine: $e');
+      throw e;
     }
   }
 
