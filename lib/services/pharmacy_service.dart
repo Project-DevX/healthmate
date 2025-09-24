@@ -205,13 +205,10 @@ class PharmacyService {
     String status,
   ) async {
     try {
-      await _firestore
-          .collection('pharmacy_prescriptions')
-          .doc(prescriptionId)
-          .update({
-            'status': status,
-            'lastUpdated': FieldValue.serverTimestamp(),
-          });
+      await _firestore.collection('prescriptions').doc(prescriptionId).update({
+        'status': status,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
     } catch (e) {
       print('Error updating prescription status: $e');
     }
@@ -231,6 +228,7 @@ class PharmacyService {
       );
       final tax = subtotal * 0.08; // 8% tax
       final total = subtotal + tax;
+      final now = DateTime.now();
 
       final billData = {
         'id': billId,
@@ -243,12 +241,17 @@ class PharmacyService {
         'subtotal': subtotal,
         'tax': tax,
         'totalAmount': total,
-        'billDate': FieldValue.serverTimestamp(),
-        'timestamp': FieldValue.serverTimestamp(),
+        'billDate': Timestamp.fromDate(now),
+        'timestamp': Timestamp.fromDate(now),
         'status': 'issued',
       };
 
-      await _firestore.collection('pharmacy_bills').doc(billId).set(billData);
+      // Save to Firestore with server timestamp
+      await _firestore.collection('pharmacy_bills').doc(billId).set({
+        ...billData,
+        'billDate': FieldValue.serverTimestamp(),
+        'timestamp': FieldValue.serverTimestamp(),
+      });
 
       return PharmacyBill.fromMap(billData);
     } catch (e) {
@@ -606,10 +609,12 @@ class PharmacyService {
 
       // Add inventory to Firestore
       for (final item in sampleInventory) {
-        await _firestore.collection('inventory').doc(item['id'] as String).set({
-          ...item,
-          'lastUpdated': FieldValue.serverTimestamp(),
-        });
+        await _firestore
+            .collection('pharmacy_inventory')
+            .doc(currentPharmacyId)
+            .collection('medicines')
+            .doc(item['id'] as String)
+            .set({...item, 'lastUpdated': FieldValue.serverTimestamp()});
       }
 
       print('✅ Sample pharmacy data created successfully');
@@ -693,7 +698,7 @@ class PharmacyService {
       // Add prescriptions to Firestore
       for (final prescription in samplePrescriptions) {
         await _firestore
-            .collection('pharmacy_prescriptions')
+            .collection('prescriptions')
             .doc(prescription['id'] as String)
             .set(prescription);
       }

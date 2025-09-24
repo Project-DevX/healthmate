@@ -20,7 +20,7 @@ Future<void> main() async {
 
     // Initialize sample data
     final pharmacyService = PharmacyService();
-    await pharmacyService.initializeSampleData();
+    await pharmacyService.createSampleData();
 
     print('✅ Sample data initialization complete');
   } catch (e) {
