@@ -18,6 +18,7 @@ import 'screens/lab_report_content_screen.dart';
 import 'screens/privacy_settings_screen.dart';
 import 'screens/notifications_settings_screen.dart';
 import 'screens/patient_profile_edit_screen.dart';
+import 'screens/friends_screen.dart';
 import 'widgets/trend_test_data_widget.dart';
 import 'widgets/doctor_booking_widget.dart';
 import 'screens/chat_page.dart';
@@ -340,6 +341,16 @@ class _PatientDashboardState extends State<PatientDashboard> {
         backgroundColor: AppTheme.patientColor,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.people),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const FriendsScreen()),
+              );
+            },
+            tooltip: 'Friends',
+          ),
           IconButton(
             icon: const Icon(Icons.emergency),
             onPressed: _showEmergencyOptions,

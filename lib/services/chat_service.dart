@@ -11,6 +11,10 @@ class ChatService {
     try {
       List<Map<String, dynamic>> contacts = [];
 
+      // First add friends
+      contacts.addAll(await _getFriends(userId));
+
+      // Then add role-based contacts
       switch (userType.toLowerCase()) {
         case 'patient':
           // Patients can chat with doctors and caregivers
@@ -357,6 +361,30 @@ class ChatService {
       }).toList();
     } catch (e) {
       print('Error getting lab patients: $e');
+      return [];
+    }
+  }
+
+  // Friends contacts
+  static Future<List<Map<String, dynamic>>> _getFriends(String userId) async {
+    try {
+      final friends = await _firestore
+          .collection('friends')
+          .where('userId', isEqualTo: userId)
+          .get();
+
+      return friends.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'id': data['friendId'],
+          'name': data['friendName'] ?? 'Friend',
+          'type': data['friendType'] ?? 'unknown',
+          'email': '', // Friends don't need email for chat
+          'isFriend': true,
+        };
+      }).toList();
+    } catch (e) {
+      print('Error getting friends: $e');
       return [];
     }
   }
