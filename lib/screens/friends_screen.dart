@@ -168,28 +168,30 @@ class _FriendsScreenState extends State<FriendsScreen>
         controller: _tabController,
         children: [
           // Friends Tab
-          StreamBuilder<List<Friend>>(
-            stream: FriendService.getFriends(_currentUserId!),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+          _currentUserId == null
+              ? const Center(child: CircularProgressIndicator())
+              : StreamBuilder<List<Friend>>(
+                  stream: FriendService.getFriends(_currentUserId!),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-              if (snapshot.hasError) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error, size: 64, color: Colors.red),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Error loading friends: ${snapshot.error}',
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ],
-                  ),
-                );
-              }
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.error, size: 64, color: Colors.red),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Error loading friends: ${snapshot.error}',
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
 
               if (!snapshot.hasData || snapshot.data!.isEmpty) {
                 return const Center(
@@ -275,188 +277,192 @@ class _FriendsScreenState extends State<FriendsScreen>
           ),
 
           // Received Requests Tab
-          StreamBuilder<List<FriendRequest>>(
-            stream: FriendService.getReceivedFriendRequests(_currentUserId!),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+          _currentUserId == null
+              ? const Center(child: CircularProgressIndicator())
+              : StreamBuilder<List<FriendRequest>>(
+                  stream: FriendService.getReceivedFriendRequests(_currentUserId!),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-              if (snapshot.hasError) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error, size: 64, color: Colors.red),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Error loading requests: ${snapshot.error}',
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ],
-                  ),
-                );
-              }
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.error, size: 64, color: Colors.red),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Error loading requests: ${snapshot.error}',
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
 
-              if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                return const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.notifications_none,
-                        size: 64,
-                        color: Colors.grey,
-                      ),
-                      SizedBox(height: 16),
-                      Text(
-                        'No pending requests',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                );
-              }
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.notifications_none,
+                              size: 64,
+                              color: Colors.grey,
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              'No pending requests',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
 
-              final requests = snapshot.data!;
-              return ListView.builder(
-                itemCount: requests.length,
-                itemBuilder: (context, index) {
-                  final request = requests[index];
-                  return Card(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
-                    ),
-                    child: ListTile(
-                      leading: _buildUserTypeIcon(request.senderType),
-                      title: Text(
-                        request.senderName,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(request.senderType.toUpperCase()),
-                          Text(
-                            'Sent ${request.createdAt.toString().split(' ')[0]}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(
-                                context,
-                              ).textTheme.bodySmall?.color,
+                    final requests = snapshot.data!;
+                    return ListView.builder(
+                      itemCount: requests.length,
+                      itemBuilder: (context, index) {
+                        final request = requests[index];
+                        return Card(
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 4,
+                          ),
+                          child: ListTile(
+                            leading: _buildUserTypeIcon(request.senderType),
+                            title: Text(
+                              request.senderName,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(request.senderType.toUpperCase()),
+                                Text(
+                                  'Sent ${request.createdAt.toString().split(' ')[0]}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall?.color,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.check, color: Colors.green),
+                                  onPressed: () => _acceptFriendRequest(request.id),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close, color: Colors.red),
+                                  onPressed: () => _declineFriendRequest(request.id),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.check, color: Colors.green),
-                            onPressed: () => _acceptFriendRequest(request.id),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close, color: Colors.red),
-                            onPressed: () => _declineFriendRequest(request.id),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
+                        );
+                      },
+                    );
+                  },
+                ),
 
           // Sent Requests Tab
-          StreamBuilder<List<FriendRequest>>(
-            stream: FriendService.getSentFriendRequests(_currentUserId!),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+          _currentUserId == null
+              ? const Center(child: CircularProgressIndicator())
+              : StreamBuilder<List<FriendRequest>>(
+                  stream: FriendService.getSentFriendRequests(_currentUserId!),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-              if (snapshot.hasError) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error, size: 64, color: Colors.red),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Error loading requests: ${snapshot.error}',
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ],
-                  ),
-                );
-              }
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.error, size: 64, color: Colors.red),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Error loading requests: ${snapshot.error}',
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
 
-              if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                return const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.send, size: 64, color: Colors.grey),
-                      SizedBox(height: 16),
-                      Text(
-                        'No sent requests',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                );
-              }
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.send, size: 64, color: Colors.grey),
+                            SizedBox(height: 16),
+                            Text(
+                              'No sent requests',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
 
-              final requests = snapshot.data!;
-              return ListView.builder(
-                itemCount: requests.length,
-                itemBuilder: (context, index) {
-                  final request = requests[index];
-                  return Card(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
-                    ),
-                    child: ListTile(
-                      leading: _buildUserTypeIcon(request.receiverType),
-                      title: Text(
-                        request.receiverName,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${request.receiverType.toUpperCase()} • ${request.status}',
+                    final requests = snapshot.data!;
+                    return ListView.builder(
+                      itemCount: requests.length,
+                      itemBuilder: (context, index) {
+                        final request = requests[index];
+                        return Card(
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 4,
                           ),
-                          Text(
-                            'Sent ${request.createdAt.toString().split(' ')[0]}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(
-                                context,
-                              ).textTheme.bodySmall?.color,
+                          child: ListTile(
+                            leading: _buildUserTypeIcon(request.receiverType),
+                            title: Text(
+                              request.receiverName,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${request.receiverType.toUpperCase()} • ${request.status}',
+                                ),
+                                Text(
+                                  'Sent ${request.createdAt.toString().split(' ')[0]}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall?.color,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            trailing: Text(
+                              request.status.toUpperCase(),
+                              style: TextStyle(
+                                color: request.status == 'pending'
+                                    ? Colors.orange
+                                    : Colors.grey,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        ],
-                      ),
-                      trailing: Text(
-                        request.status.toUpperCase(),
-                        style: TextStyle(
-                          color: request.status == 'pending'
-                              ? Colors.orange
-                              : Colors.grey,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
+                        );
+                      },
+                    );
+                  },
+                ),
         ],
       ),
     );
