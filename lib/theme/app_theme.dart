@@ -32,6 +32,8 @@ class AppTheme {
   static const Color doctorColor = accentGreen;
   static const Color caregiverColor = accentOrange;
   static const Color hospitalColor = accentPurple;
+  static const Color pharmacyColor = accentOrange; // Orange for pharmacy
+  static const Color labColor = accentRed; // Red for lab
 
   /// Get color based on user type
   static Color getUserTypeColor(String? userType) {
@@ -45,6 +47,11 @@ class AppTheme {
       case 'hospital':
       case 'institution':
         return hospitalColor;
+      case 'pharmacy':
+        return pharmacyColor;
+      case 'lab':
+      case 'laboratory':
+        return labColor;
       default:
         return primaryBlue;
     }

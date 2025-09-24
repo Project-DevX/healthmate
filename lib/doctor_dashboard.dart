@@ -11,6 +11,9 @@ import 'screens/prescriptions_screen.dart';
 import 'screens/lab_reports_screen.dart';
 import 'screens/doctor_availability_screen.dart';
 import 'screens/doctor_profile_edit_screen.dart';
+import 'widgets/patient_medical_history_widget.dart';
+import 'screens/doctor_notification_settings_screen.dart';
+import 'screens/doctor_privacy_security_screen.dart';
 
 class DoctorDashboard extends StatefulWidget {
   const DoctorDashboard({super.key});
@@ -23,18 +26,16 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-
   Map<String, dynamic>? userData;
   bool _isLoading = true;
   int _selectedIndex = 0;
 
-  
   // Statistics data
   int totalAppointments = 0;
   int todayAppointments = 0;
   int pendingLabReports = 0;
   int totalPatients = 0;
-  
+
   // Today's appointments
   List<Map<String, dynamic>> todaysAppointmentsList = [];
 
@@ -47,17 +48,12 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       DeviceOrientation.portraitDown,
     ]);
   }
-  
 
-  
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildOldUI(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
         body: Center(
-          child: CircularProgressIndicator(
-            color: AppTheme.doctorColor,
-          ),
+          child: CircularProgressIndicator(color: AppTheme.doctorColor),
         ),
       );
     }
@@ -96,21 +92,15 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
         doctorId: userData!['uid'],
         doctorName: UserDataUtils.getDisplayName(userData),
       ),
-      PrescriptionsScreen(
-        doctorId: userData!['uid'],
-      ),
-      LabReportsScreen(
-        doctorId: userData!['uid'],
-      ),
+      PrescriptionsScreen(doctorId: userData!['uid']),
+      LabReportsScreen(doctorId: userData!['uid']),
     ];
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
           _getAppBarTitle(),
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppTheme.doctorColor,
         foregroundColor: Colors.white,
@@ -134,10 +124,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
         ],
       ),
       drawer: _buildDrawer(),
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: screens,
-      ),
+      body: IndexedStack(index: _selectedIndex, children: screens),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {
@@ -178,7 +165,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       ),
     );
   }
-  
+
   String _getAppBarTitle() {
     switch (_selectedIndex) {
       case 0:
@@ -199,9 +186,10 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
   Widget _buildDrawer() {
     final name = UserDataUtils.getDisplayName(userData);
     final email = UserDataUtils.getEmail(userData);
-    final specialty = userData?['specialty'] as String? ?? 'General Practitioner';
+    final specialty =
+        userData?['specialty'] as String? ?? 'General Practitioner';
     final profileImage = userData?['profileImageUrl'];
-    
+
     return Drawer(
       child: Column(
         children: [
@@ -218,10 +206,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
             accountEmail: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  email,
-                  style: const TextStyle(color: Colors.white),
-                ),
+                Text(email, style: const TextStyle(color: Colors.white)),
                 const SizedBox(height: 4),
                 Text(
                   specialty,
@@ -306,13 +291,13 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                   onTap: () {
                     Navigator.pop(context);
                     Navigator.push(
-                      context, 
+                      context,
                       MaterialPageRoute(
                         builder: (context) => DoctorAvailabilityScreen(
                           doctorId: userData!['uid'],
                           doctorName: UserDataUtils.getDisplayName(userData),
-                        )
-                      )
+                        ),
+                      ),
                     );
                   },
                 ),
@@ -324,10 +309,8 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => DoctorProfileEditScreen(
-                          doctorId: userData!['uid'],
-                          userData: userData!,
-                        ),
+                        builder: (context) =>
+                            DoctorProfileEditScreen(userData: userData!),
                       ),
                     );
                   },
@@ -367,10 +350,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                 Expanded(
                   child: Text(
                     'HealthMate v1.0.0',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                 ),
               ],
@@ -431,7 +411,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
   Widget _buildWelcomeCard() {
     final name = UserDataUtils.getDisplayName(userData);
     final greeting = _getGreeting();
-    
+
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -449,7 +429,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                   ? Text(
                       UserDataUtils.getInitials(userData),
                       style: TextStyle(
-                        fontSize: 24, 
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
                         color: AppTheme.doctorColor,
                       ),
@@ -477,10 +457,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                   ),
                   Text(
                     DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                   ),
                 ],
               ),
@@ -538,7 +515,12 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
     );
   }
 
-  Widget _buildStatCard(String title, String count, IconData icon, Color color) {
+  Widget _buildStatCard(
+    String title,
+    String count,
+    IconData icon,
+    Color color,
+  ) {
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -560,10 +542,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
             const SizedBox(height: 4),
             Text(
               title,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
               textAlign: TextAlign.center,
             ),
           ],
@@ -586,10 +565,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
               children: [
                 const Text(
                   'Today\'s Appointments',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 TextButton(
                   onPressed: () {
@@ -634,12 +610,12 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       'cancelled': Colors.red,
       'no_show': Colors.orange,
     };
-    
+
     final color = statusColors[appointment['status']] ?? Colors.grey;
     final time = appointment['timeSlot'];
     final timestamp = appointment['appointmentDate'] as Timestamp;
     final date = timestamp.toDate();
-    
+
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
@@ -667,7 +643,9 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
         // Navigate to appointment details
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Appointment details for ${appointment['patientName']}'),
+            content: Text(
+              'Appointment details for ${appointment['patientName']}',
+            ),
             action: SnackBarAction(
               label: 'VIEW',
               onPressed: () {
@@ -691,10 +669,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
           children: [
             const Text(
               'Quick Actions',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             Row(
@@ -788,10 +763,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
           children: [
             const Text(
               'Recent Activities',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             _buildActivityItem(
@@ -869,20 +841,14 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                 ),
                 Text(
                   description,
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 13,
-                  ),
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                 ),
               ],
             ),
           ),
           Text(
             time,
-            style: TextStyle(
-              color: Colors.grey.shade500,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
           ),
         ],
       ),
@@ -893,10 +859,15 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
     try {
       setState(() => _isLoading = true);
       final user = _auth.currentUser;
-      print('🔍 Doctor Dashboard - Current user: ${user?.uid}, Email: ${user?.email}');
+      print(
+        '🔍 Doctor Dashboard - Current user: ${user?.uid}, Email: ${user?.email}',
+      );
 
       if (user != null) {
-        final userDoc = await _firestore.collection('users').doc(user.uid).get();
+        final userDoc = await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .get();
         print('🔍 Doctor Dashboard - User document exists: ${userDoc.exists}');
 
         if (userDoc.exists) {
@@ -914,7 +885,6 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
           // Load statistics data after user data is loaded
           _loadStatistics(user.uid);
           _loadTodaysAppointments(user.uid);
-
         } else {
           print(
             '❌ Doctor Dashboard - User document does not exist in Firestore',
@@ -948,28 +918,31 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
           .collection('appointments')
           .where('doctorId', isEqualTo: doctorId)
           .get();
-      
+
       // Get today's appointments count
       final todayAppointmentsQuery = await _firestore
           .collection('appointments')
           .where('doctorId', isEqualTo: doctorId)
-          .where('appointmentDate', isGreaterThanOrEqualTo: Timestamp.fromDate(today))
+          .where(
+            'appointmentDate',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(today),
+          )
           .where('appointmentDate', isLessThan: Timestamp.fromDate(tomorrow))
           .get();
-      
+
       // Get pending lab reports count
       final pendingLabsQuery = await _firestore
           .collection('labReports')
           .where('doctorId', isEqualTo: doctorId)
           .where('status', whereIn: ['requested', 'in_progress'])
           .get();
-      
+
       // Get unique patients count
       final uniquePatientsQuery = await _firestore
           .collection('appointments')
           .where('doctorId', isEqualTo: doctorId)
           .get();
-      
+
       final Set<String> uniquePatientIds = {};
       for (var doc in uniquePatientsQuery.docs) {
         uniquePatientIds.add(doc['patientId']);
@@ -987,22 +960,25 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       print('❌ Error loading statistics: $e');
     }
   }
-  
+
   Future<void> _loadTodaysAppointments(String doctorId) async {
     try {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
       final tomorrow = today.add(const Duration(days: 1));
-      
+
       final todayAppointmentsSnapshot = await _firestore
           .collection('appointments')
           .where('doctorId', isEqualTo: doctorId)
-          .where('appointmentDate', isGreaterThanOrEqualTo: Timestamp.fromDate(today))
+          .where(
+            'appointmentDate',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(today),
+          )
           .where('appointmentDate', isLessThan: Timestamp.fromDate(tomorrow))
           .orderBy('appointmentDate')
           .limit(5)
           .get();
-      
+
       final appointments = todayAppointmentsSnapshot.docs.map((doc) {
         final data = doc.data();
         return {
@@ -1014,7 +990,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
           'reason': data['reason'] ?? 'Check-up',
         };
       }).toList();
-      
+
       if (mounted) {
         setState(() {
           todaysAppointmentsList = appointments;
@@ -1029,13 +1005,17 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
     try {
       await FirebaseAuth.instance.signOut();
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/login', (route) => false);
       }
     } catch (e) {
       print('❌ Error signing out: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to sign out. Please try again.')),
+          const SnackBar(
+            content: Text('Failed to sign out. Please try again.'),
+          ),
         );
       }
     }
@@ -1465,8 +1445,6 @@ class DoctorDashboardContent extends StatelessWidget {
       ),
     );
   }
-
-
 
   Widget _buildQuickActions(BuildContext context, String? doctorId) {
     return Column(

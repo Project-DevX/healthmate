@@ -7,6 +7,7 @@ import '../services/interconnect_service.dart';
 import '../services/medical_records_service.dart';
 import '../services/enhanced_firebase_service.dart';
 import '../models/shared_models.dart';
+import '../theme/app_theme.dart';
 
 class CaregiverDashboard extends StatefulWidget {
   const CaregiverDashboard({Key? key}) : super(key: key);
@@ -123,7 +124,7 @@ class _CaregiverDashboardState extends State<CaregiverDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final Color mainBlue = const Color(0xFF2196F3);
+    final Color mainBlue = AppTheme.caregiverColor;
     final Color successGreen = const Color(0xFF4CAF50);
     final Color cardBg = isDarkMode
         ? const Color(0xFF232A34)

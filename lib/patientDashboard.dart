@@ -1,20 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
-import 'services/auth_service.dart';
-import 'services/document_service.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/foundation.dart';
+import 'theme/app_theme.dart';
+import 'models/shared_models.dart';
+import 'services/trend_analysis_service.dart';
 import 'services/gemini_service.dart';
 import 'services/interconnect_service.dart';
-import 'models/shared_models.dart';
-import 'widgets/doctor_booking_widget.dart';
 import 'screens/medical_records_screen.dart';
+import 'screens/emergency_contacts_screen.dart';
+import 'screens/trend_analysis_screen.dart';
+import 'screens/health_vitals_screen.dart';
 import 'screens/medical_summary_screen.dart';
 import 'screens/lab_report_content_screen.dart';
-import 'screens/trend_analysis_screen.dart';
-import 'services/trend_analysis_service.dart';
+import 'screens/privacy_settings_screen.dart';
+import 'screens/notifications_settings_screen.dart';
+import 'screens/patient_profile_edit_screen.dart';
 import 'widgets/trend_test_data_widget.dart';
+import 'widgets/doctor_booking_widget.dart';
+import 'screens/chat_page.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -75,6 +81,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
     DashboardContent(userData: userData, onNavigateToTrends: _navigateToTrends),
     AppointmentsContent(userData: userData),
     MedicalRecordsScreen(userId: userData?['uid'] ?? ''),
+    ChatPage(),
     UserProfileContent(
       displayName: _getDisplayName(),
       email: _getEmail(),
@@ -82,6 +89,8 @@ class _PatientDashboardState extends State<PatientDashboard> {
       dateOfBirth: _getDateOfBirth(),
       phoneNumber: _getPhoneNumber(),
       gender: _getGender(),
+      userData: userData,
+      onProfileUpdated: _loadUserData,
     ),
   ];
 
@@ -108,9 +117,27 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 Icons.local_hospital,
                 'Call Emergency Services',
                 Colors.red,
-                () {
+                () async {
                   Navigator.pop(context);
-                  // Add emergency call functionality
+                  const emergencyNumber = '911'; // US emergency number
+                  final Uri launchUri = Uri(
+                    scheme: 'tel',
+                    path: emergencyNumber,
+                  );
+                  if (await canLaunchUrl(launchUri)) {
+                    await launchUrl(launchUri);
+                  } else {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Unable to make emergency call. Please call 911 manually.',
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
                 },
               ),
               _buildEmergencyOption(
@@ -118,19 +145,79 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 Icons.phone,
                 'Call Emergency Contact',
                 Colors.orange,
-                () {
+                () async {
                   Navigator.pop(context);
-                  // Add emergency contact functionality
+                  final emergencyContactPhone =
+                      userData?['emergencyContactPhone'];
+                  if (emergencyContactPhone != null &&
+                      emergencyContactPhone.isNotEmpty) {
+                    final Uri launchUri = Uri(
+                      scheme: 'tel',
+                      path: emergencyContactPhone,
+                    );
+                    if (await canLaunchUrl(launchUri)) {
+                      await launchUrl(launchUri);
+                    } else {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Unable to call emergency contact.'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  } else {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'No emergency contact phone number set. Please update your profile.',
+                          ),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                    }
+                  }
                 },
               ),
               _buildEmergencyOption(
                 context,
                 Icons.location_on,
                 'Share Location',
-                Colors.blue,
-                () {
+                AppTheme.patientColor,
+                () async {
                   Navigator.pop(context);
-                  // Add location sharing functionality
+                  // For now, open Google Maps with a generic location sharing message
+                  // In a real app, you'd get the actual GPS coordinates
+                  final Uri launchUri = Uri.parse(
+                    'https://maps.google.com/?q=current+location',
+                  );
+                  if (await canLaunchUrl(launchUri)) {
+                    await launchUrl(launchUri);
+                  } else {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Unable to open maps. Please share your location manually.',
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                  // Show a message about location sharing
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text(
+                          'Location sharing initiated. Help is on the way.',
+                        ),
+                        backgroundColor: AppTheme.patientColor,
+                      ),
+                    );
+                  }
                 },
               ),
               _buildEmergencyOption(
@@ -140,7 +227,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 Colors.green,
                 () {
                   Navigator.pop(context);
-                  // Add emergency contacts functionality
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const EmergencyContactsScreen(),
+                    ),
+                  );
                 },
               ),
             ],
@@ -245,7 +337,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('HealthMate'),
-        backgroundColor: Colors.blue,
+        backgroundColor: AppTheme.patientColor,
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -269,7 +361,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
         type: BottomNavigationBarType.fixed,
-        selectedItemColor: Colors.blue,
+        selectedItemColor: AppTheme.patientColor,
         unselectedItemColor: Colors.grey,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
@@ -281,6 +373,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
             icon: Icon(Icons.medical_services),
             label: 'Records',
           ),
+          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
@@ -301,7 +394,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
   }
 }
 
-class DashboardContent extends StatelessWidget {
+class DashboardContent extends StatefulWidget {
   final Map<String, dynamic>? userData;
   final VoidCallback? onNavigateToTrends;
 
@@ -312,122 +405,356 @@ class DashboardContent extends StatelessWidget {
   });
 
   @override
+  State<DashboardContent> createState() => _DashboardContentState();
+}
+
+class _DashboardContentState extends State<DashboardContent> {
+  Map<String, dynamic>? _latestVitals;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLatestVitals();
+  }
+
+  Future<void> _loadLatestVitals() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final vitalsQuery = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('health_vitals')
+          .orderBy('date', descending: true)
+          .limit(1)
+          .get();
+
+      if (vitalsQuery.docs.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _latestVitals = vitalsQuery.docs.first.data();
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading vitals: $e');
+    }
+  }
+
+  void _navigateToHealthVitals() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const HealthVitalsScreen()),
+    ).then((result) {
+      if (result == true) {
+        _loadLatestVitals(); // Refresh data after saving
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final greeting = _getGreeting();
-    final userName = userData?['name'] ?? 'User';
+    final userName = widget.userData?['name'] ?? 'User';
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // User greeting card
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$greeting, $userName!',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 800;
+        final isTablet =
+            constraints.maxWidth >= 600 && constraints.maxWidth < 800;
+
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(isDesktop ? 24 : 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // User greeting card
+              Card(
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$greeting, $userName!',
+                        style: TextStyle(
+                          fontSize: isDesktop ? 28 : 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'How are you feeling today?',
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Test Data Widget (only in debug mode)
+              if (kDebugMode) const TrendTestDataWidget(),
+
+              const SizedBox(height: 16),
+
+              // For desktop: Two-column layout for main cards
+              if (isDesktop) ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        children: [
+                          // Medical Summary Card
+                          _buildMedicalSummaryCard(
+                            context,
+                            widget.userData?['uid'],
+                          ),
+                          const SizedBox(height: 16),
+                          // Trend Analysis Card
+                          _buildTrendAnalysisCard(),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'How are you feeling today?',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Test Data Widget (only in debug mode)
-          if (kDebugMode) const TrendTestDataWidget(),
-
-          const SizedBox(height: 16),
-
-          // Medical Summary Card
-          _buildMedicalSummaryCard(context, userData?['uid']),
-
-          const SizedBox(height: 16),
-
-          // Trend Analysis Card
-          _buildTrendAnalysisCard(),
-
-          const SizedBox(height: 16),
-
-          // Trend Notifications
-          _buildTrendNotifications(),
-
-          const SizedBox(height: 16),
-
-          // Quick Access Buttons
-          _buildQuickAccessButtons(context, userData?['uid']),
-
-          const SizedBox(height: 24),
-
-          // Health Stats Section
-          const Text(
-            'Health Overview',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildHealthStatCard(
-                  'Heart Rate',
-                  '72 bpm',
-                  Icons.favorite,
-                  Colors.red,
+                    const SizedBox(width: 24),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          // Trend Notifications
+                          _buildTrendNotifications(),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
+              ] else ...[
+                // Mobile/Tablet: Single column layout
+                // Medical Summary Card
+                _buildMedicalSummaryCard(context, widget.userData?['uid']),
+
+                const SizedBox(height: 16),
+
+                // Trend Analysis Card
+                _buildTrendAnalysisCard(),
+
+                const SizedBox(height: 16),
+
+                // Trend Notifications
+                _buildTrendNotifications(),
+              ],
+
+              const SizedBox(height: 16),
+
+              // Quick Access Buttons - Responsive grid
+              _buildQuickAccessButtons(
+                context,
+                widget.userData?['uid'],
+                isDesktop,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildHealthStatCard(
-                  'Blood Pressure',
-                  '120/80',
-                  Icons.bloodtype,
-                  Colors.blue,
+
+              const SizedBox(height: 24),
+
+              // Health Stats Section
+              const Text(
+                'Health Overview',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Health Stats Grid - Responsive
+              if (isDesktop) ...[
+                // Desktop: 4 cards in a row
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildHealthStatCard(
+                        'Heart Rate',
+                        _latestVitals?['heartRate'] != null
+                            ? '${_latestVitals!['heartRate']} bpm'
+                            : 'Not recorded',
+                        Icons.favorite,
+                        Colors.red,
+                        _navigateToHealthVitals,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildHealthStatCard(
+                        'Blood Pressure',
+                        _latestVitals?['bloodPressureSystolic'] != null &&
+                                _latestVitals?['bloodPressureDiastolic'] != null
+                            ? '${_latestVitals!['bloodPressureSystolic']}/${_latestVitals!['bloodPressureDiastolic']}'
+                            : 'Not recorded',
+                        Icons.bloodtype,
+                        AppTheme.patientColor,
+                        _navigateToHealthVitals,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildHealthStatCard(
+                        'Weight',
+                        _latestVitals?['weight'] != null
+                            ? '${_latestVitals!['weight']} kg'
+                            : 'Not recorded',
+                        Icons.monitor_weight,
+                        Colors.green,
+                        _navigateToHealthVitals,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildHealthStatCard(
+                        'Temperature',
+                        _latestVitals?['temperature'] != null
+                            ? '${_latestVitals!['temperature']}°F'
+                            : 'Not recorded',
+                        Icons.thermostat,
+                        Colors.orange,
+                        _navigateToHealthVitals,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
+              ] else if (isTablet) ...[
+                // Tablet: 2 cards per row
+                Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildHealthStatCard(
+                            'Heart Rate',
+                            _latestVitals?['heartRate'] != null
+                                ? '${_latestVitals!['heartRate']} bpm'
+                                : 'Not recorded',
+                            Icons.favorite,
+                            Colors.red,
+                            _navigateToHealthVitals,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildHealthStatCard(
+                            'Blood Pressure',
+                            _latestVitals?['bloodPressureSystolic'] != null &&
+                                    _latestVitals?['bloodPressureDiastolic'] !=
+                                        null
+                                ? '${_latestVitals!['bloodPressureSystolic']}/${_latestVitals!['bloodPressureDiastolic']}'
+                                : 'Not recorded',
+                            Icons.bloodtype,
+                            AppTheme.patientColor,
+                            _navigateToHealthVitals,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildHealthStatCard(
+                            'Weight',
+                            _latestVitals?['weight'] != null
+                                ? '${_latestVitals!['weight']} kg'
+                                : 'Not recorded',
+                            Icons.monitor_weight,
+                            Colors.green,
+                            _navigateToHealthVitals,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildHealthStatCard(
+                            'Temperature',
+                            _latestVitals?['temperature'] != null
+                                ? '${_latestVitals!['temperature']}°F'
+                                : 'Not recorded',
+                            Icons.thermostat,
+                            Colors.orange,
+                            _navigateToHealthVitals,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ] else ...[
+                // Mobile: 2 cards per row (existing layout)
+                Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildHealthStatCard(
+                            'Heart Rate',
+                            _latestVitals?['heartRate'] != null
+                                ? '${_latestVitals!['heartRate']} bpm'
+                                : 'Not recorded',
+                            Icons.favorite,
+                            Colors.red,
+                            _navigateToHealthVitals,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildHealthStatCard(
+                            'Blood Pressure',
+                            _latestVitals?['bloodPressureSystolic'] != null &&
+                                    _latestVitals?['bloodPressureDiastolic'] !=
+                                        null
+                                ? '${_latestVitals!['bloodPressureSystolic']}/${_latestVitals!['bloodPressureDiastolic']}'
+                                : 'Not recorded',
+                            Icons.bloodtype,
+                            AppTheme.patientColor,
+                            _navigateToHealthVitals,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildHealthStatCard(
+                            'Weight',
+                            _latestVitals?['weight'] != null
+                                ? '${_latestVitals!['weight']} kg'
+                                : 'Not recorded',
+                            Icons.monitor_weight,
+                            Colors.green,
+                            _navigateToHealthVitals,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildHealthStatCard(
+                            'Temperature',
+                            _latestVitals?['temperature'] != null
+                                ? '${_latestVitals!['temperature']}°F'
+                                : 'Not recorded',
+                            Icons.thermostat,
+                            Colors.orange,
+                            _navigateToHealthVitals,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildHealthStatCard(
-                  'Weight',
-                  '70 kg',
-                  Icons.monitor_weight,
-                  Colors.green,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildHealthStatCard(
-                  'Temperature',
-                  '98.6°F',
-                  Icons.thermostat,
-                  Colors.orange,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -501,7 +828,11 @@ class DashboardContent extends StatelessWidget {
     );
   }
 
-  Widget _buildQuickAccessButtons(BuildContext context, String? userId) {
+  Widget _buildQuickAccessButtons(
+    BuildContext context,
+    String? userId,
+    bool isDesktop,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -510,156 +841,335 @@ class DashboardContent extends StatelessWidget {
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildQuickAccessButton(
-                context,
-                Icons.folder_shared,
-                'Medical Records',
-                Colors.blue,
-                () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          MedicalRecordsScreen(userId: userId ?? ''),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildQuickAccessButton(
-                context,
-                Icons.auto_awesome,
-                'AI Summary',
-                Colors.purple,
-                () async {
-                  if (userId != null) {
-                    // Show loading indicator
-                    showDialog(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (context) =>
-                          const Center(child: CircularProgressIndicator()),
+        if (isDesktop) ...[
+          // Desktop: 4 buttons in 2 rows of 2
+          Row(
+            children: [
+              Expanded(
+                child: _buildQuickAccessButton(
+                  context,
+                  Icons.folder_shared,
+                  'Medical Records',
+                  AppTheme.patientColor,
+                  () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            MedicalRecordsScreen(userId: userId ?? ''),
+                      ),
                     );
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildQuickAccessButton(
+                  context,
+                  Icons.auto_awesome,
+                  'AI Summary',
+                  Colors.purple,
+                  () async {
+                    if (userId != null) {
+                      // Show loading indicator
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) =>
+                            const Center(child: CircularProgressIndicator()),
+                      );
 
-                    try {
-                      // Import and create GeminiService
-                      final GeminiService geminiService = GeminiService();
+                      try {
+                        // Import and create GeminiService
+                        final GeminiService geminiService = GeminiService();
 
-                      // Check if there are new documents that need analysis
-                      final statusData = await geminiService
-                          .checkAnalysisStatus();
+                        // Check if there are new documents that need analysis
+                        final statusData = await geminiService
+                            .checkAnalysisStatus();
 
-                      // Close loading dialog
-                      Navigator.of(context).pop();
+                        // Close loading dialog
+                        Navigator.of(context).pop();
 
-                      if (statusData['needsAnalysis']) {
-                        // There are new documents - trigger analysis before showing summary
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => MedicalSummaryScreen(
-                              userId: userId,
-                              autoTriggerAnalysis: true,
+                        if (statusData['needsAnalysis']) {
+                          // There are new documents - trigger analysis before showing summary
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => MedicalSummaryScreen(
+                                userId: userId,
+                                autoTriggerAnalysis: true,
+                              ),
                             ),
-                          ),
-                        );
-                      } else {
-                        // No new documents - just show the summary
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                MedicalSummaryScreen(userId: userId),
+                          );
+                        } else {
+                          // No new documents - just show the summary
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  MedicalSummaryScreen(userId: userId),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        // Close loading dialog if still open
+                        Navigator.of(context).pop();
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error checking analysis status: $e'),
+                            backgroundColor: Colors.red,
                           ),
                         );
                       }
-                    } catch (e) {
-                      // Close loading dialog if still open
-                      Navigator.of(context).pop();
-
+                    } else {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Error checking analysis status: $e'),
-                          backgroundColor: Colors.red,
+                        const SnackBar(
+                          content: Text(
+                            'Please log in to view medical summary',
+                          ),
                         ),
                       );
                     }
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please log in to view medical summary'),
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildQuickAccessButton(
+                  context,
+                  Icons.medication,
+                  'Medications',
+                  Colors.orange,
+                  () {
+                    // Navigate to appointments screen with prescriptions tab
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AppointmentsContent(
+                          userData: {'uid': userId},
+                          initialTab: 2, // Prescriptions tab
+                        ),
                       ),
                     );
-                  }
-                },
+                  },
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildQuickAccessButton(
-                context,
-                Icons.medication,
-                'Medications',
-                Colors.orange,
-                () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Medications feature coming soon'),
-                    ),
-                  );
-                },
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildQuickAccessButton(
+                  context,
+                  Icons.calendar_month,
+                  'Appointments',
+                  Colors.green,
+                  () {
+                    // Navigate to appointments screen with appointments tab
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AppointmentsContent(
+                          userData: {'uid': userId},
+                          initialTab: 0, // Appointments tab
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildQuickAccessButton(
-                context,
-                Icons.calendar_month,
-                'Appointments',
-                Colors.green,
-                () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Appointments feature coming soon'),
-                    ),
-                  );
-                },
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildQuickAccessButton(
+                  context,
+                  Icons.science,
+                  'Lab Reports',
+                  Colors.teal,
+                  () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LabReportContentScreen(),
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _buildQuickAccessButton(
-                context,
-                Icons.science,
-                'Lab Reports',
-                Colors.teal,
-                () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const LabReportContentScreen(),
-                    ),
-                  );
-                },
+              const SizedBox(width: 12),
+              const Expanded(
+                child: SizedBox(),
+              ), // Empty space to balance the row
+            ],
+          ),
+        ] else ...[
+          // Mobile/Tablet: Original layout with 3 rows
+          Row(
+            children: [
+              Expanded(
+                child: _buildQuickAccessButton(
+                  context,
+                  Icons.folder_shared,
+                  'Medical Records',
+                  AppTheme.patientColor,
+                  () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            MedicalRecordsScreen(userId: userId ?? ''),
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(child: SizedBox()), // Empty space to balance the row
-          ],
-        ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildQuickAccessButton(
+                  context,
+                  Icons.auto_awesome,
+                  'AI Summary',
+                  Colors.purple,
+                  () async {
+                    if (userId != null) {
+                      // Show loading indicator
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) =>
+                            const Center(child: CircularProgressIndicator()),
+                      );
+
+                      try {
+                        // Import and create GeminiService
+                        final GeminiService geminiService = GeminiService();
+
+                        // Check if there are new documents that need analysis
+                        final statusData = await geminiService
+                            .checkAnalysisStatus();
+
+                        // Close loading dialog
+                        Navigator.of(context).pop();
+
+                        if (statusData['needsAnalysis']) {
+                          // There are new documents - trigger analysis before showing summary
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => MedicalSummaryScreen(
+                                userId: userId,
+                                autoTriggerAnalysis: true,
+                              ),
+                            ),
+                          );
+                        } else {
+                          // No new documents - just show the summary
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  MedicalSummaryScreen(userId: userId),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        // Close loading dialog if still open
+                        Navigator.of(context).pop();
+
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error checking analysis status: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Please log in to view medical summary',
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildQuickAccessButton(
+                  context,
+                  Icons.medication,
+                  'Medications',
+                  Colors.orange,
+                  () {
+                    // Navigate to appointments screen with prescriptions tab
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AppointmentsContent(
+                          userData: {'uid': userId},
+                          initialTab: 2, // Prescriptions tab
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildQuickAccessButton(
+                  context,
+                  Icons.calendar_month,
+                  'Appointments',
+                  Colors.green,
+                  () {
+                    // Navigate to appointments screen with appointments tab
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => AppointmentsContent(
+                          userData: {'uid': userId},
+                          initialTab: 0, // Appointments tab
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildQuickAccessButton(
+                  context,
+                  Icons.science,
+                  'Lab Reports',
+                  Colors.teal,
+                  () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const LabReportContentScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: SizedBox(),
+              ), // Empty space to balance the row
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -704,37 +1214,47 @@ class DashboardContent extends StatelessWidget {
     String title,
     String value,
     IconData icon,
-    Color color,
-  ) {
-    return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: color, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
+    Color color, [
+    VoidCallback? onTap,
+  ]) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Card(
+        elevation: 1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, color: color, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
+                  if (onTap != null)
+                    Icon(Icons.edit, size: 16, color: Colors.grey.shade400),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -756,7 +1276,7 @@ class DashboardContent extends StatelessWidget {
       elevation: 3,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: InkWell(
-        onTap: onNavigateToTrends,
+        onTap: widget.onNavigateToTrends,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -765,12 +1285,12 @@ class DashboardContent extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.blue[100],
+                  color: AppTheme.patientColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   Icons.trending_up,
-                  color: Colors.blue[700],
+                  color: AppTheme.patientColor,
                   size: 24,
                 ),
               ),
@@ -819,14 +1339,14 @@ class DashboardContent extends StatelessWidget {
         }
 
         return Card(
-          color: Colors.blue[50],
+          color: AppTheme.patientColor.withOpacity(0.05),
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: ListTile(
-            leading: Icon(Icons.notifications, color: Colors.blue[700]),
+            leading: Icon(Icons.notifications, color: AppTheme.patientColor),
             title: const Text('New Health Trends Available'),
             subtitle: Text('${unreadNotifications.length} new analysis'),
             trailing: const Icon(Icons.arrow_forward_ios),
-            onTap: onNavigateToTrends,
+            onTap: widget.onNavigateToTrends,
           ),
         );
       },
@@ -841,6 +1361,8 @@ class UserProfileContent extends StatelessWidget {
   final String dateOfBirth;
   final String phoneNumber;
   final String gender;
+  final Map<String, dynamic>? userData;
+  final VoidCallback? onProfileUpdated;
 
   const UserProfileContent({
     super.key,
@@ -850,6 +1372,8 @@ class UserProfileContent extends StatelessWidget {
     required this.dateOfBirth,
     required this.phoneNumber,
     required this.gender,
+    this.userData,
+    this.onProfileUpdated,
   });
 
   @override
@@ -916,18 +1440,27 @@ class UserProfileContent extends StatelessWidget {
           const SizedBox(height: 16),
 
           _buildSettingsOption(context, 'Edit Profile', Icons.edit, () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Edit profile feature coming soon')),
-            );
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) =>
+                    PatientProfileEditScreen(userData: userData ?? {}),
+              ),
+            ).then((updated) {
+              if (updated == true && onProfileUpdated != null) {
+                onProfileUpdated!();
+              }
+            });
           }),
           _buildSettingsOption(
             context,
             'Privacy Settings',
             Icons.privacy_tip,
             () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Privacy settings feature coming soon'),
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PrivacySettingsScreen(),
                 ),
               );
             },
@@ -937,9 +1470,10 @@ class UserProfileContent extends StatelessWidget {
             'Notifications',
             Icons.notifications,
             () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Notification settings feature coming soon'),
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const NotificationsSettingsScreen(),
                 ),
               );
             },
@@ -954,7 +1488,7 @@ class UserProfileContent extends StatelessWidget {
       elevation: 1,
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        leading: Icon(icon, color: Colors.blue),
+        leading: Icon(icon, color: AppTheme.patientColor),
         title: Text(title),
         subtitle: Text(value),
       ),
@@ -971,7 +1505,7 @@ class UserProfileContent extends StatelessWidget {
       elevation: 1,
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        leading: Icon(icon, color: Colors.blue),
+        leading: Icon(icon, color: AppTheme.patientColor),
         title: Text(title),
         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
         onTap: onTap,
@@ -983,8 +1517,13 @@ class UserProfileContent extends StatelessWidget {
 // New Appointments Content Widget
 class AppointmentsContent extends StatefulWidget {
   final Map<String, dynamic>? userData;
+  final int initialTab;
 
-  const AppointmentsContent({Key? key, this.userData}) : super(key: key);
+  const AppointmentsContent({
+    Key? key,
+    this.userData,
+    this.initialTab = 0, // Default to appointments tab
+  }) : super(key: key);
 
   @override
   State<AppointmentsContent> createState() => _AppointmentsContentState();
@@ -1000,6 +1539,7 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
   @override
   void initState() {
     super.initState();
+    _selectedTab = widget.initialTab; // Set initial tab
     _loadData();
   }
 
@@ -1008,11 +1548,20 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
 
     try {
       final userId = widget.userData!['uid'];
-      
+
       // Load all interconnected data
-      final appointments = await InterconnectService.getUserAppointments(userId, 'patient');
-      final labReports = await InterconnectService.getUserLabReports(userId, 'patient');
-      final prescriptions = await InterconnectService.getUserPrescriptions(userId, 'patient');
+      final appointments = await InterconnectService.getUserAppointments(
+        userId,
+        'patient',
+      );
+      final labReports = await InterconnectService.getUserLabReports(
+        userId,
+        'patient',
+      );
+      final prescriptions = await InterconnectService.getUserPrescriptions(
+        userId,
+        'patient',
+      );
 
       if (mounted) {
         setState(() {
@@ -1025,9 +1574,9 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load data: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load data: $e')));
       }
     }
   }
@@ -1070,7 +1619,7 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
             ],
           ),
         ),
-        
+
         // Tab Navigation
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -1080,7 +1629,9 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
                 child: TextButton(
                   onPressed: () => setState(() => _selectedTab = 0),
                   style: TextButton.styleFrom(
-                    backgroundColor: _selectedTab == 0 ? Theme.of(context).primaryColor : null,
+                    backgroundColor: _selectedTab == 0
+                        ? Theme.of(context).primaryColor
+                        : null,
                     foregroundColor: _selectedTab == 0 ? Colors.white : null,
                   ),
                   child: const Text('Appointments'),
@@ -1091,7 +1642,9 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
                 child: TextButton(
                   onPressed: () => setState(() => _selectedTab = 1),
                   style: TextButton.styleFrom(
-                    backgroundColor: _selectedTab == 1 ? Theme.of(context).primaryColor : null,
+                    backgroundColor: _selectedTab == 1
+                        ? Theme.of(context).primaryColor
+                        : null,
                     foregroundColor: _selectedTab == 1 ? Colors.white : null,
                   ),
                   child: const Text('Lab Reports'),
@@ -1102,7 +1655,9 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
                 child: TextButton(
                   onPressed: () => setState(() => _selectedTab = 2),
                   style: TextButton.styleFrom(
-                    backgroundColor: _selectedTab == 2 ? Theme.of(context).primaryColor : null,
+                    backgroundColor: _selectedTab == 2
+                        ? Theme.of(context).primaryColor
+                        : null,
                     foregroundColor: _selectedTab == 2 ? Colors.white : null,
                   ),
                   child: const Text('Prescriptions'),
@@ -1111,13 +1666,11 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
             ],
           ),
         ),
-        
+
         const SizedBox(height: 16),
-        
+
         // Tab Content
-        Expanded(
-          child: _buildTabContent(),
-        ),
+        Expanded(child: _buildTabContent()),
       ],
     );
   }
@@ -1191,7 +1744,9 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              backgroundColor: _getStatusColor(appointment.status).withOpacity(0.2),
+              backgroundColor: _getStatusColor(
+                appointment.status,
+              ).withOpacity(0.2),
               labelStyle: TextStyle(color: _getStatusColor(appointment.status)),
             ),
             onTap: () => _showAppointmentDetails(appointment),
@@ -1226,11 +1781,7 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
           child: ListTile(
             leading: CircleAvatar(
               backgroundColor: _getStatusColor(report.status),
-              child: Icon(
-                Icons.assignment,
-                color: Colors.white,
-                size: 20,
-              ),
+              child: Icon(Icons.assignment, color: Colors.white, size: 20),
             ),
             title: Text(
               report.testName,
@@ -1255,7 +1806,9 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
                     report.status.toUpperCase(),
                     style: const TextStyle(fontSize: 10),
                   ),
-                  backgroundColor: _getStatusColor(report.status).withOpacity(0.2),
+                  backgroundColor: _getStatusColor(
+                    report.status,
+                  ).withOpacity(0.2),
                 ),
                 if (report.status == 'completed' && report.reportUrl != null)
                   const Icon(Icons.download, size: 16),
@@ -1293,11 +1846,7 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
           child: ExpansionTile(
             leading: CircleAvatar(
               backgroundColor: _getStatusColor(prescription.status),
-              child: Icon(
-                Icons.medication,
-                color: Colors.white,
-                size: 20,
-              ),
+              child: Icon(Icons.medication, color: Colors.white, size: 20),
             ),
             title: Text(
               'Prescription from Dr. ${prescription.doctorName}',
@@ -1316,7 +1865,9 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
                     prescription.status.toUpperCase(),
                     style: const TextStyle(fontSize: 10),
                   ),
-                  backgroundColor: _getStatusColor(prescription.status).withOpacity(0.2),
+                  backgroundColor: _getStatusColor(
+                    prescription.status,
+                  ).withOpacity(0.2),
                 ),
               ],
             ),
@@ -1331,25 +1882,29 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
-                    ...prescription.medicines.map((medicine) => Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              medicine.name,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            Text('Dosage: ${medicine.dosage}'),
-                            Text('Frequency: ${medicine.frequency}'),
-                            Text('Duration: ${medicine.duration} days'),
-                            if (medicine.instructions.isNotEmpty)
-                              Text('Instructions: ${medicine.instructions}'),
-                          ],
+                    ...prescription.medicines.map(
+                      (medicine) => Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                medicine.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text('Dosage: ${medicine.dosage}'),
+                              Text('Frequency: ${medicine.frequency}'),
+                              Text('Duration: ${medicine.duration} days'),
+                              if (medicine.instructions.isNotEmpty)
+                                Text('Instructions: ${medicine.instructions}'),
+                            ],
+                          ),
                         ),
                       ),
-                    )),
+                    ),
                     if (prescription.notes != null) ...[
                       const SizedBox(height: 8),
                       Text(
@@ -1372,7 +1927,7 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
       case 'scheduled':
       case 'requested':
       case 'prescribed':
-        return Colors.blue;
+        return AppTheme.patientColor;
       case 'confirmed':
       case 'in_progress':
         return Colors.orange;
@@ -1413,15 +1968,16 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
           children: [
             Text('Specialty: ${appointment.doctorSpecialty}'),
             Text('Hospital: ${appointment.hospitalName}'),
-            Text('Date: ${DateFormat('MMM dd, yyyy').format(appointment.appointmentDate)}'),
+            Text(
+              'Date: ${DateFormat('MMM dd, yyyy').format(appointment.appointmentDate)}',
+            ),
             Text('Time: ${appointment.timeSlot}'),
             Text('Status: ${appointment.status.toUpperCase()}'),
             if (appointment.reason != null)
               Text('Reason: ${appointment.reason}'),
             if (appointment.symptoms != null)
               Text('Symptoms: ${appointment.symptoms}'),
-            if (appointment.notes != null)
-              Text('Notes: ${appointment.notes}'),
+            if (appointment.notes != null) Text('Notes: ${appointment.notes}'),
           ],
         ),
         actions: [
@@ -1446,10 +2002,11 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
             Text('Lab: ${report.labName}'),
             if (report.doctorName != null)
               Text('Requested by: Dr. ${report.doctorName}'),
-            Text('Test Date: ${DateFormat('MMM dd, yyyy').format(report.testDate)}'),
+            Text(
+              'Test Date: ${DateFormat('MMM dd, yyyy').format(report.testDate)}',
+            ),
             Text('Status: ${report.status.toUpperCase()}'),
-            if (report.notes != null)
-              Text('Notes: ${report.notes}'),
+            if (report.notes != null) Text('Notes: ${report.notes}'),
             if (report.status == 'completed' && report.reportUrl != null) ...[
               const SizedBox(height: 16),
               ElevatedButton.icon(

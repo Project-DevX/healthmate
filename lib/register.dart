@@ -68,100 +68,123 @@ class RegisterPage extends StatelessWidget {
         backgroundColor: Colors.teal,
         foregroundColor: Colors.white,
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header
-              const Icon(Icons.app_registration, size: 80, color: Colors.teal),
-              const SizedBox(height: 16),
-              const Text(
-                'Join HealthMate',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Select your role to get started with the right features',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // Determine cross axis count based on screen width
+          int crossAxisCount;
+          if (constraints.maxWidth >= 900) {
+            // Desktop: 3 columns
+            crossAxisCount = 3;
+          } else if (constraints.maxWidth >= 600) {
+            // Tablet: 2 columns
+            crossAxisCount = 2;
+          } else {
+            // Mobile: 1 column for better usability
+            crossAxisCount = 1;
+          }
 
-              // Role Cards in a Grid
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 0.85,
+          return SingleChildScrollView(
+            child: Padding(
+              padding: EdgeInsets.all(
+                constraints.maxWidth >= 600 ? 32.0 : 24.0,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildRoleCard(
-                    context,
-                    'Patient',
-                    Icons.person,
-                    Colors.blue,
-                    'Manage your health records and appointments',
+                  // Header
+                  const Icon(
+                    Icons.app_registration,
+                    size: 80,
+                    color: Colors.teal,
                   ),
-                  _buildRoleCard(
-                    context,
-                    'Doctor',
-                    Icons.medical_services,
-                    Colors.green,
-                    'Provide medical care and manage patients',
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Join HealthMate',
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
                   ),
-                  _buildRoleCard(
-                    context,
-                    'Caregiver',
-                    Icons.favorite,
-                    Colors.pink,
-                    'Care for your loved ones',
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Select your role to get started with the right features',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                    textAlign: TextAlign.center,
                   ),
-                  _buildRoleCard(
-                    context,
-                    'Hospital',
-                    Icons.local_hospital,
-                    Colors.red,
-                    'Register your hospital for healthcare services',
+                  const SizedBox(height: 32),
+
+                  // Role Cards in a Responsive Grid
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: crossAxisCount,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    childAspectRatio: constraints.maxWidth >= 600 ? 0.9 : 0.8,
+                    children: [
+                      _buildRoleCard(
+                        context,
+                        'Patient',
+                        Icons.person,
+                        Colors.blue,
+                        'Manage your health records and appointments',
+                      ),
+                      _buildRoleCard(
+                        context,
+                        'Doctor',
+                        Icons.medical_services,
+                        Colors.green,
+                        'Provide medical care and manage patients',
+                      ),
+                      _buildRoleCard(
+                        context,
+                        'Caregiver',
+                        Icons.favorite,
+                        Colors.pink,
+                        'Care for your loved ones',
+                      ),
+                      _buildRoleCard(
+                        context,
+                        'Hospital',
+                        Icons.local_hospital,
+                        Colors.red,
+                        'Register your hospital for healthcare services',
+                      ),
+                      _buildRoleCard(
+                        context,
+                        'Pharmacy',
+                        Icons.local_pharmacy,
+                        Colors.orange,
+                        'Register your pharmacy for medication services',
+                      ),
+                      _buildRoleCard(
+                        context,
+                        'Laboratory',
+                        Icons.science,
+                        Colors.purple,
+                        'Register your lab for diagnostic services',
+                      ),
+                    ],
                   ),
-                  _buildRoleCard(
-                    context,
-                    'Pharmacy',
-                    Icons.local_pharmacy,
-                    Colors.orange,
-                    'Register your pharmacy for medication services',
-                  ),
-                  _buildRoleCard(
-                    context,
-                    'Laboratory',
-                    Icons.science,
-                    Colors.purple,
-                    'Register your lab for diagnostic services',
+
+                  const SizedBox(height: 32),
+
+                  // Login Link
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('Already have an account?'),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pushReplacementNamed(context, '/login');
+                        },
+                        child: const Text('Login'),
+                      ),
+                    ],
                   ),
                 ],
               ),
-
-              const SizedBox(height: 32),
-
-              // Login Link
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('Already have an account?'),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.pushReplacementNamed(context, '/login');
-                    },
-                    child: const Text('Login'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
