@@ -9,69 +9,69 @@ class PharmacyService {
   // Get current user's pharmacy ID
   String? get currentPharmacyId => _auth.currentUser?.uid;
 
-  /// Get current order number for the pharmacy
-  Future<String> getCurrentOrderNumber() async {
+  /// Get current bill number for the pharmacy
+  Future<String> getCurrentBillNumber() async {
     try {
       final today = DateTime.now();
       final dateKey = DateFormat('yyyy-MM-dd').format(today);
 
-      final orderDoc = await _firestore
-          .collection('pharmacy_orders')
+      final billDoc = await _firestore
+          .collection('pharmacy_bills_counter')
           .doc(currentPharmacyId)
-          .collection('daily_orders')
+          .collection('daily_bills')
           .doc(dateKey)
           .get();
 
-      if (orderDoc.exists) {
-        final data = orderDoc.data()!;
-        return (data['currentOrderNumber'] ?? 1).toString().padLeft(3, '0');
+      if (billDoc.exists) {
+        final data = billDoc.data()!;
+        return (data['currentBillNumber'] ?? 1).toString().padLeft(3, '0');
       } else {
         // Initialize for today
         await _firestore
-            .collection('pharmacy_orders')
+            .collection('pharmacy_bills_counter')
             .doc(currentPharmacyId)
-            .collection('daily_orders')
+            .collection('daily_bills')
             .doc(dateKey)
-            .set({'currentOrderNumber': 1, 'date': today, 'totalOrders': 0});
+            .set({'currentBillNumber': 1, 'date': today, 'totalBills': 0});
         return '001';
       }
     } catch (e) {
-      print('Error getting order number: $e');
+      print('Error getting bill number: $e');
       return '001';
     }
   }
 
-  /// Increment order number
-  Future<void> incrementOrderNumber() async {
+  /// Increment bill number
+  Future<void> incrementBillNumber() async {
     try {
       final today = DateTime.now();
       final dateKey = DateFormat('yyyy-MM-dd').format(today);
 
-      final orderDocRef = _firestore
-          .collection('pharmacy_orders')
+      final billDocRef = _firestore
+          .collection('pharmacy_bills_counter')
           .doc(currentPharmacyId)
-          .collection('daily_orders')
+          .collection('daily_bills')
           .doc(dateKey);
 
       await _firestore.runTransaction((transaction) async {
-        final orderDoc = await transaction.get(orderDocRef);
+        final billDoc = await transaction.get(billDocRef);
 
-        if (orderDoc.exists) {
-          final currentNumber = orderDoc.data()!['currentOrderNumber'] ?? 0;
-          transaction.update(orderDocRef, {
-            'currentOrderNumber': currentNumber + 1,
-            'totalOrders': FieldValue.increment(1),
+        if (billDoc.exists) {
+          final currentNumber = billDoc.data()!['currentBillNumber'] ?? 0;
+          transaction.update(billDocRef, {
+            'currentBillNumber': currentNumber + 1,
+            'totalBills': FieldValue.increment(1),
           });
         } else {
-          transaction.set(orderDocRef, {
-            'currentOrderNumber': 2,
+          transaction.set(billDocRef, {
+            'currentBillNumber': 2,
             'date': today,
-            'totalOrders': 1,
+            'totalBills': 1,
           });
         }
       });
     } catch (e) {
-      print('Error incrementing order number: $e');
+      print('Error incrementing bill number: $e');
     }
   }
 
@@ -199,7 +199,45 @@ class PharmacyService {
         .snapshots();
   }
 
-  /// Update prescription status
+  // Get bills for pharmacy
+  Future<List<PharmacyBill>> getBills() async {
+    try {
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('pharmacy_bills')
+          .where('pharmacyId', isEqualTo: currentPharmacyId)
+          .orderBy('timestamp', descending: true)
+          .get();
+
+      final bills = querySnapshot.docs.map((doc) {
+        final data = doc.data();
+        return PharmacyBill.fromMap(data);
+      }).toList();
+
+      return bills;
+    } catch (e) {
+      print('Error getting bills: $e');
+      return [];
+    }
+  }
+
+  // Get bills stream for real-time updates
+  Stream<List<PharmacyBill>> getBillsStream() {
+    return FirebaseFirestore.instance
+        .collection('pharmacy_bills')
+        .where('pharmacyId', isEqualTo: currentPharmacyId)
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          final bills = snapshot.docs.map((doc) {
+            final data = doc.data();
+            return PharmacyBill.fromMap(data);
+          }).toList();
+
+          return bills;
+        });
+  }
+
+  /// Update prescription status and generate bill if delivered
   Future<void> updatePrescriptionStatus(
     String prescriptionId,
     String status,
@@ -209,8 +247,48 @@ class PharmacyService {
         'status': status,
         'lastUpdated': FieldValue.serverTimestamp(),
       });
+
+      // If status is delivered, automatically generate and save a bill
+      if (status.toLowerCase() == 'delivered') {
+        await _generateBillForDeliveredPrescription(prescriptionId);
+      }
     } catch (e) {
       print('Error updating prescription status: $e');
+    }
+  }
+
+  /// Generate bill for delivered prescription
+  Future<void> _generateBillForDeliveredPrescription(
+    String prescriptionId,
+  ) async {
+    try {
+      // Get the prescription details
+      final prescriptionDoc = await _firestore
+          .collection('prescriptions')
+          .doc(prescriptionId)
+          .get();
+
+      if (!prescriptionDoc.exists) {
+        print('Prescription not found: $prescriptionId');
+        return;
+      }
+
+      // Convert prescription data to PharmacyPrescription object
+      final prescriptionData = prescriptionDoc.data()!;
+      final prescription = PharmacyPrescription.fromFirestore(
+        prescriptionData,
+        prescriptionId,
+      );
+
+      // Generate and save bill
+      final bill = await generateBill(prescription);
+
+      // Increment bill counter
+      await incrementBillNumber();
+
+      print('✅ Bill generated for delivered prescription: ${bill.billNumber}');
+    } catch (e) {
+      print('Error generating bill for delivered prescription: $e');
     }
   }
 
@@ -218,7 +296,12 @@ class PharmacyService {
   Future<PharmacyBill> generateBill(PharmacyPrescription prescription) async {
     try {
       final billId = _firestore.collection('pharmacy_bills').doc().id;
-      final billNumber = 'BILL${DateTime.now().millisecondsSinceEpoch}';
+
+      // Get current bill number for proper sequential numbering
+      final currentBillNumber = await getCurrentBillNumber();
+      final billNumber =
+          'BILL-${DateFormat('yyyyMMdd').format(DateTime.now())}-$currentBillNumber';
+
       final subtotal = prescription.medicines.fold(
         0.0,
         (sum, medicine) =>
@@ -233,24 +316,25 @@ class PharmacyService {
       final billData = {
         'id': billId,
         'billNumber': billNumber,
-        'orderNumber': prescription.orderNumber.toString(),
+        'prescriptionId': prescription.id,
         'pharmacyId': currentPharmacyId,
         'patientName': prescription.patientInfo.name,
         'medicines': prescription.medicines.map((m) => m.toMap()).toList(),
         'patientInfo': prescription.patientInfo.toMap(),
+        'doctorInfo': prescription.doctorInfo.toMap(),
         'subtotal': subtotal,
         'tax': tax,
         'totalAmount': total,
         'billDate': Timestamp.fromDate(now),
         'timestamp': Timestamp.fromDate(now),
-        'status': 'issued',
+        'status': 'paid',
       };
 
       // Save to Firestore with server timestamp
       await _firestore.collection('pharmacy_bills').doc(billId).set({
         ...billData,
-        'billDate': FieldValue.serverTimestamp(),
-        'timestamp': FieldValue.serverTimestamp(),
+        'billDate': Timestamp.fromDate(DateTime.now()),
+        'timestamp': Timestamp.fromDate(DateTime.now()),
       });
 
       return PharmacyBill.fromMap(billData);
@@ -928,11 +1012,12 @@ class Medicine {
 class PharmacyBill {
   final String id;
   final String billNumber;
-  final String orderNumber;
+  final String? prescriptionId;
   final String pharmacyId;
   final String patientName;
   final List<Medicine> medicines;
   final PatientInfo? patientInfo;
+  final DoctorInfo? doctorInfo;
   final double subtotal;
   final double tax;
   final double totalAmount;
@@ -943,11 +1028,12 @@ class PharmacyBill {
   PharmacyBill({
     required this.id,
     required this.billNumber,
-    required this.orderNumber,
+    this.prescriptionId,
     required this.pharmacyId,
     required this.patientName,
     required this.medicines,
     this.patientInfo,
+    this.doctorInfo,
     required this.subtotal,
     required this.tax,
     required this.totalAmount,
@@ -960,7 +1046,7 @@ class PharmacyBill {
     return PharmacyBill(
       id: data['id'] ?? '',
       billNumber: data['billNumber'] ?? '',
-      orderNumber: data['orderNumber'] ?? '',
+      prescriptionId: data['prescriptionId'],
       pharmacyId: data['pharmacyId'] ?? '',
       patientName: data['patientName'] ?? '',
       medicines: (data['medicines'] as List<dynamic>? ?? [])
@@ -969,12 +1055,15 @@ class PharmacyBill {
       patientInfo: data['patientInfo'] != null
           ? PatientInfo.fromMap(data['patientInfo'])
           : null,
+      doctorInfo: data['doctorInfo'] != null
+          ? DoctorInfo.fromMap(data['doctorInfo'])
+          : null,
       subtotal: (data['subtotal'] ?? 0.0).toDouble(),
       tax: (data['tax'] ?? 0.0).toDouble(),
       totalAmount: (data['totalAmount'] ?? 0.0).toDouble(),
       billDate: (data['billDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
       timestamp: (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      status: data['status'] ?? 'issued',
+      status: data['status'] ?? 'paid',
     );
   }
 }

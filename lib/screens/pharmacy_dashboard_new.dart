@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../services/pharmacy_service.dart';
 import '../widgets/add_medicine_form.dart';
@@ -57,7 +56,7 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
             icon: Icon(Icons.inventory),
             label: 'Inventory',
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'Orders'),
+          BottomNavigationBarItem(icon: Icon(Icons.receipt), label: 'Bills'),
           BottomNavigationBarItem(
             icon: Icon(Icons.analytics),
             label: 'Analytics',
@@ -75,7 +74,7 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
       case 1:
         return _buildInventoryPage();
       case 2:
-        return _buildOrdersPage();
+        return _buildBillsPage();
       case 3:
         return _buildAnalyticsPage();
       case 4:
@@ -323,43 +322,36 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
     );
   }
 
-  Widget _buildOrdersPage() {
+  Widget _buildBillsPage() {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Order Management',
+            'Bill Management',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('orders')
-                  .where(
-                    'pharmacyId',
-                    isEqualTo: FirebaseAuth.instance.currentUser?.uid,
-                  )
-                  .orderBy('createdAt', descending: true)
-                  .snapshots(),
+            child: StreamBuilder<List<dynamic>>(
+              stream: _pharmacyService.getBillsStream(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final orders = snapshot.data?.docs ?? [];
+                final bills = snapshot.data ?? [];
 
-                if (orders.isEmpty) {
-                  return const Center(child: Text('No orders found'));
+                if (bills.isEmpty) {
+                  return const Center(child: Text('No bills found'));
                 }
 
                 return ListView.builder(
-                  itemCount: orders.length,
+                  itemCount: bills.length,
                   itemBuilder: (context, index) {
-                    final order = orders[index].data() as Map<String, dynamic>;
-                    return _buildOrderCard(order);
+                    final bill = bills[index];
+                    return _buildBillCard(bill);
                   },
                 );
               },
@@ -370,19 +362,123 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
     );
   }
 
-  Widget _buildOrderCard(Map<String, dynamic> order) {
+  Widget _buildBillCard(dynamic bill) {
+    // Handle both PharmacyBill objects and Map representations
+    String billNumber = '';
+    String customerName = '';
+    double totalAmount = 0.0;
+    String doctorName = '';
+    DateTime? timestamp;
+
+    if (bill is Map<String, dynamic>) {
+      billNumber = bill['billNumber'] ?? 'N/A';
+      customerName = bill['patientName'] ?? 'Unknown';
+      totalAmount = (bill['totalAmount'] ?? 0).toDouble();
+      doctorName = bill['doctorName'] ?? 'Unknown';
+      timestamp = bill['timestamp']?.toDate();
+    } else {
+      // Assuming it's a PharmacyBill object
+      billNumber = bill.billNumber ?? 'N/A';
+      customerName = bill.patientInfo?.name ?? 'Unknown';
+      totalAmount = bill.totalAmount ?? 0.0;
+      doctorName = bill.doctorInfo?.name ?? 'Unknown';
+      timestamp = bill.timestamp;
+    }
+
     return Card(
+      margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        title: Text('Order #${order['orderNumber'] ?? 'N/A'}'),
+        title: Text('Bill #$billNumber'),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Customer: ${order['customerName'] ?? 'Unknown'}'),
-            Text('Amount: \$${(order['totalAmount'] ?? 0).toStringAsFixed(2)}'),
-            Text('Status: ${order['status'] ?? 'Unknown'}'),
+            Text('Patient: $customerName'),
+            Text('Doctor: $doctorName'),
+            Text('Amount: \$${totalAmount.toStringAsFixed(2)}'),
+            if (timestamp != null)
+              Text(
+                'Date: ${DateFormat('MMM dd, yyyy - HH:mm').format(timestamp)}',
+              ),
           ],
         ),
-        trailing: _buildStatusChip(order['status'] ?? 'unknown'),
+        trailing: const Icon(Icons.receipt_long, color: Colors.green),
+        onTap: () => _showBillDetails(bill),
+      ),
+    );
+  }
+
+  void _showBillDetails(dynamic bill) {
+    String billNumber = '';
+    String customerName = '';
+    double totalAmount = 0.0;
+    String doctorName = '';
+    DateTime? timestamp;
+    List<dynamic> medicines = [];
+
+    if (bill is Map<String, dynamic>) {
+      billNumber = bill['billNumber'] ?? 'N/A';
+      customerName = bill['patientName'] ?? 'Unknown';
+      totalAmount = (bill['totalAmount'] ?? 0).toDouble();
+      doctorName = bill['doctorName'] ?? 'Unknown';
+      timestamp = bill['timestamp']?.toDate();
+      medicines = bill['medicines'] ?? [];
+    } else {
+      billNumber = bill.billNumber ?? 'N/A';
+      customerName = bill.patientInfo?.name ?? 'Unknown';
+      totalAmount = bill.totalAmount ?? 0.0;
+      doctorName = bill.doctorInfo?.name ?? 'Unknown';
+      timestamp = bill.timestamp;
+      medicines = bill.medicines ?? [];
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Bill Details - #$billNumber'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Patient: $customerName',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text('Doctor: $doctorName'),
+              if (timestamp != null)
+                Text(
+                  'Date: ${DateFormat('MMM dd, yyyy - HH:mm').format(timestamp)}',
+                ),
+              const SizedBox(height: 16),
+              const Text(
+                'Medicines:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              ...medicines.map(
+                (medicine) => Padding(
+                  padding: const EdgeInsets.only(left: 16, top: 4),
+                  child: Text(
+                    '• ${medicine['name'] ?? 'Unknown'} - Qty: ${medicine['quantity'] ?? 0}',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Total Amount: \$${totalAmount.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }
@@ -409,7 +505,7 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: _buildAnalyticsCard('Orders', '45', Icons.shopping_cart),
+                child: _buildAnalyticsCard('Bills', '45', Icons.receipt_long),
               ),
             ],
           ),
