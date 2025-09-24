@@ -11,7 +11,8 @@ class FriendsScreen extends StatefulWidget {
   State<FriendsScreen> createState() => _FriendsScreenState();
 }
 
-class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProviderStateMixin {
+class _FriendsScreenState extends State<FriendsScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   String? _currentUserId;
 
@@ -34,9 +35,9 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
   Future<void> _acceptFriendRequest(String requestId) async {
     try {
       await FriendService.acceptFriendRequest(requestId);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Friend request accepted!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Friend request accepted!')));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error accepting friend request: $e')),
@@ -47,9 +48,9 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
   Future<void> _declineFriendRequest(String requestId) async {
     try {
       await FriendService.declineFriendRequest(requestId);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Friend request declined')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Friend request declined')));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error declining friend request: $e')),
@@ -62,7 +63,9 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove Friend'),
-        content: Text('Are you sure you want to remove $friendName from your friends?'),
+        content: Text(
+          'Are you sure you want to remove $friendName from your friends?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -84,9 +87,9 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
           SnackBar(content: Text('Removed $friendName from friends')),
         );
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error removing friend: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error removing friend: $e')));
       }
     }
   }
@@ -134,9 +137,7 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     if (_currentUserId == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
@@ -181,7 +182,10 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
                     children: [
                       const Icon(Icons.error, size: 64, color: Colors.red),
                       const SizedBox(height: 16),
-                      Text('Error loading friends: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+                      Text(
+                        'Error loading friends: ${snapshot.error}',
+                        style: const TextStyle(color: Colors.red),
+                      ),
                     ],
                   ),
                 );
@@ -194,9 +198,15 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
                     children: [
                       Icon(Icons.people_outline, size: 64, color: Colors.grey),
                       SizedBox(height: 16),
-                      Text('No friends yet', style: TextStyle(color: Colors.grey)),
+                      Text(
+                        'No friends yet',
+                        style: TextStyle(color: Colors.grey),
+                      ),
                       SizedBox(height: 8),
-                      Text('Tap the + button to find friends', style: TextStyle(color: Colors.grey)),
+                      Text(
+                        'Tap the + button to find friends',
+                        style: TextStyle(color: Colors.grey),
+                      ),
                     ],
                   ),
                 );
@@ -208,7 +218,10 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
                 itemBuilder: (context, index) {
                   final friend = friends[index];
                   return Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
                     child: ListTile(
                       leading: _buildUserTypeIcon(friend.friendType),
                       title: Text(
@@ -276,7 +289,10 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
                     children: [
                       const Icon(Icons.error, size: 64, color: Colors.red),
                       const SizedBox(height: 16),
-                      Text('Error loading requests: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+                      Text(
+                        'Error loading requests: ${snapshot.error}',
+                        style: const TextStyle(color: Colors.red),
+                      ),
                     ],
                   ),
                 );
@@ -287,9 +303,16 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.notifications_none, size: 64, color: Colors.grey),
+                      Icon(
+                        Icons.notifications_none,
+                        size: 64,
+                        color: Colors.grey,
+                      ),
                       SizedBox(height: 16),
-                      Text('No pending requests', style: TextStyle(color: Colors.grey)),
+                      Text(
+                        'No pending requests',
+                        style: TextStyle(color: Colors.grey),
+                      ),
                     ],
                   ),
                 );
@@ -301,7 +324,10 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
                 itemBuilder: (context, index) {
                   final request = requests[index];
                   return Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
                     child: ListTile(
                       leading: _buildUserTypeIcon(request.senderType),
                       title: Text(
@@ -316,7 +342,9 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
                             'Sent ${request.createdAt.toString().split(' ')[0]}',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Theme.of(context).textTheme.bodySmall?.color,
+                              color: Theme.of(
+                                context,
+                              ).textTheme.bodySmall?.color,
                             ),
                           ),
                         ],
@@ -356,7 +384,10 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
                     children: [
                       const Icon(Icons.error, size: 64, color: Colors.red),
                       const SizedBox(height: 16),
-                      Text('Error loading requests: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+                      Text(
+                        'Error loading requests: ${snapshot.error}',
+                        style: const TextStyle(color: Colors.red),
+                      ),
                     ],
                   ),
                 );
@@ -369,7 +400,10 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
                     children: [
                       Icon(Icons.send, size: 64, color: Colors.grey),
                       SizedBox(height: 16),
-                      Text('No sent requests', style: TextStyle(color: Colors.grey)),
+                      Text(
+                        'No sent requests',
+                        style: TextStyle(color: Colors.grey),
+                      ),
                     ],
                   ),
                 );
@@ -381,7 +415,10 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
                 itemBuilder: (context, index) {
                   final request = requests[index];
                   return Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
                     child: ListTile(
                       leading: _buildUserTypeIcon(request.receiverType),
                       title: Text(
@@ -391,12 +428,16 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('${request.receiverType.toUpperCase()} • ${request.status}'),
+                          Text(
+                            '${request.receiverType.toUpperCase()} • ${request.status}',
+                          ),
                           Text(
                             'Sent ${request.createdAt.toString().split(' ')[0]}',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Theme.of(context).textTheme.bodySmall?.color,
+                              color: Theme.of(
+                                context,
+                              ).textTheme.bodySmall?.color,
                             ),
                           ),
                         ],
@@ -404,7 +445,9 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
                       trailing: Text(
                         request.status.toUpperCase(),
                         style: TextStyle(
-                          color: request.status == 'pending' ? Colors.orange : Colors.grey,
+                          color: request.status == 'pending'
+                              ? Colors.orange
+                              : Colors.grey,
                           fontWeight: FontWeight.bold,
                         ),
                       ),

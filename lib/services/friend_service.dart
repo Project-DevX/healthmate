@@ -52,7 +52,10 @@ class FriendService {
 
   // Accept friend request
   static Future<void> acceptFriendRequest(String requestId) async {
-    final requestDoc = await _firestore.collection('friend_requests').doc(requestId).get();
+    final requestDoc = await _firestore
+        .collection('friend_requests')
+        .doc(requestId)
+        .get();
     if (!requestDoc.exists) {
       throw Exception('Friend request not found');
     }
@@ -104,7 +107,9 @@ class FriendService {
         .where('status', isEqualTo: 'pending')
         .snapshots()
         .map((snapshot) {
-          final requests = snapshot.docs.map((doc) => FriendRequest.fromFirestore(doc)).toList();
+          final requests = snapshot.docs
+              .map((doc) => FriendRequest.fromFirestore(doc))
+              .toList();
           // Sort in memory to avoid composite index requirement
           requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return requests;
@@ -119,7 +124,9 @@ class FriendService {
         .where('status', isEqualTo: 'pending')
         .snapshots()
         .map((snapshot) {
-          final requests = snapshot.docs.map((doc) => FriendRequest.fromFirestore(doc)).toList();
+          final requests = snapshot.docs
+              .map((doc) => FriendRequest.fromFirestore(doc))
+              .toList();
           // Sort in memory to avoid composite index requirement
           requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return requests;
@@ -133,12 +140,17 @@ class FriendService {
         .where('userId', isEqualTo: userId)
         .orderBy('addedAt', descending: true)
         .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => Friend.fromFirestore(doc)).toList());
+        .map(
+          (snapshot) =>
+              snapshot.docs.map((doc) => Friend.fromFirestore(doc)).toList(),
+        );
   }
 
   // Search users for friend requests
-  static Future<List<Map<String, dynamic>>> searchUsers(String query, String currentUserId) async {
+  static Future<List<Map<String, dynamic>>> searchUsers(
+    String query,
+    String currentUserId,
+  ) async {
     if (query.trim().isEmpty) return [];
 
     try {
@@ -204,7 +216,10 @@ class FriendService {
   }
 
   // Check if friend request exists
-  static Future<FriendRequest?> getFriendRequest(String senderId, String receiverId) async {
+  static Future<FriendRequest?> getFriendRequest(
+    String senderId,
+    String receiverId,
+  ) async {
     final request = await _firestore
         .collection('friend_requests')
         .where('senderId', isEqualTo: senderId)
