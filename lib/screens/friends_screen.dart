@@ -174,6 +174,19 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
                 return const Center(child: CircularProgressIndicator());
               }
 
+              if (snapshot.hasError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error, size: 64, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text('Error loading friends: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                );
+              }
+
               if (!snapshot.hasData || snapshot.data!.isEmpty) {
                 return const Center(
                   child: Column(
@@ -256,6 +269,19 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
                 return const Center(child: CircularProgressIndicator());
               }
 
+              if (snapshot.hasError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error, size: 64, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text('Error loading requests: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                );
+              }
+
               if (!snapshot.hasData || snapshot.data!.isEmpty) {
                 return const Center(
                   child: Column(
@@ -321,6 +347,19 @@ class _FriendsScreenState extends State<FriendsScreen> with SingleTickerProvider
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
+              }
+
+              if (snapshot.hasError) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error, size: 64, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text('Error loading requests: ${snapshot.error}', style: const TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                );
               }
 
               if (!snapshot.hasData || snapshot.data!.isEmpty) {
