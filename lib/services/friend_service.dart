@@ -138,12 +138,13 @@ class FriendService {
     return _firestore
         .collection('friends')
         .where('userId', isEqualTo: userId)
-        .orderBy('addedAt', descending: true)
         .snapshots()
-        .map(
-          (snapshot) =>
-              snapshot.docs.map((doc) => Friend.fromFirestore(doc)).toList(),
-        );
+        .map((snapshot) {
+          final friends = snapshot.docs.map((doc) => Friend.fromFirestore(doc)).toList();
+          // Sort in memory to avoid composite index requirement
+          friends.sort((a, b) => b.addedAt.compareTo(a.addedAt));
+          return friends;
+        });
   }
 
   // Search users for friend requests
