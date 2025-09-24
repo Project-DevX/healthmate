@@ -337,14 +337,48 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
             child: StreamBuilder<List<dynamic>>(
               stream: _pharmacyService.getBillsStream(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
+                // Show loading only on initial load
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    !snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error, size: 48, color: Colors.red),
+                        const SizedBox(height: 16),
+                        Text('Error loading bills: ${snapshot.error}'),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () => setState(() {}), // Trigger rebuild
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  );
                 }
 
                 final bills = snapshot.data ?? [];
 
                 if (bills.isEmpty) {
-                  return const Center(child: Text('No bills found'));
+                  return const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.receipt_long, size: 48, color: Colors.grey),
+                        SizedBox(height: 16),
+                        Text('No bills found'),
+                        SizedBox(height: 8),
+                        Text(
+                          'Bills will appear here when prescriptions are delivered.',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  );
                 }
 
                 return ListView.builder(

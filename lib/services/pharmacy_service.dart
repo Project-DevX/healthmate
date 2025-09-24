@@ -205,13 +205,15 @@ class PharmacyService {
       final querySnapshot = await FirebaseFirestore.instance
           .collection('pharmacy_bills')
           .where('pharmacyId', isEqualTo: currentPharmacyId)
-          .orderBy('timestamp', descending: true)
           .get();
 
       final bills = querySnapshot.docs.map((doc) {
         final data = doc.data();
         return PharmacyBill.fromMap(data);
       }).toList();
+
+      // Sort bills by timestamp, newest first
+      bills.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
       return bills;
     } catch (e) {
@@ -222,18 +224,60 @@ class PharmacyService {
 
   // Get bills stream for real-time updates
   Stream<List<PharmacyBill>> getBillsStream() {
-    return FirebaseFirestore.instance
+    final user = _auth.currentUser;
+    if (user == null) {
+      print('❌ No authenticated user found');
+      return Stream.value([]);
+    }
+
+    final pharmacyId = user.uid;
+    print('🔍 getBillsStream called with pharmacyId: $pharmacyId');
+    print(
+      '🔧 Creating FIXED query without orderBy: collection(pharmacy_bills).where(pharmacyId, ==, $pharmacyId)',
+    );
+
+    final query = FirebaseFirestore.instance
         .collection('pharmacy_bills')
-        .where('pharmacyId', isEqualTo: currentPharmacyId)
-        .orderBy('timestamp', descending: true)
+        .where('pharmacyId', isEqualTo: pharmacyId);
+
+    print('✅ Query created successfully, starting snapshots listener');
+
+    return query
         .snapshots()
         .map((snapshot) {
-          final bills = snapshot.docs.map((doc) {
-            final data = doc.data();
-            return PharmacyBill.fromMap(data);
-          }).toList();
+          print(
+            '📡 Stream received ${snapshot.docs.length} bills for pharmacy: $pharmacyId',
+          );
 
+          if (snapshot.docs.isEmpty) {
+            print('📭 No bills found in snapshot');
+          }
+
+          final bills = <PharmacyBill>[];
+
+          for (final doc in snapshot.docs) {
+            try {
+              final data = doc.data();
+              print(
+                '📋 Processing bill: ${data['billNumber']} for pharmacy: ${data['pharmacyId']}',
+              );
+              final bill = PharmacyBill.fromMap(data);
+              bills.add(bill);
+            } catch (e) {
+              print('❌ Error parsing bill ${doc.id}: $e');
+              print('❌ Bill data: ${doc.data()}');
+            }
+          }
+
+          // Sort bills by timestamp, newest first
+          bills.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+          print('✅ Returning ${bills.length} processed bills');
           return bills;
+        })
+        .handleError((error) {
+          print('❌ Stream error: $error');
+          return <PharmacyBill>[];
         });
   }
 
