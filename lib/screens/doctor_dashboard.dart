@@ -14,6 +14,8 @@ import 'analytics_page.dart';
 import 'availability_page.dart';
 import 'profile_page.dart';
 import 'rating_page.dart';
+import 'friends_screen.dart';
+import 'doctor_appointments_screen.dart';
 import '../theme/app_theme.dart';
 
 class DoctorDashboard extends StatefulWidget {
@@ -135,10 +137,13 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
   }
 
   void _onFeatureTap(String feature) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
     Widget? page;
     switch (feature) {
       case 'Appointments':
-        page = const AppointmentsPage();
+        page = DoctorAppointmentsScreen(doctorId: user.uid);
         break;
       case 'Patient Search':
         page = const PatientSearchPage();
@@ -236,6 +241,16 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
         appBar: AppBar(
           title: const Text('Dashboard'),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.people),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const FriendsScreen()),
+                );
+              },
+              tooltip: 'Friends',
+            ),
             IconButton(
               icon: const Icon(Icons.notifications_none),
               onPressed: () => _showNotificationsDialog(),
@@ -476,12 +491,15 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                 ),
                 TextButton(
                   onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const AppointmentsPage(),
-                      ),
-                    );
+                    final user = FirebaseAuth.instance.currentUser;
+                    if (user != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => DoctorAppointmentsScreen(doctorId: user.uid),
+                        ),
+                      );
+                    }
                   },
                   child: Text('View All', style: TextStyle(color: mainBlue)),
                 ),
