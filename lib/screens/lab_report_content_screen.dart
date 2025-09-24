@@ -263,7 +263,7 @@ class _LabReportContentScreenState extends State<LabReportContentScreen> {
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey[300]!),
         borderRadius: BorderRadius.circular(8),
-        color: test.isAbnormal ? statusColor.withOpacity(0.1) : null,
+        color: test.isAbnormal ? statusColor.withValues(alpha: 0.1) : null,
       ),
       child: Row(
         children: [

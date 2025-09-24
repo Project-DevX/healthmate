@@ -371,7 +371,7 @@ class _DoctorNotificationSettingsScreenState extends State<DoctorNotificationSet
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: AppTheme.errorRed.withOpacity(0.2),
+                color: AppTheme.errorRed.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: const Text(

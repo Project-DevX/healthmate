@@ -171,7 +171,7 @@ class _DoctorProfileEditScreenState extends State<DoctorProfileEditScreen> {
                         children: [
                           CircleAvatar(
                             radius: 60,
-                            backgroundColor: AppTheme.doctorColor.withOpacity(0.2),
+                            backgroundColor: AppTheme.doctorColor.withValues(alpha: 0.2),
                             child: Icon(
                               Icons.medical_services,
                               size: 60,
@@ -367,7 +367,7 @@ class _DoctorProfileEditScreenState extends State<DoctorProfileEditScreen> {
                   }
                 });
               },
-              selectedColor: AppTheme.doctorColor.withOpacity(0.2),
+              selectedColor: AppTheme.doctorColor.withValues(alpha: 0.2),
               checkmarkColor: AppTheme.doctorColor,
             )).toList(),
           ),

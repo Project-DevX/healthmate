@@ -329,7 +329,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
               Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: AppTheme.doctorColor.withOpacity(0.1),
+                    backgroundColor: AppTheme.doctorColor.withValues(alpha: 0.1),
                     child: Text(
                       patientName.isNotEmpty
                           ? patientName[0].toUpperCase()
@@ -362,7 +362,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
+                      color: statusColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(

@@ -160,7 +160,7 @@ class _LabReportsScreenState extends State<LabReportsScreen> {
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: AppTheme.infoBlue.withOpacity(0.1),
+                                color: AppTheme.infoBlue.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Icon(

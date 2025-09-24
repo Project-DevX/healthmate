@@ -82,7 +82,7 @@ class _NotificationWidgetState extends State<NotificationWidget> {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: notification.isRead ? 1 : 3,
-      color: notification.isRead ? null : Colors.blue.withOpacity(0.05),
+      color: notification.isRead ? null : Colors.blue.withValues(alpha: 0.05),
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: _getNotificationColor(notification.type),

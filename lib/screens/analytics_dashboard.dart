@@ -192,9 +192,9 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -217,7 +217,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
             title,
             style: Theme.of(
               context,
-            ).textTheme.bodyMedium?.copyWith(color: color.withOpacity(0.8)),
+            ).textTheme.bodyMedium?.copyWith(color: color.withValues(alpha: 0.8)),
           ),
         ],
       ),
@@ -232,7 +232,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -322,10 +322,10 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: priorityColor.withOpacity(0.3)),
+        border: Border.all(color: priorityColor.withValues(alpha: 0.3)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -337,7 +337,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: priorityColor.withOpacity(0.1),
+              color: priorityColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(priorityIcon, color: priorityColor, size: 20),
@@ -365,7 +365,7 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: priorityColor.withOpacity(0.1),
+                    color: priorityColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -452,14 +452,14 @@ class _AnalyticsDashboardState extends State<AnalyticsDashboard> {
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.withOpacity(0.2)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Icon(icon, color: color, size: 16),
