@@ -15,24 +15,28 @@ class InterconnectService {
     String? hospitalId,
   }) async {
     try {
-      Query query = _firestore.collection('users').where('role', isEqualTo: 'doctor');
-      
+      Query query = _firestore
+          .collection('users')
+          .where('role', isEqualTo: 'doctor');
+
       if (specialty != null && specialty.isNotEmpty) {
         query = query.where('specialty', isEqualTo: specialty);
       }
-      
+
       if (hospitalId != null && hospitalId.isNotEmpty) {
         query = query.where('hospitalId', isEqualTo: hospitalId);
       }
 
       final snapshot = await query.get();
-      final doctors = snapshot.docs.map((doc) => DoctorProfile.fromFirestore(doc)).toList();
-      
+      final doctors = snapshot.docs
+          .map((doc) => DoctorProfile.fromFirestore(doc))
+          .toList();
+
       // If no doctors found, return sample doctors for testing
       if (doctors.isEmpty) {
         return _getSampleDoctors();
       }
-      
+
       return doctors;
     } catch (e) {
       // Return sample doctors if query fails
@@ -55,7 +59,14 @@ class InterconnectService {
         experienceYears: 8,
         rating: 4.8,
         availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-        timeSlots: ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '03:00 PM', '04:00 PM'],
+        timeSlots: [
+          '09:00 AM',
+          '10:00 AM',
+          '11:00 AM',
+          '02:00 PM',
+          '03:00 PM',
+          '04:00 PM',
+        ],
         consultationFee: 150.0,
         isAvailable: true,
       ),
@@ -70,7 +81,14 @@ class InterconnectService {
         experienceYears: 12,
         rating: 4.9,
         availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-        timeSlots: ['09:30 AM', '10:30 AM', '11:30 AM', '02:30 PM', '03:30 PM', '04:30 PM'],
+        timeSlots: [
+          '09:30 AM',
+          '10:30 AM',
+          '11:30 AM',
+          '02:30 PM',
+          '03:30 PM',
+          '04:30 PM',
+        ],
         consultationFee: 120.0,
         isAvailable: true,
       ),
@@ -99,7 +117,13 @@ class InterconnectService {
         qualifications: ['MBBS', 'MS Orthopedics'],
         experienceYears: 10,
         rating: 4.6,
-        availableDays: ['Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+        availableDays: [
+          'Tuesday',
+          'Wednesday',
+          'Thursday',
+          'Friday',
+          'Saturday',
+        ],
         timeSlots: ['09:00 AM', '10:00 AM', '11:00 AM', '03:00 PM', '04:00 PM'],
         consultationFee: 180.0,
         isAvailable: true,
@@ -110,14 +134,29 @@ class InterconnectService {
   // Book appointment (from patient/caregiver)
   static Future<String> bookAppointment(Appointment appointment) async {
     try {
-      final docRef = await _firestore.collection('appointments').add(appointment.toMap());
-      
+      // Create appointment with proper date handling
+      final appointmentData = appointment.toMap();
+
+      // Store appointmentDate as proper timestamp for the selected date and time
+      final appointmentDateTime = _combineDateTime(
+        appointment.appointmentDate,
+        appointment.timeSlot,
+      );
+      appointmentData['appointmentDate'] = Timestamp.fromDate(
+        appointmentDateTime,
+      );
+
+      final docRef = await _firestore
+          .collection('appointments')
+          .add(appointmentData);
+
       // Send notification to doctor
       await _sendNotification(
         recipientId: appointment.doctorId,
         recipientType: 'doctor',
         title: 'New Appointment Request',
-        message: 'New appointment request from ${appointment.patientName}',
+        message:
+            'New appointment request from ${appointment.patientName} for ${appointment.timeSlot} on ${_formatDate(appointment.appointmentDate)}',
         type: 'appointment',
         relatedId: docRef.id,
       );
@@ -127,10 +166,24 @@ class InterconnectService {
         recipientId: appointment.hospitalId,
         recipientType: 'hospital',
         title: 'New Appointment Scheduled',
-        message: 'Appointment scheduled for Dr. ${appointment.doctorName}',
+        message:
+            'Appointment scheduled for Dr. ${appointment.doctorName} with ${appointment.patientName}',
         type: 'appointment',
         relatedId: docRef.id,
       );
+
+      // If caregiver is involved, notify them too
+      if (appointment.caregiverId != null) {
+        await _sendNotification(
+          recipientId: appointment.caregiverId!,
+          recipientType: 'caregiver',
+          title: 'Appointment Booked',
+          message:
+              'Appointment booked for ${appointment.patientName} with Dr. ${appointment.doctorName}',
+          type: 'appointment',
+          relatedId: docRef.id,
+        );
+      }
 
       return docRef.id;
     } catch (e) {
@@ -138,23 +191,77 @@ class InterconnectService {
     }
   }
 
+  // Helper method to combine date and time slot
+  static DateTime _combineDateTime(DateTime date, String timeSlot) {
+    try {
+      // Parse time slot (e.g., "09:30 AM" or "02:30 PM")
+      final timeParts = timeSlot.split(' ');
+      final time = timeParts[0].split(':');
+      final hour = int.parse(time[0]);
+      final minute = int.parse(time[1]);
+      final isPM = timeParts[1].toUpperCase() == 'PM';
+
+      int finalHour = hour;
+      if (isPM && hour != 12) {
+        finalHour = hour + 12;
+      } else if (!isPM && hour == 12) {
+        finalHour = 0;
+      }
+
+      return DateTime(date.year, date.month, date.day, finalHour, minute);
+    } catch (e) {
+      // Fallback to noon if parsing fails
+      return DateTime(date.year, date.month, date.day, 12, 0);
+    }
+  }
+
+  // Helper method to format date
+  static String _formatDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
   // Get appointments for user
-  static Future<List<Appointment>> getUserAppointments(String userId, String userType) async {
+  static Future<List<Appointment>> getUserAppointments(
+    String userId,
+    String userType,
+  ) async {
     try {
       Query query;
-      
+
       switch (userType) {
         case 'patient':
-          query = _firestore.collection('appointments').where('patientId', isEqualTo: userId);
+          query = _firestore
+              .collection('appointments')
+              .where('patientId', isEqualTo: userId);
           break;
         case 'doctor':
-          query = _firestore.collection('appointments').where('doctorId', isEqualTo: userId);
+          query = _firestore
+              .collection('appointments')
+              .where('doctorId', isEqualTo: userId);
           break;
         case 'caregiver':
-          query = _firestore.collection('appointments').where('caregiverId', isEqualTo: userId);
+          query = _firestore
+              .collection('appointments')
+              .where('caregiverId', isEqualTo: userId);
           break;
         case 'hospital':
-          query = _firestore.collection('appointments').where('hospitalId', isEqualTo: userId);
+          query = _firestore
+              .collection('appointments')
+              .where('hospitalId', isEqualTo: userId);
           break;
         default:
           throw Exception('Invalid user type');
@@ -162,11 +269,15 @@ class InterconnectService {
 
       // Get data without ordering first to avoid index requirement
       final snapshot = await query.get();
-      final appointments = snapshot.docs.map((doc) => Appointment.fromFirestore(doc)).toList();
-      
+      final appointments = snapshot.docs
+          .map((doc) => Appointment.fromFirestore(doc))
+          .toList();
+
       // Sort in memory instead of using Firebase orderBy to avoid index requirement
-      appointments.sort((a, b) => b.appointmentDate.compareTo(a.appointmentDate));
-      
+      appointments.sort(
+        (a, b) => b.appointmentDate.compareTo(a.appointmentDate),
+      );
+
       return appointments;
     } catch (e) {
       throw Exception('Failed to fetch appointments: $e');
@@ -174,17 +285,27 @@ class InterconnectService {
   }
 
   // Update appointment status
-  static Future<void> updateAppointmentStatus(String appointmentId, String status, {String? notes}) async {
+  static Future<void> updateAppointmentStatus(
+    String appointmentId,
+    String status, {
+    String? notes,
+  }) async {
     try {
       final updateData = {'status': status};
       if (notes != null) updateData['notes'] = notes;
-      
-      await _firestore.collection('appointments').doc(appointmentId).update(updateData);
-      
+
+      await _firestore
+          .collection('appointments')
+          .doc(appointmentId)
+          .update(updateData);
+
       // Get appointment details for notifications
-      final appointmentDoc = await _firestore.collection('appointments').doc(appointmentId).get();
+      final appointmentDoc = await _firestore
+          .collection('appointments')
+          .doc(appointmentId)
+          .get();
       final appointment = Appointment.fromFirestore(appointmentDoc);
-      
+
       // Notify patient
       await _sendNotification(
         recipientId: appointment.patientId,
@@ -194,14 +315,15 @@ class InterconnectService {
         type: 'appointment',
         relatedId: appointmentId,
       );
-      
+
       // Notify caregiver if exists
       if (appointment.caregiverId != null) {
         await _sendNotification(
           recipientId: appointment.caregiverId!,
           recipientType: 'caregiver',
           title: 'Appointment Update',
-          message: 'Appointment status updated for ${appointment.patientName}: $status',
+          message:
+              'Appointment status updated for ${appointment.patientName}: $status',
           type: 'appointment',
           relatedId: appointmentId,
         );
@@ -216,14 +338,17 @@ class InterconnectService {
   // Request lab test (from doctor)
   static Future<String> requestLabTest(LabReport labReport) async {
     try {
-      final docRef = await _firestore.collection('lab_reports').add(labReport.toMap());
-      
+      final docRef = await _firestore
+          .collection('lab_reports')
+          .add(labReport.toMap());
+
       // Notify lab
       await _sendNotification(
         recipientId: labReport.labId,
         recipientType: 'lab',
         title: 'New Lab Test Request',
-        message: 'New ${labReport.testName} test requested for ${labReport.patientName}',
+        message:
+            'New ${labReport.testName} test requested for ${labReport.patientName}',
         type: 'lab_result',
         relatedId: docRef.id,
       );
@@ -245,7 +370,12 @@ class InterconnectService {
   }
 
   // Upload lab result (from lab)
-  static Future<void> uploadLabResult(String reportId, String reportUrl, Map<String, dynamic>? results, {String? notes}) async {
+  static Future<void> uploadLabResult(
+    String reportId,
+    String reportUrl,
+    Map<String, dynamic>? results, {
+    String? notes,
+  }) async {
     try {
       await _firestore.collection('lab_reports').doc(reportId).update({
         'status': 'completed',
@@ -255,7 +385,10 @@ class InterconnectService {
       });
 
       // Get report details
-      final reportDoc = await _firestore.collection('lab_reports').doc(reportId).get();
+      final reportDoc = await _firestore
+          .collection('lab_reports')
+          .doc(reportId)
+          .get();
       final report = LabReport.fromFirestore(reportDoc);
 
       // Notify patient
@@ -273,30 +406,39 @@ class InterconnectService {
         recipientId: report.doctorId,
         recipientType: 'doctor',
         title: 'Lab Results Available',
-        message: 'Lab results for ${report.patientName} (${report.testName}) are available',
+        message:
+            'Lab results for ${report.patientName} (${report.testName}) are available',
         type: 'lab_result',
         relatedId: reportId,
       );
-
     } catch (e) {
       throw Exception('Failed to upload lab result: $e');
     }
   }
 
   // Get lab reports for user
-  static Future<List<LabReport>> getUserLabReports(String userId, String userType) async {
+  static Future<List<LabReport>> getUserLabReports(
+    String userId,
+    String userType,
+  ) async {
     try {
       Query query;
-      
+
       switch (userType) {
         case 'patient':
-          query = _firestore.collection('lab_reports').where('patientId', isEqualTo: userId);
+          query = _firestore
+              .collection('lab_reports')
+              .where('patientId', isEqualTo: userId);
           break;
         case 'doctor':
-          query = _firestore.collection('lab_reports').where('doctorId', isEqualTo: userId);
+          query = _firestore
+              .collection('lab_reports')
+              .where('doctorId', isEqualTo: userId);
           break;
         case 'lab':
-          query = _firestore.collection('lab_reports').where('labId', isEqualTo: userId);
+          query = _firestore
+              .collection('lab_reports')
+              .where('labId', isEqualTo: userId);
           break;
         default:
           throw Exception('Invalid user type');
@@ -304,11 +446,13 @@ class InterconnectService {
 
       // Get data without ordering first to avoid index requirement
       final snapshot = await query.get();
-      final labReports = snapshot.docs.map((doc) => LabReport.fromFirestore(doc)).toList();
-      
+      final labReports = snapshot.docs
+          .map((doc) => LabReport.fromFirestore(doc))
+          .toList();
+
       // Sort in memory instead of using Firebase orderBy to avoid index requirement
       labReports.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      
+
       return labReports;
     } catch (e) {
       throw Exception('Failed to fetch lab reports: $e');
@@ -320,14 +464,17 @@ class InterconnectService {
   // Create prescription (from doctor)
   static Future<String> createPrescription(Prescription prescription) async {
     try {
-      final docRef = await _firestore.collection('prescriptions').add(prescription.toMap());
-      
+      final docRef = await _firestore
+          .collection('prescriptions')
+          .add(prescription.toMap());
+
       // Notify patient
       await _sendNotification(
         recipientId: prescription.patientId,
         recipientType: 'patient',
         title: 'New Prescription',
-        message: 'Dr. ${prescription.doctorName} has prescribed medications for you',
+        message:
+            'Dr. ${prescription.doctorName} has prescribed medications for you',
         type: 'prescription',
         relatedId: docRef.id,
       );
@@ -349,19 +496,28 @@ class InterconnectService {
   }
 
   // Update prescription status (from pharmacy)
-  static Future<void> updatePrescriptionStatus(String prescriptionId, String status) async {
+  static Future<void> updatePrescriptionStatus(
+    String prescriptionId,
+    String status,
+  ) async {
     try {
       final updateData = <String, dynamic>{'status': status};
       if (status == 'filled') {
         updateData['filledDate'] = Timestamp.now();
       }
-      
-      await _firestore.collection('prescriptions').doc(prescriptionId).update(updateData);
-      
+
+      await _firestore
+          .collection('prescriptions')
+          .doc(prescriptionId)
+          .update(updateData);
+
       // Get prescription details
-      final prescriptionDoc = await _firestore.collection('prescriptions').doc(prescriptionId).get();
+      final prescriptionDoc = await _firestore
+          .collection('prescriptions')
+          .doc(prescriptionId)
+          .get();
       final prescription = Prescription.fromFirestore(prescriptionDoc);
-      
+
       // Notify patient
       await _sendNotification(
         recipientId: prescription.patientId,
@@ -377,30 +533,39 @@ class InterconnectService {
         recipientId: prescription.doctorId,
         recipientType: 'doctor',
         title: 'Prescription Update',
-        message: 'Prescription for ${prescription.patientName} has been $status',
+        message:
+            'Prescription for ${prescription.patientName} has been $status',
         type: 'prescription',
         relatedId: prescriptionId,
       );
-
     } catch (e) {
       throw Exception('Failed to update prescription: $e');
     }
   }
 
   // Get prescriptions for user
-  static Future<List<Prescription>> getUserPrescriptions(String userId, String userType) async {
+  static Future<List<Prescription>> getUserPrescriptions(
+    String userId,
+    String userType,
+  ) async {
     try {
       Query query;
-      
+
       switch (userType) {
         case 'patient':
-          query = _firestore.collection('prescriptions').where('patientId', isEqualTo: userId);
+          query = _firestore
+              .collection('prescriptions')
+              .where('patientId', isEqualTo: userId);
           break;
         case 'doctor':
-          query = _firestore.collection('prescriptions').where('doctorId', isEqualTo: userId);
+          query = _firestore
+              .collection('prescriptions')
+              .where('doctorId', isEqualTo: userId);
           break;
         case 'pharmacy':
-          query = _firestore.collection('prescriptions').where('pharmacyId', isEqualTo: userId);
+          query = _firestore
+              .collection('prescriptions')
+              .where('pharmacyId', isEqualTo: userId);
           break;
         default:
           throw Exception('Invalid user type');
@@ -408,11 +573,15 @@ class InterconnectService {
 
       // Get data without ordering first to avoid index requirement
       final snapshot = await query.get();
-      final prescriptions = snapshot.docs.map((doc) => Prescription.fromFirestore(doc)).toList();
-      
+      final prescriptions = snapshot.docs
+          .map((doc) => Prescription.fromFirestore(doc))
+          .toList();
+
       // Sort in memory instead of using Firebase orderBy to avoid index requirement
-      prescriptions.sort((a, b) => b.prescribedDate.compareTo(a.prescribedDate));
-      
+      prescriptions.sort(
+        (a, b) => b.prescribedDate.compareTo(a.prescribedDate),
+      );
+
       return prescriptions;
     } catch (e) {
       throw Exception('Failed to fetch prescriptions: $e');
@@ -435,9 +604,12 @@ class InterconnectService {
       if (currentUser == null) return;
 
       // Get sender info
-      final senderDoc = await _firestore.collection('users').doc(currentUser.uid).get();
+      final senderDoc = await _firestore
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
       final senderData = senderDoc.data();
-      
+
       final notification = NotificationModel(
         id: '',
         recipientId: recipientId,
@@ -460,7 +632,9 @@ class InterconnectService {
   }
 
   // Get notifications for user
-  static Future<List<NotificationModel>> getUserNotifications(String userId) async {
+  static Future<List<NotificationModel>> getUserNotifications(
+    String userId,
+  ) async {
     try {
       // Get data without ordering first to avoid index requirement
       final snapshot = await _firestore
@@ -468,11 +642,13 @@ class InterconnectService {
           .where('recipientId', isEqualTo: userId)
           .get();
 
-      final notifications = snapshot.docs.map((doc) => NotificationModel.fromFirestore(doc)).toList();
-      
+      final notifications = snapshot.docs
+          .map((doc) => NotificationModel.fromFirestore(doc))
+          .toList();
+
       // Sort in memory and limit to 50 most recent
       notifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      
+
       return notifications.take(50).toList();
     } catch (e) {
       throw Exception('Failed to fetch notifications: $e');
@@ -482,7 +658,9 @@ class InterconnectService {
   // Mark notification as read
   static Future<void> markNotificationAsRead(String notificationId) async {
     try {
-      await _firestore.collection('notifications').doc(notificationId).update({'isRead': true});
+      await _firestore.collection('notifications').doc(notificationId).update({
+        'isRead': true,
+      });
     } catch (e) {
       throw Exception('Failed to mark notification as read: $e');
     }
@@ -500,9 +678,15 @@ class InterconnectService {
 
       final patients = snapshot.docs
           .map((doc) => {'id': doc.id, ...doc.data()})
-          .where((patient) => 
-              patient['name'].toString().toLowerCase().contains(query.toLowerCase()) ||
-              patient['email'].toString().toLowerCase().contains(query.toLowerCase()))
+          .where(
+            (patient) =>
+                patient['name'].toString().toLowerCase().contains(
+                  query.toLowerCase(),
+                ) ||
+                patient['email'].toString().toLowerCase().contains(
+                  query.toLowerCase(),
+                ),
+          )
           .toList();
 
       // If no patients found, return sample patients for testing
@@ -578,14 +762,22 @@ class InterconnectService {
     }
 
     return samplePatients
-        .where((patient) => 
-            patient['name'].toString().toLowerCase().contains(query.toLowerCase()) ||
-            patient['email'].toString().toLowerCase().contains(query.toLowerCase()))
+        .where(
+          (patient) =>
+              patient['name'].toString().toLowerCase().contains(
+                query.toLowerCase(),
+              ) ||
+              patient['email'].toString().toLowerCase().contains(
+                query.toLowerCase(),
+              ),
+        )
         .toList();
   }
 
   // Get patient medical history (for doctors)
-  static Future<Map<String, dynamic>> getPatientMedicalHistory(String patientId) async {
+  static Future<Map<String, dynamic>> getPatientMedicalHistory(
+    String patientId,
+  ) async {
     try {
       // Get appointments (without orderBy to avoid index requirement)
       final appointmentsSnapshot = await _firestore
@@ -606,14 +798,24 @@ class InterconnectService {
           .get();
 
       // Convert to objects and sort in memory to avoid Firebase index requirement
-      final appointments = appointmentsSnapshot.docs.map((doc) => Appointment.fromFirestore(doc)).toList();
-      final labReports = labReportsSnapshot.docs.map((doc) => LabReport.fromFirestore(doc)).toList();
-      final prescriptions = prescriptionsSnapshot.docs.map((doc) => Prescription.fromFirestore(doc)).toList();
+      final appointments = appointmentsSnapshot.docs
+          .map((doc) => Appointment.fromFirestore(doc))
+          .toList();
+      final labReports = labReportsSnapshot.docs
+          .map((doc) => LabReport.fromFirestore(doc))
+          .toList();
+      final prescriptions = prescriptionsSnapshot.docs
+          .map((doc) => Prescription.fromFirestore(doc))
+          .toList();
 
       // Sort by date (most recent first)
-      appointments.sort((a, b) => b.appointmentDate.compareTo(a.appointmentDate));
+      appointments.sort(
+        (a, b) => b.appointmentDate.compareTo(a.appointmentDate),
+      );
       labReports.sort((a, b) => b.testDate.compareTo(a.testDate));
-      prescriptions.sort((a, b) => b.prescribedDate.compareTo(a.prescribedDate));
+      prescriptions.sort(
+        (a, b) => b.prescribedDate.compareTo(a.prescribedDate),
+      );
 
       return {
         'appointments': appointments,
@@ -626,38 +828,117 @@ class InterconnectService {
   }
 
   // Get available time slots for doctor
-  static Future<List<String>> getAvailableTimeSlots(String doctorId, DateTime date) async {
+  static Future<List<String>> getAvailableTimeSlots(
+    String doctorId,
+    DateTime date,
+  ) async {
     try {
-      // Get doctor's available time slots
-      final doctorDoc = await _firestore.collection('users').doc(doctorId).get();
-      final doctorData = doctorDoc.data();
-      final allTimeSlots = List<String>.from(doctorData?['timeSlots'] ?? [
-        '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
-        '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM', '04:00 PM', '04:30 PM'
-      ]);
+      // First check if doctor has availability settings
+      final availabilityDoc = await _firestore
+          .collection('doctorAvailability')
+          .doc(doctorId)
+          .get();
 
-      // Get all appointments for the doctor (without date filtering to avoid index requirement)
+      List<String> allTimeSlots = [];
+
+      if (availabilityDoc.exists) {
+        final availabilityData = availabilityDoc.data()!;
+
+        // Check if doctor is available on this day
+        final dayName = _getDayName(date);
+        final workingDays = Map<String, bool>.from(
+          availabilityData['workingDays'] ?? {},
+        );
+
+        if (workingDays[dayName] != true ||
+            availabilityData['isOnline'] != true) {
+          return []; // Doctor not available on this day
+        }
+
+        // Use doctor's generated time slots
+        allTimeSlots = List<String>.from(availabilityData['timeSlots'] ?? []);
+      }
+
+      // Fallback to default slots if no availability settings
+      if (allTimeSlots.isEmpty) {
+        final doctorDoc = await _firestore
+            .collection('users')
+            .doc(doctorId)
+            .get();
+        final doctorData = doctorDoc.data();
+        allTimeSlots = List<String>.from(
+          doctorData?['timeSlots'] ??
+              [
+                '09:00 AM',
+                '09:30 AM',
+                '10:00 AM',
+                '10:30 AM',
+                '11:00 AM',
+                '11:30 AM',
+                '02:00 PM',
+                '02:30 PM',
+                '03:00 PM',
+                '03:30 PM',
+                '04:00 PM',
+                '04:30 PM',
+              ],
+        );
+      }
+
+      // Get all appointments for the doctor on the selected date
+      final startOfDay = DateTime(date.year, date.month, date.day);
+      final endOfDay = startOfDay.add(const Duration(days: 1));
+
       final appointmentsSnapshot = await _firestore
           .collection('appointments')
           .where('doctorId', isEqualTo: doctorId)
           .get();
 
-      // Filter appointments for the specific date in memory
-      final startOfDay = DateTime(date.year, date.month, date.day);
-      final endOfDay = startOfDay.add(const Duration(days: 1));
+      // Filter appointments for the specific date and extract booked time slots
+      final bookedSlots = <String>{};
+      for (final doc in appointmentsSnapshot.docs) {
+        final data = doc.data();
+        final appointmentDate = (data['appointmentDate'] as Timestamp).toDate();
 
-      final bookedSlots = appointmentsSnapshot.docs
-          .where((doc) {
-            final appointmentDate = (doc.data()['appointmentDate'] as Timestamp).toDate();
-            return appointmentDate.isAfter(startOfDay) && appointmentDate.isBefore(endOfDay);
-          })
-          .map((doc) => doc.data()['timeSlot'] as String)
-          .toSet();
+        // Check if appointment is on the selected date and not cancelled
+        if (appointmentDate.isAfter(startOfDay) &&
+            appointmentDate.isBefore(endOfDay) &&
+            data['status'] != 'cancelled') {
+          final timeSlot = data['timeSlot'] as String?;
+          if (timeSlot != null) {
+            bookedSlots.add(timeSlot);
+          }
+        }
+      }
 
+      // Return only available (not booked) time slots
       return allTimeSlots.where((slot) => !bookedSlots.contains(slot)).toList();
     } catch (e) {
-      throw Exception('Failed to get available time slots: $e');
+      print('Error getting available time slots: $e');
+      // Return basic time slots as fallback
+      return [
+        '09:00 AM',
+        '10:00 AM',
+        '11:00 AM',
+        '02:00 PM',
+        '03:00 PM',
+        '04:00 PM',
+      ];
     }
+  }
+
+  // Helper method to get day name from date
+  static String _getDayName(DateTime date) {
+    const days = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    return days[date.weekday - 1];
   }
 
   // ============ MEDICAL RECORDS SHARING ============
@@ -678,7 +959,7 @@ class InterconnectService {
         'sharedWithId': sharedWithId,
         'sharedWithType': sharedWithType,
         'createdAt': Timestamp.now(),
-        'expiresAt': expiresIn != null 
+        'expiresAt': expiresIn != null
             ? Timestamp.fromDate(DateTime.now().add(expiresIn))
             : null,
         'isActive': true,
