@@ -15,6 +15,7 @@ import 'screens/hospital_dashboard.dart';
 import 'screens/caregiver_dashboard.dart';
 import 'screens/lab_dashboard.dart';
 import 'screens/pharmacy_dashboard.dart';
+import 'screens/pharmacy_dashboard_new.dart';
 import 'screens/trend_analysis_screen.dart';
 import 'theme/app_theme.dart';
 
@@ -110,7 +111,8 @@ class MyApp extends StatelessWidget {
         '/hospitalDashboard': (context) => const HospitalDashboard(),
         '/caregiverDashboard': (context) => const CaregiverDashboard(),
         '/labDashboard': (context) => const LabDashboard(),
-        '/pharmacyDashboard': (context) => const PharmacyDashboardPage(),
+        '/pharmacyDashboard': (context) => const PharmacyDashboardNew(),
+        '/pharmacyDashboardOld': (context) => const PharmacyDashboardPage(),
         '/trends': (context) => const TrendAnalysisScreen(),
       },
     );
