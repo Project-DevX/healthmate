@@ -307,7 +307,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: categoryInfo['color'].withOpacity(0.1),
+                color: categoryInfo['color'].withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -365,9 +365,9 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 margin: const EdgeInsets.only(bottom: 4),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
+                  color: Colors.blue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                  border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -491,7 +491,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                     margin: const EdgeInsets.only(right: 12),
                     decoration: BoxDecoration(
                       color: isSelected
-                          ? category['color'].withOpacity(0.2)
+                          ? category['color'].withValues(alpha: 0.2)
                           : Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
@@ -532,7 +532,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: category['color'].withOpacity(0.1),
+                            color: category['color'].withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
@@ -628,7 +628,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
 
     return CircleAvatar(
       radius: 24,
-      backgroundColor: color.withOpacity(0.2),
+      backgroundColor: color.withValues(alpha: 0.2),
       child: Icon(iconData, color: color),
     );
   }

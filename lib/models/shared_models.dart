@@ -421,3 +421,225 @@ class NotificationModel {
     };
   }
 }
+
+// Friend Request Model
+class FriendRequest {
+  final String id;
+  final String senderId;
+  final String senderName;
+  final String senderType;
+  final String receiverId;
+  final String receiverName;
+  final String receiverType;
+  final String status; // 'pending', 'accepted', 'declined'
+  final DateTime createdAt;
+  final DateTime? respondedAt;
+
+  FriendRequest({
+    required this.id,
+    required this.senderId,
+    required this.senderName,
+    required this.senderType,
+    required this.receiverId,
+    required this.receiverName,
+    required this.receiverType,
+    required this.status,
+    required this.createdAt,
+    this.respondedAt,
+  });
+
+  factory FriendRequest.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return FriendRequest(
+      id: doc.id,
+      senderId: data['senderId'] ?? '',
+      senderName: data['senderName'] ?? '',
+      senderType: data['senderType'] ?? '',
+      receiverId: data['receiverId'] ?? '',
+      receiverName: data['receiverName'] ?? '',
+      receiverType: data['receiverType'] ?? '',
+      status: data['status'] ?? 'pending',
+      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      respondedAt: data['respondedAt'] != null
+          ? (data['respondedAt'] as Timestamp).toDate()
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'senderId': senderId,
+      'senderName': senderName,
+      'senderType': senderType,
+      'receiverId': receiverId,
+      'receiverName': receiverName,
+      'receiverType': receiverType,
+      'status': status,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'respondedAt': respondedAt != null ? Timestamp.fromDate(respondedAt!) : null,
+    };
+  }
+}
+
+// Friend Model
+class Friend {
+  final String id;
+  final String userId;
+  final String friendId;
+  final String friendName;
+  final String friendType;
+  final DateTime addedAt;
+
+  Friend({
+    required this.id,
+    required this.userId,
+    required this.friendId,
+    required this.friendName,
+    required this.friendType,
+    required this.addedAt,
+  });
+
+  factory Friend.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return Friend(
+      id: doc.id,
+      userId: data['userId'] ?? '',
+      friendId: data['friendId'] ?? '',
+      friendName: data['friendName'] ?? '',
+      friendType: data['friendType'] ?? '',
+      addedAt: (data['addedAt'] as Timestamp).toDate(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'userId': userId,
+      'friendId': friendId,
+      'friendName': friendName,
+      'friendType': friendType,
+      'addedAt': Timestamp.fromDate(addedAt),
+    };
+  }
+}
+
+// Medical Record Permission Model
+class MedicalRecordPermission {
+  final String id;
+  final String patientId;
+  final String doctorId;
+  final String appointmentId;
+  final bool canViewRecords;
+  final bool canViewAnalysis;
+  final bool canWritePrescriptions;
+  final DateTime grantedAt;
+  final DateTime? expiresAt;
+
+  MedicalRecordPermission({
+    required this.id,
+    required this.patientId,
+    required this.doctorId,
+    required this.appointmentId,
+    required this.canViewRecords,
+    required this.canViewAnalysis,
+    required this.canWritePrescriptions,
+    required this.grantedAt,
+    this.expiresAt,
+  });
+
+  factory MedicalRecordPermission.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return MedicalRecordPermission(
+      id: doc.id,
+      patientId: data['patientId'] ?? '',
+      doctorId: data['doctorId'] ?? '',
+      appointmentId: data['appointmentId'] ?? '',
+      canViewRecords: data['canViewRecords'] ?? false,
+      canViewAnalysis: data['canViewAnalysis'] ?? false,
+      canWritePrescriptions: data['canWritePrescriptions'] ?? false,
+      grantedAt: (data['grantedAt'] as Timestamp).toDate(),
+      expiresAt: data['expiresAt'] != null ? (data['expiresAt'] as Timestamp).toDate() : null,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'patientId': patientId,
+      'doctorId': doctorId,
+      'appointmentId': appointmentId,
+      'canViewRecords': canViewRecords,
+      'canViewAnalysis': canViewAnalysis,
+      'canWritePrescriptions': canWritePrescriptions,
+      'grantedAt': Timestamp.fromDate(grantedAt),
+      'expiresAt': expiresAt != null ? Timestamp.fromDate(expiresAt!) : null,
+    };
+  }
+}
+
+// Lab Referral Model
+class LabReferral {
+  final String id;
+  final String patientId;
+  final String patientName;
+  final String doctorId;
+  final String doctorName;
+  final String labId;
+  final String labName;
+  final String appointmentId;
+  final List<String> testTypes;
+  final String status; // 'pending', 'accepted', 'completed', 'cancelled'
+  final String? notes;
+  final DateTime createdAt;
+  final DateTime? completedAt;
+
+  LabReferral({
+    required this.id,
+    required this.patientId,
+    required this.patientName,
+    required this.doctorId,
+    required this.doctorName,
+    required this.labId,
+    required this.labName,
+    required this.appointmentId,
+    required this.testTypes,
+    required this.status,
+    this.notes,
+    required this.createdAt,
+    this.completedAt,
+  });
+
+  factory LabReferral.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return LabReferral(
+      id: doc.id,
+      patientId: data['patientId'] ?? '',
+      patientName: data['patientName'] ?? '',
+      doctorId: data['doctorId'] ?? '',
+      doctorName: data['doctorName'] ?? '',
+      labId: data['labId'] ?? '',
+      labName: data['labName'] ?? '',
+      appointmentId: data['appointmentId'] ?? '',
+      testTypes: List<String>.from(data['testTypes'] ?? []),
+      status: data['status'] ?? 'pending',
+      notes: data['notes'],
+      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      completedAt: data['completedAt'] != null ? (data['completedAt'] as Timestamp).toDate() : null,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'patientId': patientId,
+      'patientName': patientName,
+      'doctorId': doctorId,
+      'doctorName': doctorName,
+      'labId': labId,
+      'labName': labName,
+      'appointmentId': appointmentId,
+      'testTypes': testTypes,
+      'status': status,
+      'notes': notes,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
+    };
+  }
+}

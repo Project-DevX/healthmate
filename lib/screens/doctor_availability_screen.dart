@@ -361,9 +361,9 @@ class _DoctorAvailabilityScreenState extends State<DoctorAvailabilityScreen> {
                           final slot = _generateTimeSlots()[index];
                           return Container(
                             decoration: BoxDecoration(
-                              color: AppTheme.doctorColor.withOpacity(0.1),
+                              color: AppTheme.doctorColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: AppTheme.doctorColor.withOpacity(0.3)),
+                              border: Border.all(color: AppTheme.doctorColor.withValues(alpha: 0.3)),
                             ),
                             child: Center(
                               child: Text(

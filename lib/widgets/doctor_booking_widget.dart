@@ -460,7 +460,7 @@ class _DoctorBookingWidgetState extends State<DoctorBookingWidget> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.1),
+                        color: Colors.orange.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: Colors.orange),
                       ),
@@ -500,7 +500,7 @@ class _DoctorBookingWidgetState extends State<DoctorBookingWidget> {
                           },
                           selectedColor: Theme.of(
                             context,
-                          ).primaryColor.withOpacity(0.2),
+                          ).primaryColor.withValues(alpha: 0.2),
                           checkmarkColor: Theme.of(context).primaryColor,
                         );
                       }).toList(),

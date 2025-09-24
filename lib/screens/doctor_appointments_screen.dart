@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
+import 'doctor_appointment_details_screen.dart';
 
 class DoctorAppointmentsScreen extends StatefulWidget {
   final String doctorId;
@@ -329,7 +330,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
               Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: AppTheme.doctorColor.withOpacity(0.1),
+                    backgroundColor: AppTheme.doctorColor.withValues(alpha: 0.1),
                     child: Text(
                       patientName.isNotEmpty
                           ? patientName[0].toUpperCase()
@@ -362,7 +363,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
+                      color: statusColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -457,44 +458,13 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
   }
 
   void _showAppointmentDetails(QueryDocumentSnapshot appointment) {
-    final data = appointment.data() as Map<String, dynamic>;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Appointment Details'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildDetailRow('Patient', data['patientName'] ?? 'Unknown'),
-            _buildDetailRow('Type', data['appointmentType'] ?? 'Consultation'),
-            _buildDetailRow(
-              'Date',
-              DateFormat(
-                'MMMM dd, yyyy',
-              ).format((data['appointmentDate'] as Timestamp).toDate()),
-            ),
-            _buildDetailRow(
-              'Time',
-              DateFormat(
-                'hh:mm a',
-              ).format((data['appointmentDate'] as Timestamp).toDate()),
-            ),
-            _buildDetailRow('Duration', data['duration'] ?? '30 min'),
-            _buildDetailRow('Status', data['status'] ?? 'scheduled'),
-            if (data['notes'] != null && data['notes'].isNotEmpty)
-              _buildDetailRow('Notes', data['notes']),
-            if (data['patientPhone'] != null)
-              _buildDetailRow('Phone', data['patientPhone']),
-          ],
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DoctorAppointmentDetailsScreen(
+          appointment: appointment,
+          doctorId: widget.doctorId,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
   }

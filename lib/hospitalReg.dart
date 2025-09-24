@@ -403,7 +403,7 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.2),
+                      color: Colors.orange.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: Colors.orange),
                     ),
@@ -615,7 +615,7 @@ class _HospitalRegistrationPageState extends State<HospitalRegistrationPage> {
                     padding: const EdgeInsets.all(12),
                     margin: const EdgeInsets.only(bottom: 16),
                     decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
+                      color: Colors.green.withValues(alpha: 0.1),
                       border: Border.all(color: Colors.green),
                       borderRadius: BorderRadius.circular(8),
                     ),
