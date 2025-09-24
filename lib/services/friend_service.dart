@@ -101,10 +101,14 @@ class FriendService {
     return _firestore
         .collection('friend_requests')
         .where('senderId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
+        .where('status', isEqualTo: 'pending')
         .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => FriendRequest.fromFirestore(doc)).toList());
+        .map((snapshot) {
+          final requests = snapshot.docs.map((doc) => FriendRequest.fromFirestore(doc)).toList();
+          // Sort in memory to avoid composite index requirement
+          requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return requests;
+        });
   }
 
   // Get received friend requests
@@ -113,10 +117,13 @@ class FriendService {
         .collection('friend_requests')
         .where('receiverId', isEqualTo: userId)
         .where('status', isEqualTo: 'pending')
-        .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) =>
-            snapshot.docs.map((doc) => FriendRequest.fromFirestore(doc)).toList());
+        .map((snapshot) {
+          final requests = snapshot.docs.map((doc) => FriendRequest.fromFirestore(doc)).toList();
+          // Sort in memory to avoid composite index requirement
+          requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return requests;
+        });
   }
 
   // Get friends list
