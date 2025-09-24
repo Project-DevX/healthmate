@@ -69,9 +69,9 @@ class _DoctorBookingWidgetState extends State<DoctorBookingWidget> {
     } catch (e) {
       setState(() => _isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load doctors: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load doctors: $e')));
       }
     }
   }
@@ -79,9 +79,14 @@ class _DoctorBookingWidgetState extends State<DoctorBookingWidget> {
   void _filterDoctors() {
     setState(() {
       _filteredDoctors = _doctors.where((doctor) {
-        final matchesSpecialty = _selectedSpecialty == 'All' || doctor.specialty == _selectedSpecialty;
-        final matchesSearch = doctor.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                             doctor.hospitalName.toLowerCase().contains(_searchQuery.toLowerCase());
+        final matchesSpecialty =
+            _selectedSpecialty == 'All' ||
+            doctor.specialty == _selectedSpecialty;
+        final matchesSearch =
+            doctor.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            doctor.hospitalName.toLowerCase().contains(
+              _searchQuery.toLowerCase(),
+            );
         return matchesSpecialty && matchesSearch;
       }).toList();
     });
@@ -91,32 +96,80 @@ class _DoctorBookingWidgetState extends State<DoctorBookingWidget> {
     if (_selectedDoctor == null || _selectedDate == null) return;
 
     try {
+      setState(() {
+        _availableTimeSlots = ['Loading...'];
+      });
+
       final timeSlots = await InterconnectService.getAvailableTimeSlots(
         _selectedDoctor!.id,
         _selectedDate!,
       );
+
       setState(() {
         _availableTimeSlots = timeSlots;
         _selectedTimeSlot = null;
       });
+
+      if (timeSlots.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No available time slots for this date. Please choose another date.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
     } catch (e) {
+      setState(() {
+        _availableTimeSlots = [];
+        _selectedTimeSlot = null;
+      });
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load time slots: $e')),
+          SnackBar(
+            content: Text('Failed to load time slots: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
   }
 
   Future<void> _bookAppointment() async {
-    if (_selectedDoctor == null || _selectedDate == null || _selectedTimeSlot == null) {
+    if (_selectedDoctor == null ||
+        _selectedDate == null ||
+        _selectedTimeSlot == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all required fields')),
+        const SnackBar(
+          content: Text('Please fill all required fields'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_reasonController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please provide a reason for the visit'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
 
     try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
       final appointment = Appointment(
         id: '',
         patientId: widget.patientId,
@@ -136,21 +189,62 @@ class _DoctorBookingWidgetState extends State<DoctorBookingWidget> {
         caregiverId: widget.caregiverId,
       );
 
-      await InterconnectService.bookAppointment(appointment);
+      final appointmentId = await InterconnectService.bookAppointment(
+        appointment,
+      );
+      print('Appointment booked with ID: $appointmentId');
+
+      // Hide loading
+      if (mounted) Navigator.of(context).pop();
 
       if (mounted) {
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(); // Close booking dialog
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Appointment booked successfully!'),
+          SnackBar(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '✅ Appointment booked successfully!',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text('Dr. ${_selectedDoctor!.name}'),
+                Text(
+                  '${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year} at $_selectedTimeSlot',
+                ),
+                const Text('Doctor will be notified'),
+              ],
+            ),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
           ),
         );
+
+        // Clear selections
+        setState(() {
+          _selectedDoctor = null;
+          _selectedDate = null;
+          _selectedTimeSlot = null;
+          _availableTimeSlots = [];
+          _reasonController.clear();
+          _symptomsController.clear();
+        });
       }
     } catch (e) {
+      // Hide loading if still showing
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to book appointment: $e')),
+          SnackBar(
+            content: Text('Failed to book appointment: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
         );
       }
     }
@@ -159,7 +253,7 @@ class _DoctorBookingWidgetState extends State<DoctorBookingWidget> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Book Appointment'),
@@ -241,7 +335,11 @@ class _DoctorBookingWidgetState extends State<DoctorBookingWidget> {
                               Text(doctor.hospitalName),
                               Row(
                                 children: [
-                                  Icon(Icons.star, size: 16, color: Colors.amber),
+                                  Icon(
+                                    Icons.star,
+                                    size: 16,
+                                    color: Colors.amber,
+                                  ),
                                   Text(' ${doctor.rating.toStringAsFixed(1)}'),
                                   const SizedBox(width: 16),
                                   Text('${doctor.experienceYears} years exp.'),
@@ -311,7 +409,9 @@ class _DoctorBookingWidgetState extends State<DoctorBookingWidget> {
                             children: [
                               Text(
                                 doctor.name,
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                               Text(doctor.specialty),
                               Text(doctor.hospitalName),
@@ -323,7 +423,7 @@ class _DoctorBookingWidgetState extends State<DoctorBookingWidget> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Date Selection
                 ListTile(
                   leading: const Icon(Icons.calendar_today),
@@ -346,48 +446,89 @@ class _DoctorBookingWidgetState extends State<DoctorBookingWidget> {
                     }
                   },
                 ),
-                
+
                 // Time Slot Selection
                 if (_selectedDate != null) ...[
                   const SizedBox(height: 12),
-                  const Text('Available Time Slots:', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: _availableTimeSlots.map((slot) {
-                      final isSelected = slot == _selectedTimeSlot;
-                      return FilterChip(
-                        label: Text(slot),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          setDialogState(() {
-                            _selectedTimeSlot = selected ? slot : null;
-                          });
-                        },
-                      );
-                    }).toList(),
+                  const Text(
+                    'Available Time Slots:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
+                  const SizedBox(height: 8),
+
+                  if (_availableTimeSlots.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info, color: Colors.orange),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'No available time slots for this date. Please try another date.',
+                              style: TextStyle(color: Colors.orange),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (_availableTimeSlots.first == 'Loading...')
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _availableTimeSlots.map((slot) {
+                        final isSelected = slot == _selectedTimeSlot;
+                        return FilterChip(
+                          label: Text(slot),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            setDialogState(() {
+                              _selectedTimeSlot = selected ? slot : null;
+                            });
+                          },
+                          selectedColor: Theme.of(
+                            context,
+                          ).primaryColor.withOpacity(0.2),
+                          checkmarkColor: Theme.of(context).primaryColor,
+                        );
+                      }).toList(),
+                    ),
                 ],
-                
+
                 const SizedBox(height: 16),
-                
-                // Reason
+
+                // Reason (Required)
                 TextField(
                   controller: _reasonController,
                   decoration: const InputDecoration(
-                    labelText: 'Reason for visit',
+                    labelText: 'Reason for visit *',
+                    hintText: 'e.g., Routine checkup, Follow-up, Consultation',
                     border: OutlineInputBorder(),
+                    helperText: 'Required field',
                   ),
                   maxLines: 2,
                 ),
-                
+
                 const SizedBox(height: 12),
-                
-                // Symptoms
+
+                // Symptoms (Optional)
                 TextField(
                   controller: _symptomsController,
                   decoration: const InputDecoration(
                     labelText: 'Symptoms (optional)',
+                    hintText: 'Describe any symptoms you are experiencing',
                     border: OutlineInputBorder(),
                   ),
                   maxLines: 2,
