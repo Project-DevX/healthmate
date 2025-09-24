@@ -6,6 +6,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
 import '../models/shared_models.dart';
 import '../services/interconnect_service.dart';
+import '../theme/app_theme.dart';
+import 'chat_page.dart';
 import 'dart:io';
 
 class PharmacyDashboardPage extends StatefulWidget {
@@ -119,7 +121,9 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
                   return Card(
                     child: ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: isPriority ? Colors.red : Colors.blue,
+                        backgroundColor: isPriority
+                            ? Colors.red
+                            : AppTheme.pharmacyColor,
                         child: Text(prescription['id'].substring(2)),
                       ),
                       title: Text(prescription['patientName']),
@@ -292,7 +296,7 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
                     child: ListTile(
                       leading: Icon(
                         Icons.medication,
-                        color: isLowStock ? Colors.red : Colors.blue,
+                        color: isLowStock ? Colors.red : AppTheme.pharmacyColor,
                       ),
                       title: Text(item['name']),
                       subtitle: Column(
@@ -386,8 +390,8 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
                           : Container(
                               width: 8,
                               height: 8,
-                              decoration: const BoxDecoration(
-                                color: Colors.blue,
+                              decoration: BoxDecoration(
+                                color: AppTheme.pharmacyColor,
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -639,7 +643,7 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
                     'Monthly Revenue',
                     '₹4,25,650',
                     Icons.trending_up,
-                    Colors.blue,
+                    AppTheme.pharmacyColor,
                   ),
                   _buildReportCard(
                     'Top Medications',
@@ -751,7 +755,7 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
       case 'Pending':
         return Colors.orange.withOpacity(0.3);
       case 'Ready':
-        return Colors.blue.withOpacity(0.3);
+        return AppTheme.pharmacyColor.withOpacity(0.3);
       case 'Fulfilled':
         return Colors.green.withOpacity(0.3);
       default:
@@ -764,7 +768,7 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
       case 'warning':
         return Colors.orange;
       case 'info':
-        return Colors.blue;
+        return AppTheme.pharmacyColor;
       case 'success':
         return Colors.green;
       case 'error':
@@ -1165,7 +1169,7 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final Color mainBlue = theme.primaryColor;
+    final Color mainBlue = AppTheme.pharmacyColor;
     final Color scaffoldBg = theme.scaffoldBackgroundColor;
     final Color textColor = theme.textTheme.bodyLarge?.color ?? Colors.black;
     final Color subTextColor = theme.textTheme.bodyMedium?.color ?? Colors.grey;
@@ -1262,7 +1266,7 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
                           'Total Prescriptions',
                           '$totalPrescriptions',
                           Icons.receipt_long,
-                          Colors.blue,
+                          AppTheme.pharmacyColor,
                           textColor,
                           cardColor,
                         ),
@@ -1380,12 +1384,7 @@ class _PharmacyDashboardPageState extends State<PharmacyDashboardPage> {
               ),
             )
           : _selectedBottomNav == 1
-          ? Center(
-              child: Text(
-                'Chat System (Functional)',
-                style: TextStyle(fontSize: 20, color: textColor),
-              ),
-            )
+          ? const ChatPage()
           : const PharmacyProfilePage(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedBottomNav,

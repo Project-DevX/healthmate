@@ -5,6 +5,8 @@ import '../services/auth_service.dart';
 import '../login.dart';
 import 'analytics_page.dart';
 import 'profile_page.dart';
+import 'chat_page.dart';
+import '../theme/app_theme.dart';
 
 class HospitalDashboard extends StatefulWidget {
   const HospitalDashboard({Key? key}) : super(key: key);
@@ -308,9 +310,9 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           child: ListTile(
-                            leading: const Icon(
+                            leading: Icon(
                               Icons.calendar_today,
-                              color: Colors.blue,
+                              color: AppTheme.hospitalColor,
                             ),
                             title: Text(
                               appointment['patientName'] ?? 'Unknown Patient',
@@ -417,7 +419,7 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final Color mainBlue = theme.primaryColor;
+    final Color mainBlue = AppTheme.hospitalColor;
     final Color scaffoldBg = theme.scaffoldBackgroundColor;
     final Color textColor = theme.textTheme.bodyLarge?.color ?? Colors.black;
     final Color subTextColor = theme.textTheme.bodyMedium?.color ?? Colors.grey;
@@ -515,7 +517,7 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
                           'Staff',
                           '${totalStaff}',
                           Icons.people,
-                          Colors.blue,
+                          AppTheme.hospitalColor,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -614,9 +616,7 @@ class _HospitalDashboardState extends State<HospitalDashboard> {
               ),
             )
           : _selectedBottomNav == 1
-          ? const Center(
-              child: Text('Chat System (Stub)', style: TextStyle(fontSize: 20)),
-            )
+          ? const ChatPage()
           : const ProfilePage(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedBottomNav,

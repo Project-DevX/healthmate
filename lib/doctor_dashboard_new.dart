@@ -558,25 +558,62 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
   }
 
   Widget _buildHomeScreen() {
-    return RefreshIndicator(
-      onRefresh: () async {
-        await _loadUserData();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 800;
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            await _loadUserData();
+          },
+          color: AppTheme.doctorColor,
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(isDesktop ? 24 : 16),
+            child: Column(
+              children: [
+                _buildWelcomeCard(),
+                const SizedBox(height: 16),
+                if (isDesktop) ...[
+                  // Desktop: Two-column layout
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          children: [
+                            _buildStatsGrid(),
+                            const SizedBox(height: 24),
+                            _buildQuickActionsSection(),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 24),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            _buildTodayAppointmentsSection(),
+                            const SizedBox(height: 24),
+                            _buildRecentActivitiesSection(),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  // Mobile/Tablet: Single column layout
+                  _buildStatsGrid(),
+                  const SizedBox(height: 24),
+                  _buildTodayAppointmentsSection(),
+                  const SizedBox(height: 24),
+                  _buildQuickActionsSection(),
+                  const SizedBox(height: 24),
+                  _buildRecentActivitiesSection(),
+                ],
+              ],
+            ),
+          ),
+        );
       },
-      color: AppTheme.doctorColor,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildWelcomeCard(),
-          const SizedBox(height: 16),
-          _buildStatsGrid(),
-          const SizedBox(height: 24),
-          _buildTodayAppointmentsSection(),
-          const SizedBox(height: 24),
-          _buildQuickActionsSection(),
-          const SizedBox(height: 24),
-          _buildRecentActivitiesSection(),
-        ],
-      ),
     );
   }
 
@@ -652,38 +689,52 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
   }
 
   Widget _buildStatsGrid() {
-    return GridView.count(
-      crossAxisCount: 2,
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      children: [
-        _buildStatCard(
-          'Total Appointments',
-          totalAppointments.toString(),
-          Icons.calendar_month,
-          Colors.blue,
-        ),
-        _buildStatCard(
-          'Today\'s Appointments',
-          todayAppointments.toString(),
-          Icons.today,
-          Colors.orange,
-        ),
-        _buildStatCard(
-          'Pending Lab Reports',
-          pendingLabReports.toString(),
-          Icons.science,
-          Colors.purple,
-        ),
-        _buildStatCard(
-          'Total Patients',
-          totalPatients.toString(),
-          Icons.people,
-          Colors.green,
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Determine cross axis count based on available width
+        int crossAxisCount;
+        if (constraints.maxWidth >= 600) {
+          // Desktop/Tablet: 4 cards in a row
+          crossAxisCount = 4;
+        } else {
+          // Mobile: 2 cards per row (2 rows total)
+          crossAxisCount = 2;
+        }
+
+        return GridView.count(
+          crossAxisCount: crossAxisCount,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          children: [
+            _buildStatCard(
+              'Total Appointments',
+              totalAppointments.toString(),
+              Icons.calendar_month,
+              Colors.blue,
+            ),
+            _buildStatCard(
+              'Today\'s Appointments',
+              todayAppointments.toString(),
+              Icons.today,
+              Colors.orange,
+            ),
+            _buildStatCard(
+              'Pending Lab Reports',
+              pendingLabReports.toString(),
+              Icons.science,
+              Colors.purple,
+            ),
+            _buildStatCard(
+              'Total Patients',
+              totalPatients.toString(),
+              Icons.people,
+              Colors.green,
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -831,67 +882,133 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
   }
 
   Widget _buildQuickActionsSection() {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Quick Actions',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 800;
+
+        return Card(
+          elevation: 3,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildQuickActionItem(
-                  icon: Icons.search,
-                  label: 'Search\nPatient',
-                  color: Colors.blue,
-                  onTap: () {
-                    setState(() => _selectedIndex = 2);
-                  },
+                const Text(
+                  'Quick Actions',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                _buildQuickActionItem(
-                  icon: Icons.receipt,
-                  label: 'New\nPrescription',
-                  color: Colors.green,
-                  onTap: () {
-                    setState(() => _selectedIndex = 3);
-                  },
-                ),
-                _buildQuickActionItem(
-                  icon: Icons.science,
-                  label: 'Lab\nRequest',
-                  color: Colors.purple,
-                  onTap: () {
-                    setState(() => _selectedIndex = 4);
-                  },
-                ),
-                _buildQuickActionItem(
-                  icon: Icons.schedule,
-                  label: 'Set\nAvailability',
-                  color: Colors.orange,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => DoctorAvailabilityScreen(
-                          doctorId: userData!['uid'],
-                          doctorName: UserDataUtils.getDisplayName(userData),
-                        ),
+                const SizedBox(height: 16),
+                if (isDesktop) ...[
+                  // Desktop: 4 buttons in a row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildQuickActionItem(
+                        icon: Icons.search,
+                        label: 'Search\nPatient',
+                        color: Colors.blue,
+                        onTap: () {
+                          setState(() => _selectedIndex = 2);
+                        },
                       ),
-                    );
-                  },
-                ),
+                      _buildQuickActionItem(
+                        icon: Icons.receipt,
+                        label: 'New\nPrescription',
+                        color: Colors.green,
+                        onTap: () {
+                          setState(() => _selectedIndex = 3);
+                        },
+                      ),
+                      _buildQuickActionItem(
+                        icon: Icons.science,
+                        label: 'Lab\nRequest',
+                        color: Colors.purple,
+                        onTap: () {
+                          setState(() => _selectedIndex = 4);
+                        },
+                      ),
+                      _buildQuickActionItem(
+                        icon: Icons.schedule,
+                        label: 'Set\nAvailability',
+                        color: Colors.orange,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => DoctorAvailabilityScreen(
+                                doctorId: userData!['uid'],
+                                doctorName: UserDataUtils.getDisplayName(
+                                  userData,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  // Mobile/Tablet: 2x2 grid
+                  GridView.count(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    children: [
+                      _buildQuickActionItem(
+                        icon: Icons.search,
+                        label: 'Search\nPatient',
+                        color: Colors.blue,
+                        onTap: () {
+                          setState(() => _selectedIndex = 2);
+                        },
+                      ),
+                      _buildQuickActionItem(
+                        icon: Icons.receipt,
+                        label: 'New\nPrescription',
+                        color: Colors.green,
+                        onTap: () {
+                          setState(() => _selectedIndex = 3);
+                        },
+                      ),
+                      _buildQuickActionItem(
+                        icon: Icons.science,
+                        label: 'Lab\nRequest',
+                        color: Colors.purple,
+                        onTap: () {
+                          setState(() => _selectedIndex = 4);
+                        },
+                      ),
+                      _buildQuickActionItem(
+                        icon: Icons.schedule,
+                        label: 'Set\nAvailability',
+                        color: Colors.orange,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => DoctorAvailabilityScreen(
+                                doctorId: userData!['uid'],
+                                doctorName: UserDataUtils.getDisplayName(
+                                  userData,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 

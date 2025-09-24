@@ -16,10 +16,12 @@ class DoctorPatientManagementScreen extends StatefulWidget {
   });
 
   @override
-  State<DoctorPatientManagementScreen> createState() => _DoctorPatientManagementScreenState();
+  State<DoctorPatientManagementScreen> createState() =>
+      _DoctorPatientManagementScreenState();
 }
 
-class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementScreen>
+class _DoctorPatientManagementScreenState
+    extends State<DoctorPatientManagementScreen>
     with SingleTickerProviderStateMixin {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final TextEditingController _searchController = TextEditingController();
@@ -62,7 +64,10 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
       // Get patient details and their latest appointment info
       for (String patientId in patientIds) {
         try {
-          final patientDoc = await _firestore.collection('users').doc(patientId).get();
+          final patientDoc = await _firestore
+              .collection('users')
+              .doc(patientId)
+              .get();
           if (patientDoc.exists) {
             final patientData = patientDoc.data()!;
             patientData['id'] = patientId;
@@ -76,14 +81,19 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
 
             if (latestAppointment.docs.isNotEmpty) {
               // Sort in memory to find latest appointment
-              final sortedAppointments = latestAppointment.docs
-                  .map((doc) => doc.data())
-                  .toList()
-                ..sort((a, b) => (b['appointmentDate'] as Timestamp).compareTo(a['appointmentDate'] as Timestamp));
-              
+              final sortedAppointments =
+                  latestAppointment.docs.map((doc) => doc.data()).toList()
+                    ..sort(
+                      (a, b) => (b['appointmentDate'] as Timestamp).compareTo(
+                        a['appointmentDate'] as Timestamp,
+                      ),
+                    );
+
               if (sortedAppointments.isNotEmpty) {
-                patientData['lastVisit'] = sortedAppointments.first['appointmentDate'];
-                patientData['appointmentStatus'] = sortedAppointments.first['status'];
+                patientData['lastVisit'] =
+                    sortedAppointments.first['appointmentDate'];
+                patientData['appointmentStatus'] =
+                    sortedAppointments.first['status'];
               }
             }
 
@@ -122,8 +132,9 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
       });
     } catch (e) {
       print('Error loading patients: $e');
+      final samplePatients = await _getSamplePatients();
       setState(() {
-        _allPatients = await _getSamplePatients();
+        _allPatients = samplePatients;
         _filteredPatients = _allPatients;
         _isLoading = false;
       });
@@ -141,7 +152,9 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
         'age': 45,
         'gender': 'Male',
         'bloodType': 'O+',
-        'lastVisit': Timestamp.fromDate(DateTime.now().subtract(const Duration(days: 7))),
+        'lastVisit': Timestamp.fromDate(
+          DateTime.now().subtract(const Duration(days: 7)),
+        ),
         'appointmentStatus': 'completed',
         'prescriptionCount': 3,
         'labReportCount': 2,
@@ -156,7 +169,9 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
         'age': 32,
         'gender': 'Female',
         'bloodType': 'A+',
-        'lastVisit': Timestamp.fromDate(DateTime.now().subtract(const Duration(days: 3))),
+        'lastVisit': Timestamp.fromDate(
+          DateTime.now().subtract(const Duration(days: 3)),
+        ),
         'appointmentStatus': 'completed',
         'prescriptionCount': 1,
         'labReportCount': 1,
@@ -171,7 +186,9 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
         'age': 28,
         'gender': 'Male',
         'bloodType': 'B+',
-        'lastVisit': Timestamp.fromDate(DateTime.now().subtract(const Duration(days: 1))),
+        'lastVisit': Timestamp.fromDate(
+          DateTime.now().subtract(const Duration(days: 1)),
+        ),
         'appointmentStatus': 'completed',
         'prescriptionCount': 2,
         'labReportCount': 3,
@@ -186,7 +203,9 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
         'age': 55,
         'gender': 'Female',
         'bloodType': 'AB+',
-        'lastVisit': Timestamp.fromDate(DateTime.now().subtract(const Duration(days: 14))),
+        'lastVisit': Timestamp.fromDate(
+          DateTime.now().subtract(const Duration(days: 14)),
+        ),
         'appointmentStatus': 'completed',
         'prescriptionCount': 5,
         'labReportCount': 4,
@@ -199,16 +218,19 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
     final query = _searchController.text.toLowerCase();
     setState(() {
       _filteredPatients = _allPatients.where((patient) {
-        final name = '${patient['firstName']} ${patient['lastName']}'.toLowerCase();
+        final name = '${patient['firstName']} ${patient['lastName']}'
+            .toLowerCase();
         final email = (patient['email'] ?? '').toLowerCase();
         final condition = (patient['condition'] ?? '').toLowerCase();
-        
-        final matchesSearch = query.isEmpty || 
-            name.contains(query) || 
-            email.contains(query) || 
+
+        final matchesSearch =
+            query.isEmpty ||
+            name.contains(query) ||
+            email.contains(query) ||
             condition.contains(query);
 
-        final matchesFilter = _selectedFilter == 'All' ||
+        final matchesFilter =
+            _selectedFilter == 'All' ||
             (_selectedFilter == 'Recent' && _isRecentPatient(patient)) ||
             (_selectedFilter == 'Chronic' && _isChronicPatient(patient)) ||
             (_selectedFilter == 'Follow-up' && _needsFollowUp(patient));
@@ -226,10 +248,10 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
 
   bool _isChronicPatient(Map<String, dynamic> patient) {
     final condition = patient['condition']?.toLowerCase() ?? '';
-    return condition.contains('diabetes') || 
-           condition.contains('hypertension') || 
-           condition.contains('arthritis') ||
-           (patient['prescriptionCount'] ?? 0) >= 3;
+    return condition.contains('diabetes') ||
+        condition.contains('hypertension') ||
+        condition.contains('arthritis') ||
+        (patient['prescriptionCount'] ?? 0) >= 3;
   }
 
   bool _needsFollowUp(Map<String, dynamic> patient) {
@@ -283,21 +305,25 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: ['All', 'Recent', 'Chronic', 'Follow-up'].map((filter) => 
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: FilterChip(
-                          label: Text(filter),
-                          selected: _selectedFilter == filter,
-                          onSelected: (selected) {
-                            setState(() => _selectedFilter = filter);
-                            _filterPatients();
-                          },
-                          selectedColor: AppTheme.doctorColor.withOpacity(0.2),
-                          checkmarkColor: AppTheme.doctorColor,
-                        ),
-                      ),
-                    ).toList(),
+                    children: ['All', 'Recent', 'Chronic', 'Follow-up']
+                        .map(
+                          (filter) => Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: FilterChip(
+                              label: Text(filter),
+                              selected: _selectedFilter == filter,
+                              onSelected: (selected) {
+                                setState(() => _selectedFilter = filter);
+                                _filterPatients();
+                              },
+                              selectedColor: AppTheme.doctorColor.withOpacity(
+                                0.2,
+                              ),
+                              checkmarkColor: AppTheme.doctorColor,
+                            ),
+                          ),
+                        )
+                        .toList(),
                   ),
                 ),
               ],
@@ -310,8 +336,12 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
               controller: _tabController,
               children: [
                 _buildPatientsList(_filteredPatients),
-                _buildPatientsList(_allPatients.where(_isRecentPatient).toList()),
-                _buildPatientsList(_allPatients.where(_isChronicPatient).toList()),
+                _buildPatientsList(
+                  _allPatients.where(_isRecentPatient).toList(),
+                ),
+                _buildPatientsList(
+                  _allPatients.where(_isChronicPatient).toList(),
+                ),
                 _buildPatientsList(_allPatients.where(_needsFollowUp).toList()),
               ],
             ),
@@ -337,26 +367,16 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.people_outline,
-              size: 64,
-              color: Colors.grey[400],
-            ),
+            Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
               'No patients found',
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey[600],
-              ),
+              style: TextStyle(fontSize: 18, color: Colors.grey[600]),
             ),
             const SizedBox(height: 8),
             Text(
               'Patients who book appointments with you will appear here',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[500],
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
               textAlign: TextAlign.center,
             ),
           ],
@@ -376,7 +396,9 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
 
   Widget _buildPatientCard(Map<String, dynamic> patient) {
     final lastVisit = patient['lastVisit'] != null
-        ? DateFormat('MMM dd, yyyy').format((patient['lastVisit'] as Timestamp).toDate())
+        ? DateFormat(
+            'MMM dd, yyyy',
+          ).format((patient['lastVisit'] as Timestamp).toDate())
         : 'No visits';
 
     return Card(
@@ -423,7 +445,10 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
                         if (patient['condition'] != null)
                           Container(
                             margin: const EdgeInsets.only(top: 4),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: AppTheme.infoBlue.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(4),
@@ -451,9 +476,15 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
                 children: [
                   _buildInfoChip('Last Visit: $lastVisit', Icons.schedule),
                   const SizedBox(width: 8),
-                  _buildInfoChip('Prescriptions: ${patient['prescriptionCount'] ?? 0}', Icons.medication),
+                  _buildInfoChip(
+                    'Prescriptions: ${patient['prescriptionCount'] ?? 0}',
+                    Icons.medication,
+                  ),
                   const SizedBox(width: 8),
-                  _buildInfoChip('Lab Reports: ${patient['labReportCount'] ?? 0}', Icons.science),
+                  _buildInfoChip(
+                    'Lab Reports: ${patient['labReportCount'] ?? 0}',
+                    Icons.science,
+                  ),
                 ],
               ),
             ],
@@ -475,13 +506,7 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
         children: [
           Icon(icon, size: 14, color: Colors.grey[600]),
           const SizedBox(width: 4),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
-          ),
+          Text(text, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
         ],
       ),
     );
@@ -580,18 +605,35 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
               _buildDetailSection('Personal Information', [
                 _buildDetailRow('Age', '${patient['age']} years'),
                 _buildDetailRow('Gender', patient['gender'] ?? 'Not specified'),
-                _buildDetailRow('Blood Type', patient['bloodType'] ?? 'Unknown'),
-                _buildDetailRow('Condition', patient['condition'] ?? 'None specified'),
+                _buildDetailRow(
+                  'Blood Type',
+                  patient['bloodType'] ?? 'Unknown',
+                ),
+                _buildDetailRow(
+                  'Condition',
+                  patient['condition'] ?? 'None specified',
+                ),
               ]),
 
               const SizedBox(height: 16),
 
               _buildDetailSection('Medical Summary', [
-                _buildDetailRow('Total Prescriptions', '${patient['prescriptionCount'] ?? 0}'),
-                _buildDetailRow('Lab Reports', '${patient['labReportCount'] ?? 0}'),
-                _buildDetailRow('Last Visit', patient['lastVisit'] != null 
-                    ? DateFormat('MMM dd, yyyy').format((patient['lastVisit'] as Timestamp).toDate())
-                    : 'No visits'),
+                _buildDetailRow(
+                  'Total Prescriptions',
+                  '${patient['prescriptionCount'] ?? 0}',
+                ),
+                _buildDetailRow(
+                  'Lab Reports',
+                  '${patient['labReportCount'] ?? 0}',
+                ),
+                _buildDetailRow(
+                  'Last Visit',
+                  patient['lastVisit'] != null
+                      ? DateFormat(
+                          'MMM dd, yyyy',
+                        ).format((patient['lastVisit'] as Timestamp).toDate())
+                      : 'No visits',
+                ),
               ]),
             ],
           ),
@@ -617,13 +659,8 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 120,
-            child: Text(label, style: AppTheme.bodySmall),
-          ),
-          Expanded(
-            child: Text(value, style: AppTheme.bodyMedium),
-          ),
+          SizedBox(width: 120, child: Text(label, style: AppTheme.bodySmall)),
+          Expanded(child: Text(value, style: AppTheme.bodyMedium)),
         ],
       ),
     );
@@ -675,7 +712,9 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
   void _scheduleAppointment(Map<String, dynamic> patient) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Scheduling appointment for ${patient['firstName']} ${patient['lastName']}'),
+        content: Text(
+          'Scheduling appointment for ${patient['firstName']} ${patient['lastName']}',
+        ),
         backgroundColor: AppTheme.infoBlue,
       ),
     );
@@ -684,7 +723,9 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
   void _createPrescription(Map<String, dynamic> patient) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Creating prescription for ${patient['firstName']} ${patient['lastName']}'),
+        content: Text(
+          'Creating prescription for ${patient['firstName']} ${patient['lastName']}',
+        ),
         backgroundColor: AppTheme.accentPurple,
       ),
     );
@@ -693,7 +734,9 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
   void _requestLabTest(Map<String, dynamic> patient) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Requesting lab test for ${patient['firstName']} ${patient['lastName']}'),
+        content: Text(
+          'Requesting lab test for ${patient['firstName']} ${patient['lastName']}',
+        ),
         backgroundColor: AppTheme.successGreen,
       ),
     );
@@ -702,7 +745,9 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
   void _callPatient(Map<String, dynamic> patient) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Calling ${patient['firstName']} ${patient['lastName']} at ${patient['phoneNumber']}'),
+        content: Text(
+          'Calling ${patient['firstName']} ${patient['lastName']} at ${patient['phoneNumber']}',
+        ),
         backgroundColor: AppTheme.warningOrange,
       ),
     );
@@ -711,7 +756,9 @@ class _DoctorPatientManagementScreenState extends State<DoctorPatientManagementS
   void _showAddPatientDialog() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Manual patient addition feature coming soon. Patients are automatically added when they book appointments.'),
+        content: Text(
+          'Manual patient addition feature coming soon. Patients are automatically added when they book appointments.',
+        ),
         backgroundColor: AppTheme.infoBlue,
       ),
     );

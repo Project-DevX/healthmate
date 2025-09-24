@@ -14,6 +14,7 @@ import 'analytics_page.dart';
 import 'availability_page.dart';
 import 'profile_page.dart';
 import 'rating_page.dart';
+import '../theme/app_theme.dart';
 
 class DoctorDashboard extends StatefulWidget {
   const DoctorDashboard({Key? key}) : super(key: key);
@@ -177,7 +178,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final Color mainBlue = const Color(0xFF2196F3);
+    final Color mainBlue = AppTheme.doctorColor;
     final Color successGreen = const Color(0xFF4CAF50);
     final Color cardBg = isDarkMode
         ? const Color(0xFF232A34)
@@ -298,7 +299,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
                             'Patients',
                             '${patients.length}',
                             Icons.people,
-                            Colors.blue,
+                            AppTheme.doctorColor,
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -588,7 +589,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'scheduled':
-        return Colors.blue;
+        return AppTheme.doctorColor;
       case 'confirmed':
         return Colors.green;
       case 'pending':

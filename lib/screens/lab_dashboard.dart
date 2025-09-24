@@ -6,6 +6,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
 import '../models/shared_models.dart';
 import '../services/interconnect_service.dart';
+import '../theme/app_theme.dart';
+import 'chat_page.dart';
 import 'dart:io';
 
 class LabDashboard extends StatefulWidget {
@@ -355,7 +357,7 @@ class _LabDashboardState extends State<LabDashboard> {
                         _getTestIcon(test['testType']),
                         color: test['priority'] == 'Urgent'
                             ? Colors.red
-                            : Colors.blue,
+                            : AppTheme.labColor,
                       ),
                       title: Text('${test['id']} - ${test['patientName']}'),
                       subtitle: Text('${test['testType']} | ${test['date']}'),
@@ -443,7 +445,7 @@ class _LabDashboardState extends State<LabDashboard> {
                       leading: CircleAvatar(
                         backgroundColor: test['priority'] == 'Urgent'
                             ? Colors.red
-                            : Colors.blue,
+                            : AppTheme.labColor,
                         child: Text(test['id'].substring(3)),
                       ),
                       title: Text(test['patientName']),
@@ -747,8 +749,8 @@ class _LabDashboardState extends State<LabDashboard> {
                   ),
                   Card(
                     child: ListTile(
-                      leading: const CircleAvatar(
-                        backgroundColor: Colors.blue,
+                      leading: CircleAvatar(
+                        backgroundColor: AppTheme.labColor,
                         child: Icon(Icons.assignment, color: Colors.white),
                       ),
                       title: const Text('New Test Assignment'),
@@ -788,7 +790,7 @@ class _LabDashboardState extends State<LabDashboard> {
       case 'Pending':
         return Colors.orange.withOpacity(0.3);
       case 'In Progress':
-        return Colors.blue.withOpacity(0.3);
+        return AppTheme.labColor.withOpacity(0.3);
       case 'Completed':
         return Colors.green.withOpacity(0.3);
       default:
@@ -799,7 +801,7 @@ class _LabDashboardState extends State<LabDashboard> {
   Color _getAppointmentStatusColor(String status) {
     switch (status) {
       case 'Scheduled':
-        return Colors.blue.withOpacity(0.3);
+        return AppTheme.labColor.withOpacity(0.3);
       case 'Checked In':
         return Colors.orange.withOpacity(0.3);
       case 'Completed':
@@ -1114,7 +1116,7 @@ class _LabDashboardState extends State<LabDashboard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final Color mainBlue = theme.primaryColor;
+    final Color mainBlue = AppTheme.labColor;
     final Color scaffoldBg = theme.scaffoldBackgroundColor;
     final Color textColor = theme.textTheme.bodyLarge?.color ?? Colors.black;
     final Color subTextColor = theme.textTheme.bodyMedium?.color ?? Colors.grey;
@@ -1230,7 +1232,7 @@ class _LabDashboardState extends State<LabDashboard> {
                           "Today's Appointments",
                           '$todaysAppointments',
                           Icons.calendar_today,
-                          Colors.blue,
+                          AppTheme.labColor,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -1302,9 +1304,7 @@ class _LabDashboardState extends State<LabDashboard> {
               ),
             )
           : _selectedBottomNav == 1
-          ? const Center(
-              child: Text('Chat System (Stub)', style: TextStyle(fontSize: 20)),
-            )
+          ? const ChatPage()
           : const LabProfilePage(),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedBottomNav,
