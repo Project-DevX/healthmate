@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/shared_models.dart';
 import '../services/consent_service.dart';
 import '../theme/app_theme.dart';
@@ -368,6 +369,33 @@ class _PatientMedicalRecordsScreenState
     );
   }
 
+  Future<void> _launchUrl(String url, String fileName) async {
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Could not open $fileName'),
+              backgroundColor: AppTheme.errorRed,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening $fileName: ${e.toString()}'),
+            backgroundColor: AppTheme.errorRed,
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildEmptyState(String title, String message, IconData icon) {
     return Center(
       child: Column(
@@ -588,116 +616,12 @@ class _PatientMedicalRecordsScreenState
             if (downloadUrl.isNotEmpty) ...[
               const SizedBox(height: 12),
               ElevatedButton.icon(
-                onPressed: () {
-                  // TODO: Implement download/view functionality
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Download feature coming soon'),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.download, size: 16),
-                label: const Text('Download Report'),
+                onPressed: () => _launchUrl(downloadUrl, fileName),
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: const Text('View Report'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryBlue,
                   foregroundColor: Colors.white,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLabReportCard(LabReport report) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.successGreen.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.science,
-                    color: AppTheme.successGreen,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        report.testName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                        ),
-                      ),
-                      Text(
-                        '${DateFormat('MMM dd, yyyy').format(report.testDate)} • ${report.status}',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppTheme.textMedium,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (report.results != null && report.results!.isNotEmpty) ...[
-              Text(
-                'Results:',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textDark,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...report.results!.entries.map(
-                (entry) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          entry.key,
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      ),
-                      Text(
-                        entry.value.toString(),
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: AppTheme.primaryBlue,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-            if (report.notes != null && report.notes!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Notes: ${report.notes}',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontStyle: FontStyle.italic,
-                  color: AppTheme.textMedium,
                 ),
               ),
             ],
@@ -868,16 +792,9 @@ class _PatientMedicalRecordsScreenState
               if (downloadUrl.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 ElevatedButton.icon(
-                  onPressed: () {
-                    // TODO: Implement download/view functionality
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Download feature coming soon'),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.download, size: 16),
-                  label: const Text('Download Document'),
+                  onPressed: () => _launchUrl(downloadUrl, fileName),
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text('View Document'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primaryBlue,
                     foregroundColor: Colors.white,
