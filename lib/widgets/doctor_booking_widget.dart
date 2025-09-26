@@ -7,7 +7,6 @@ class DoctorBookingWidget extends StatefulWidget {
   final String patientId;
   final String patientName;
   final String patientEmail;
-  final String? patientPhone;
   final String? caregiverId;
 
   const DoctorBookingWidget({
@@ -15,7 +14,6 @@ class DoctorBookingWidget extends StatefulWidget {
     required this.patientId,
     required this.patientName,
     required this.patientEmail,
-    this.patientPhone,
     this.caregiverId,
   }) : super(key: key);
 
@@ -177,7 +175,6 @@ class _DoctorBookingWidgetState extends State<DoctorBookingWidget> {
         patientId: widget.patientId,
         patientName: widget.patientName,
         patientEmail: widget.patientEmail,
-        patientPhone: widget.patientPhone,
         doctorId: _selectedDoctor!.id,
         doctorName: _selectedDoctor!.name,
         doctorSpecialty: _selectedDoctor!.specialty,

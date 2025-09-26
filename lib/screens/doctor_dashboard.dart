@@ -75,37 +75,41 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
         doctorData = docSnap.data();
       }
 
-      // Fetch appointments (using appointments collection with doctorId field)
+      // Fetch appointments (assuming appointments collection with doctorId field)
       try {
         final apptSnap = await FirebaseFirestore.instance
             .collection('appointments')
             .where('doctorId', isEqualTo: uid)
+            .orderBy('date', descending: false)
+            .limit(5)
             .get();
-
-        // Get all appointments and sort by date in memory
-        final allAppointments = apptSnap.docs.map((d) {
-          final data = d.data();
-          data['id'] = d.id; // Include document ID
-          return data;
-        }).toList();
-
-        // Sort by appointment date
-        allAppointments.sort((a, b) {
-          final aDate = (a['appointmentDate'] as Timestamp?)?.toDate();
-          final bDate = (b['appointmentDate'] as Timestamp?)?.toDate();
-          if (aDate == null || bDate == null) return 0;
-          return aDate.compareTo(bDate);
-        });
-
-        // Take only the first 5 for dashboard
-        appointments = allAppointments.take(5).toList();
-
-        print(
-          '✅ Doctor Dashboard: Loaded ${appointments.length} appointments for doctor $uid',
-        );
+        appointments = apptSnap.docs.map((d) => d.data()).toList();
       } catch (e) {
-        print('❌ Error fetching appointments: $e');
-        appointments = []; // Don't use sample data, use empty list
+        print('Error fetching appointments: $e');
+        // Add sample appointments data
+        appointments = [
+          {
+            'patientName': 'John Doe',
+            'date': '2025-07-02',
+            'time': '10:00 AM',
+            'status': 'Scheduled',
+            'patientAvatar': null,
+          },
+          {
+            'patientName': 'Jane Smith',
+            'date': '2025-07-02',
+            'time': '2:00 PM',
+            'status': 'Confirmed',
+            'patientAvatar': null,
+          },
+          {
+            'patientName': 'Mike Johnson',
+            'date': '2025-07-03',
+            'time': '9:00 AM',
+            'status': 'Pending',
+            'patientAvatar': null,
+          },
+        ];
       }
 
       // Fetch patients (assuming patients collection with doctorId field)

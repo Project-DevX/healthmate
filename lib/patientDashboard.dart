@@ -18,11 +18,7 @@ import 'screens/lab_report_content_screen.dart';
 import 'screens/privacy_settings_screen.dart';
 import 'screens/notifications_settings_screen.dart';
 import 'screens/patient_profile_edit_screen.dart';
-
-import 'screens/patient_consent_screen.dart';
-
 import 'screens/friends_screen.dart';
-
 import 'widgets/trend_test_data_widget.dart';
 import 'widgets/doctor_booking_widget.dart';
 import 'screens/chat_page.dart';
@@ -345,64 +341,6 @@ class _PatientDashboardState extends State<PatientDashboard> {
         backgroundColor: AppTheme.patientColor,
         foregroundColor: Colors.white,
         actions: [
-          // Consent Notifications Button
-          StreamBuilder<QuerySnapshot>(
-            stream: _auth.currentUser != null
-                ? FirebaseFirestore.instance
-                      .collection('consent_requests')
-                      .where('patientId', isEqualTo: _auth.currentUser!.uid)
-                      .where('status', isEqualTo: 'pending')
-                      .snapshots()
-                : const Stream.empty(),
-            builder: (context, snapshot) {
-              final pendingCount = snapshot.data?.docs.length ?? 0;
-              return Stack(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.security),
-                    onPressed: () {
-                      if (_auth.currentUser != null) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => PatientConsentScreen(
-                              patientId: _auth.currentUser!.uid,
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                    tooltip: 'Medical Record Consent Requests',
-                  ),
-                  if (pendingCount > 0)
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 16,
-                          minHeight: 16,
-                        ),
-                        child: Text(
-                          '$pendingCount',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
           IconButton(
             icon: const Icon(Icons.people),
             onPressed: () {
@@ -569,11 +507,6 @@ class _DashboardContentState extends State<DashboardContent> {
                   ),
                 ),
               ),
-
-              const SizedBox(height: 16),
-
-              // Consent Notifications Card
-              _buildConsentNotificationsCard(),
 
               const SizedBox(height: 16),
 
@@ -1338,219 +1271,6 @@ class _DashboardContentState extends State<DashboardContent> {
     );
   }
 
-  Widget _buildConsentNotificationsCard() {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      return const SizedBox.shrink();
-    }
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('consent_requests')
-          .where('patientId', isEqualTo: user.uid)
-          .where('status', isEqualTo: 'pending')
-          .snapshots(),
-      builder: (context, snapshot) {
-        print(
-          '🔐 CONSENT NOTIFICATIONS: Connection state: ${snapshot.connectionState}',
-        );
-        print('🔐 CONSENT NOTIFICATIONS: Has data: ${snapshot.hasData}');
-        print('🔐 CONSENT NOTIFICATIONS: User UID: ${user.uid}');
-
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const SizedBox.shrink(); // Don't show loading for this card
-        }
-
-        if (snapshot.hasError) {
-          print('🔐 CONSENT NOTIFICATIONS: Error: ${snapshot.error}');
-          return const SizedBox.shrink(); // Hide error from UI
-        }
-
-        final docs = snapshot.data?.docs ?? [];
-        print(
-          '🔐 CONSENT NOTIFICATIONS: Found ${docs.length} pending requests',
-        );
-
-        if (docs.isEmpty) {
-          print(
-            '🔐 CONSENT NOTIFICATIONS: No pending requests found for user ${user.uid}',
-          );
-          return const SizedBox.shrink(); // No pending requests
-        }
-
-        // Convert to ConsentRequest objects
-        final pendingRequests = docs.map((doc) {
-          return ConsentRequest.fromFirestore(doc);
-        }).toList();
-
-        return Card(
-          elevation: 2,
-          margin: const EdgeInsets.symmetric(horizontal: 0),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: AppTheme.warningOrange.withOpacity(0.3),
-              width: 1,
-            ),
-          ),
-          child: InkWell(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      PatientConsentScreen(patientId: user.uid),
-                ),
-              );
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                gradient: LinearGradient(
-                  colors: [
-                    AppTheme.warningOrange.withOpacity(0.05),
-                    AppTheme.warningOrange.withOpacity(0.1),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppTheme.warningOrange.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            Icons.security,
-                            color: AppTheme.warningOrange,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Medical Records Access Request',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.warningOrange,
-                                ),
-                              ),
-                              Text(
-                                'You have ${pendingRequests.length} pending consent request${pendingRequests.length > 1 ? 's' : ''}',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: AppTheme.textMedium,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.warningOrange,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            '${pendingRequests.length}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    ...pendingRequests
-                        .take(2)
-                        .map(
-                          (request) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.7),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.local_hospital,
-                                    size: 16,
-                                    color: AppTheme.doctorColor,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      'Dr. ${request.doctorName} - ${request.requestTypeDisplayName}',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                    if (pendingRequests.length > 2)
-                      Text(
-                        'and ${pendingRequests.length - 2} more...',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textMedium,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Spacer(),
-                        Text(
-                          'Tap to review',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppTheme.warningOrange,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Icon(
-                          Icons.arrow_forward_ios,
-                          size: 12,
-                          color: AppTheme.warningOrange,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   String _getGreeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) {
@@ -1895,7 +1615,6 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
                           patientId: widget.userData!['uid'],
                           patientName: widget.userData!['name'] ?? '',
                           patientEmail: widget.userData!['email'] ?? '',
-                          patientPhone: widget.userData!['phoneNumber'],
                         ),
                       ),
                     ).then((_) => _loadData()); // Refresh on return
