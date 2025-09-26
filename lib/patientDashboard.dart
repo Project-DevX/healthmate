@@ -22,7 +22,6 @@ import 'screens/patient_consent_screen.dart';
 import 'widgets/trend_test_data_widget.dart';
 import 'widgets/doctor_booking_widget.dart';
 import 'screens/chat_page.dart';
-import 'services/consent_service.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -342,6 +341,64 @@ class _PatientDashboardState extends State<PatientDashboard> {
         backgroundColor: AppTheme.patientColor,
         foregroundColor: Colors.white,
         actions: [
+          // Consent Notifications Button
+          StreamBuilder<QuerySnapshot>(
+            stream: _auth.currentUser != null
+                ? FirebaseFirestore.instance
+                      .collection('consent_requests')
+                      .where('patientId', isEqualTo: _auth.currentUser!.uid)
+                      .where('status', isEqualTo: 'pending')
+                      .snapshots()
+                : const Stream.empty(),
+            builder: (context, snapshot) {
+              final pendingCount = snapshot.data?.docs.length ?? 0;
+              return Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.security),
+                    onPressed: () {
+                      if (_auth.currentUser != null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => PatientConsentScreen(
+                              patientId: _auth.currentUser!.uid,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    tooltip: 'Medical Record Consent Requests',
+                  ),
+                  if (pendingCount > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          '$pendingCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.emergency),
             onPressed: _showEmergencyOptions,
@@ -1268,23 +1325,50 @@ class _DashboardContentState extends State<DashboardContent> {
   }
 
   Widget _buildConsentNotificationsCard() {
-    if (widget.userData?['uid'] == null) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
       return const SizedBox.shrink();
     }
 
-    return FutureBuilder<List<ConsentRequest>>(
-      future: ConsentService.getPatientPendingRequests(widget.userData!['uid']),
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('consent_requests')
+          .where('patientId', isEqualTo: user.uid)
+          .where('status', isEqualTo: 'pending')
+          .snapshots(),
       builder: (context, snapshot) {
+        print(
+          '🔐 CONSENT NOTIFICATIONS: Connection state: ${snapshot.connectionState}',
+        );
+        print('🔐 CONSENT NOTIFICATIONS: Has data: ${snapshot.hasData}');
+        print('🔐 CONSENT NOTIFICATIONS: User UID: ${user.uid}');
+
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox.shrink(); // Don't show loading for this card
         }
 
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+        if (snapshot.hasError) {
+          print('🔐 CONSENT NOTIFICATIONS: Error: ${snapshot.error}');
+          return const SizedBox.shrink(); // Hide error from UI
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+        print(
+          '🔐 CONSENT NOTIFICATIONS: Found ${docs.length} pending requests',
+        );
+
+        if (docs.isEmpty) {
+          print(
+            '🔐 CONSENT NOTIFICATIONS: No pending requests found for user ${user.uid}',
+          );
           return const SizedBox.shrink(); // No pending requests
         }
 
-        final pendingRequests = snapshot.data!;
-        
+        // Convert to ConsentRequest objects
+        final pendingRequests = docs.map((doc) {
+          return ConsentRequest.fromFirestore(doc);
+        }).toList();
+
         return Card(
           elevation: 2,
           margin: const EdgeInsets.symmetric(horizontal: 0),
@@ -1300,9 +1384,8 @@ class _DashboardContentState extends State<DashboardContent> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => PatientConsentScreen(
-                    patientId: widget.userData!['uid'],
-                  ),
+                  builder: (context) =>
+                      PatientConsentScreen(patientId: user.uid),
                 ),
               );
             },
@@ -1382,35 +1465,39 @@ class _DashboardContentState extends State<DashboardContent> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    ...pendingRequests.take(2).map((request) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.local_hospital,
-                              size: 16,
-                              color: AppTheme.doctorColor,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Dr. ${request.doctorName} - ${request.requestTypeDisplayName}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                    ...pendingRequests
+                        .take(2)
+                        .map(
+                          (request) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.7),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.local_hospital,
+                                    size: 16,
+                                    color: AppTheme.doctorColor,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Dr. ${request.doctorName} - ${request.requestTypeDisplayName}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
+                          ),
                         ),
-                      ),
-                    )),
                     if (pendingRequests.length > 2)
                       Text(
                         'and ${pendingRequests.length - 2} more...',

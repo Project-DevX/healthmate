@@ -26,7 +26,8 @@ class PatientMedicalRecordsScreen extends StatefulWidget {
       _PatientMedicalRecordsScreenState();
 }
 
-class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScreen>
+class _PatientMedicalRecordsScreenState
+    extends State<PatientMedicalRecordsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   Map<String, dynamic>? _medicalRecords;
@@ -79,10 +80,7 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Medical Records',
-              style: const TextStyle(fontSize: 18),
-            ),
+            Text('Medical Records', style: const TextStyle(fontSize: 18)),
             Text(
               widget.patientName,
               style: const TextStyle(
@@ -102,18 +100,9 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
                 unselectedLabelColor: Colors.white70,
                 indicatorColor: Colors.white,
                 tabs: [
-                  Tab(
-                    icon: Icon(Icons.calendar_today),
-                    text: 'Appointments',
-                  ),
-                  Tab(
-                    icon: Icon(Icons.science),
-                    text: 'Lab Reports',
-                  ),
-                  Tab(
-                    icon: Icon(Icons.medication),
-                    text: 'Prescriptions',
-                  ),
+                  Tab(icon: Icon(Icons.calendar_today), text: 'Appointments'),
+                  Tab(icon: Icon(Icons.science), text: 'Lab Reports'),
+                  Tab(icon: Icon(Icons.medication), text: 'Prescriptions'),
                 ],
               ),
       ),
@@ -140,11 +129,7 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: AppTheme.errorRed,
-            ),
+            Icon(Icons.error_outline, size: 64, color: AppTheme.errorRed),
             const SizedBox(height: 16),
             Text(
               'Access Denied',
@@ -160,10 +145,7 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
               child: Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppTheme.textMedium,
-                ),
+                style: TextStyle(fontSize: 16, color: AppTheme.textMedium),
               ),
             ),
             const SizedBox(height: 24),
@@ -196,7 +178,8 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
 
   Widget _buildAccessInfoBar() {
     final hasLabAccess = _medicalRecords?['hasLabReportsAccess'] ?? false;
-    final hasPrescriptionAccess = _medicalRecords?['hasPrescriptionsAccess'] ?? false;
+    final hasPrescriptionAccess =
+        _medicalRecords?['hasPrescriptionsAccess'] ?? false;
     final hasFullAccess = _medicalRecords?['hasFullHistoryAccess'] ?? false;
 
     return Container(
@@ -205,9 +188,7 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
       decoration: BoxDecoration(
         color: AppTheme.infoBlue.withOpacity(0.1),
         border: Border(
-          bottom: BorderSide(
-            color: AppTheme.infoBlue.withOpacity(0.3),
-          ),
+          bottom: BorderSide(color: AppTheme.infoBlue.withOpacity(0.3)),
         ),
       ),
       child: Column(
@@ -215,11 +196,7 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
         children: [
           Row(
             children: [
-              Icon(
-                Icons.security,
-                size: 16,
-                color: AppTheme.infoBlue,
-              ),
+              Icon(Icons.security, size: 16, color: AppTheme.infoBlue),
               const SizedBox(width: 8),
               Text(
                 'Access Permissions',
@@ -240,22 +217,14 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
                 true, // Always have access to appointments
                 Icons.calendar_today,
               ),
-              _buildAccessChip(
-                'Lab Reports',
-                hasLabAccess,
-                Icons.science,
-              ),
+              _buildAccessChip('Lab Reports', hasLabAccess, Icons.science),
               _buildAccessChip(
                 'Prescriptions',
                 hasPrescriptionAccess,
                 Icons.medication,
               ),
               if (hasFullAccess)
-                _buildAccessChip(
-                  'Full History',
-                  true,
-                  Icons.history,
-                ),
+                _buildAccessChip('Full History', true, Icons.history),
             ],
           ),
         ],
@@ -267,12 +236,12 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: hasAccess 
+        color: hasAccess
             ? AppTheme.successGreen.withOpacity(0.1)
             : AppTheme.errorRed.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: hasAccess 
+          color: hasAccess
               ? AppTheme.successGreen.withOpacity(0.3)
               : AppTheme.errorRed.withOpacity(0.3),
         ),
@@ -300,7 +269,8 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
   }
 
   Widget _buildAppointmentsTab() {
-    final appointments = (_medicalRecords?['appointments'] as List<Appointment>?) ?? [];
+    final appointments =
+        (_medicalRecords?['appointments'] as List<Appointment>?) ?? [];
 
     if (appointments.isEmpty) {
       return _buildEmptyState(
@@ -322,7 +292,7 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
 
   Widget _buildLabReportsTab() {
     final hasAccess = _medicalRecords?['hasLabReportsAccess'] ?? false;
-    
+
     if (!hasAccess) {
       return _buildNoAccessState(
         'Lab Reports Access Required',
@@ -331,7 +301,8 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
       );
     }
 
-    final labReports = (_medicalRecords?['labReports'] as List<LabReport>?) ?? [];
+    final labReports =
+        (_medicalRecords?['labReports'] as List<LabReport>?) ?? [];
 
     if (labReports.isEmpty) {
       return _buildEmptyState(
@@ -353,7 +324,7 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
 
   Widget _buildPrescriptionsTab() {
     final hasAccess = _medicalRecords?['hasPrescriptionsAccess'] ?? false;
-    
+
     if (!hasAccess) {
       return _buildNoAccessState(
         'Prescriptions Access Required',
@@ -362,7 +333,8 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
       );
     }
 
-    final prescriptions = (_medicalRecords?['prescriptions'] as List<Prescription>?) ?? [];
+    final prescriptions =
+        (_medicalRecords?['prescriptions'] as List<Prescription>?) ?? [];
 
     if (prescriptions.isEmpty) {
       return _buildEmptyState(
@@ -387,11 +359,7 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            icon,
-            size: 64,
-            color: AppTheme.textMedium,
-          ),
+          Icon(icon, size: 64, color: AppTheme.textMedium),
           const SizedBox(height: 16),
           Text(
             title,
@@ -404,10 +372,7 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
           const SizedBox(height: 8),
           Text(
             message,
-            style: TextStyle(
-              fontSize: 16,
-              color: AppTheme.textMedium,
-            ),
+            style: TextStyle(fontSize: 16, color: AppTheme.textMedium),
             textAlign: TextAlign.center,
           ),
         ],
@@ -420,11 +385,7 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.block,
-            size: 64,
-            color: AppTheme.errorRed,
-          ),
+          Icon(Icons.block, size: 64, color: AppTheme.errorRed),
           const SizedBox(height: 16),
           Text(
             title,
@@ -439,10 +400,7 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
             padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Text(
               message,
-              style: TextStyle(
-                fontSize: 16,
-                color: AppTheme.textMedium,
-              ),
+              style: TextStyle(fontSize: 16, color: AppTheme.textMedium),
               textAlign: TextAlign.center,
             ),
           ),
@@ -479,7 +437,9 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        DateFormat('MMMM dd, yyyy').format(appointment.appointmentDate),
+                        DateFormat(
+                          'MMMM dd, yyyy',
+                        ).format(appointment.appointmentDate),
                         style: const TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 16,
@@ -599,27 +559,29 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
                 ),
               ),
               const SizedBox(height: 8),
-              ...report.results!.entries.map((entry) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        entry.key,
-                        style: const TextStyle(fontSize: 14),
+              ...report.results!.entries.map(
+                (entry) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          entry.key,
+                          style: const TextStyle(fontSize: 14),
+                        ),
                       ),
-                    ),
-                    Text(
-                      entry.value.toString(),
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.primaryBlue,
+                      Text(
+                        entry.value.toString(),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.primaryBlue,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              )),
+              ),
             ],
             if (report.notes != null && report.notes!.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -683,9 +645,14 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: _getPrescriptionStatusColor(prescription.status).withOpacity(0.1),
+                    color: _getPrescriptionStatusColor(
+                      prescription.status,
+                    ).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -709,48 +676,51 @@ class _PatientMedicalRecordsScreenState extends State<PatientMedicalRecordsScree
                 ),
               ),
               const SizedBox(height: 8),
-              ...prescription.medicines.map((medicine) => Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      medicine.name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Dosage: ${medicine.dosage}',
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                    Text(
-                      'Frequency: ${medicine.frequency}',
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                    if (medicine.duration > 0)
+              ...prescription.medicines.map(
+                (medicine) => Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryBlue.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        'Duration: ${medicine.duration} days',
+                        medicine.name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Dosage: ${medicine.dosage}',
                         style: const TextStyle(fontSize: 13),
                       ),
-                    if (medicine.instructions.isNotEmpty)
                       Text(
-                        'Instructions: ${medicine.instructions}',
+                        'Frequency: ${medicine.frequency}',
                         style: const TextStyle(fontSize: 13),
                       ),
-                  ],
+                      if (medicine.duration > 0)
+                        Text(
+                          'Duration: ${medicine.duration} days',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      if (medicine.instructions.isNotEmpty)
+                        Text(
+                          'Instructions: ${medicine.instructions}',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                    ],
+                  ),
                 ),
-              )),
+              ),
             ],
-            if (prescription.notes != null && prescription.notes!.isNotEmpty) ...[
+            if (prescription.notes != null &&
+                prescription.notes!.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
                 'Notes: ${prescription.notes}',

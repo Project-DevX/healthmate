@@ -511,9 +511,7 @@ class ConsentRequest {
       'responseDate': responseDate != null
           ? Timestamp.fromDate(responseDate!)
           : null,
-      'expiryDate': expiryDate != null
-          ? Timestamp.fromDate(expiryDate!)
-          : null,
+      'expiryDate': expiryDate != null ? Timestamp.fromDate(expiryDate!) : null,
       'patientResponse': patientResponse,
       'specificRecordIds': specificRecordIds,
       'appointmentId': appointmentId,

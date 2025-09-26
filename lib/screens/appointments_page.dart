@@ -37,9 +37,11 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
       appointments = querySnapshot.docs
           .map((doc) => {'id': doc.id, ...doc.data()})
           .toList();
-      
+
       // Sort in memory to avoid Firebase index requirement
-      appointments.sort((a, b) => (a['date'] as String).compareTo(b['date'] as String));
+      appointments.sort(
+        (a, b) => (a['date'] as String).compareTo(b['date'] as String),
+      );
     } catch (e) {
       print('Error loading appointments: $e');
       // Add some sample data for demonstration
@@ -370,6 +372,7 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
               ],
             ),
       floatingActionButton: FloatingActionButton(
+        heroTag: "appointments_page_fab",
         onPressed: () {
           // Add new appointment functionality
           ScaffoldMessenger.of(context).showSnackBar(

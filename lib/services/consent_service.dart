@@ -21,7 +21,9 @@ class ConsentService {
     int durationDays = 30,
   }) async {
     try {
-      print('🔐 CONSENT: Creating consent request from Dr. $doctorName to $patientName');
+      print(
+        '🔐 CONSENT: Creating consent request from Dr. $doctorName to $patientName',
+      );
 
       // Check if there's already a pending request for the same type
       final existingRequest = await _firestore
@@ -33,12 +35,14 @@ class ConsentService {
           .get();
 
       if (existingRequest.docs.isNotEmpty) {
-        throw Exception('A pending consent request for $requestType already exists for this patient');
+        throw Exception(
+          'A pending consent request for $requestType already exists for this patient',
+        );
       }
 
       // Generate unique request ID
       final requestId = 'CR_${DateTime.now().millisecondsSinceEpoch}';
-      
+
       final consentRequest = ConsentRequest(
         id: '',
         requestId: requestId,
@@ -96,21 +100,25 @@ class ConsentService {
       }
 
       final consentRequest = ConsentRequest.fromFirestore(requestDoc);
-      
+
       if (consentRequest.status != 'pending') {
         throw Exception('Consent request has already been responded to');
       }
 
       DateTime? expiryDate;
       if (response == 'approved') {
-        expiryDate = DateTime.now().add(Duration(days: consentRequest.durationDays));
+        expiryDate = DateTime.now().add(
+          Duration(days: consentRequest.durationDays),
+        );
       }
 
       await _firestore.collection('consent_requests').doc(requestId).update({
         'status': response,
         'responseDate': Timestamp.now(),
         'patientResponse': patientNote,
-        'expiryDate': expiryDate != null ? Timestamp.fromDate(expiryDate) : null,
+        'expiryDate': expiryDate != null
+            ? Timestamp.fromDate(expiryDate)
+            : null,
       });
 
       // Send notification to doctor
@@ -129,7 +137,9 @@ class ConsentService {
   }
 
   /// Get pending consent requests for patient
-  static Future<List<ConsentRequest>> getPatientPendingRequests(String patientId) async {
+  static Future<List<ConsentRequest>> getPatientPendingRequests(
+    String patientId,
+  ) async {
     try {
       final snapshot = await _firestore
           .collection('consent_requests')
@@ -148,7 +158,9 @@ class ConsentService {
   }
 
   /// Get all consent requests for patient (pending, approved, denied)
-  static Future<List<ConsentRequest>> getPatientConsentHistory(String patientId) async {
+  static Future<List<ConsentRequest>> getPatientConsentHistory(
+    String patientId,
+  ) async {
     try {
       final snapshot = await _firestore
           .collection('consent_requests')
@@ -170,7 +182,9 @@ class ConsentService {
   }
 
   /// Get doctor's consent requests
-  static Future<List<ConsentRequest>> getDoctorConsentRequests(String doctorId) async {
+  static Future<List<ConsentRequest>> getDoctorConsentRequests(
+    String doctorId,
+  ) async {
     try {
       final snapshot = await _firestore
           .collection('consent_requests')
@@ -197,10 +211,12 @@ class ConsentService {
     String patientId,
   ) async {
     try {
-      print('🔐 CONSENT: Getting active consent info for Dr. $doctorId -> Patient $patientId');
+      print(
+        '🔐 CONSENT: Getting active consent info for Dr. $doctorId -> Patient $patientId',
+      );
 
       final now = DateTime.now();
-      
+
       final snapshot = await _firestore
           .collection('consent_requests')
           .where('doctorId', isEqualTo: doctorId)
@@ -212,7 +228,7 @@ class ConsentService {
       for (final doc in snapshot.docs) {
         final data = doc.data();
         final expiresAt = (data['expiresAt'] as Timestamp).toDate();
-        
+
         if (expiresAt.isAfter(now)) {
           return {
             'hasConsent': true,
@@ -238,10 +254,12 @@ class ConsentService {
     String recordType,
   ) async {
     try {
-      print('🔐 CONSENT: Checking consent for Dr. $doctorId -> Patient $patientId ($recordType)');
+      print(
+        '🔐 CONSENT: Checking consent for Dr. $doctorId -> Patient $patientId ($recordType)',
+      );
 
       final now = DateTime.now();
-      
+
       final snapshot = await _firestore
           .collection('consent_requests')
           .where('doctorId', isEqualTo: doctorId)
@@ -253,7 +271,9 @@ class ConsentService {
       for (var doc in snapshot.docs) {
         final request = ConsentRequest.fromFirestore(doc);
         if (request.expiryDate != null && request.expiryDate!.isAfter(now)) {
-          print('✅ CONSENT: Active consent found (expires: ${request.expiryDate})');
+          print(
+            '✅ CONSENT: Active consent found (expires: ${request.expiryDate})',
+          );
           return true;
         }
       }
@@ -271,7 +291,9 @@ class ConsentService {
         for (var doc in fullHistorySnapshot.docs) {
           final request = ConsentRequest.fromFirestore(doc);
           if (request.expiryDate != null && request.expiryDate!.isAfter(now)) {
-            print('✅ CONSENT: Full history consent found (expires: ${request.expiryDate})');
+            print(
+              '✅ CONSENT: Full history consent found (expires: ${request.expiryDate})',
+            );
             return true;
           }
         }
@@ -293,7 +315,9 @@ class ConsentService {
     String purpose,
   ) async {
     try {
-      print('🔐 CONSENT: Getting accessible records for Dr. $doctorId -> Patient $patientId');
+      print(
+        '🔐 CONSENT: Getting accessible records for Dr. $doctorId -> Patient $patientId',
+      );
 
       final records = <String, dynamic>{
         'appointments': <Appointment>[],
@@ -305,12 +329,25 @@ class ConsentService {
       };
 
       // Check specific consents
-      final hasLabConsent = await hasActiveConsent(doctorId, patientId, 'lab_reports');
-      final hasPrescriptionConsent = await hasActiveConsent(doctorId, patientId, 'prescriptions');
-      final hasFullConsent = await hasActiveConsent(doctorId, patientId, 'full_history');
+      final hasLabConsent = await hasActiveConsent(
+        doctorId,
+        patientId,
+        'lab_reports',
+      );
+      final hasPrescriptionConsent = await hasActiveConsent(
+        doctorId,
+        patientId,
+        'prescriptions',
+      );
+      final hasFullConsent = await hasActiveConsent(
+        doctorId,
+        patientId,
+        'full_history',
+      );
 
       records['hasLabReportsAccess'] = hasLabConsent || hasFullConsent;
-      records['hasPrescriptionsAccess'] = hasPrescriptionConsent || hasFullConsent;
+      records['hasPrescriptionsAccess'] =
+          hasPrescriptionConsent || hasFullConsent;
       records['hasFullHistoryAccess'] = hasFullConsent;
 
       // Get appointments (always accessible for treating doctor)
@@ -323,7 +360,9 @@ class ConsentService {
       final appointments = appointmentsSnapshot.docs
           .map((doc) => Appointment.fromFirestore(doc))
           .toList();
-      appointments.sort((a, b) => b.appointmentDate.compareTo(a.appointmentDate));
+      appointments.sort(
+        (a, b) => b.appointmentDate.compareTo(a.appointmentDate),
+      );
       records['appointments'] = appointments;
 
       // Get lab reports if consent exists
@@ -362,7 +401,9 @@ class ConsentService {
         final prescriptions = prescriptionsSnapshot.docs
             .map((doc) => Prescription.fromFirestore(doc))
             .toList();
-        prescriptions.sort((a, b) => b.prescribedDate.compareTo(a.prescribedDate));
+        prescriptions.sort(
+          (a, b) => b.prescribedDate.compareTo(a.prescribedDate),
+        );
         records['prescriptions'] = prescriptions;
 
         // Log access
@@ -398,8 +439,14 @@ class ConsentService {
   }) async {
     try {
       // Get doctor and patient names
-      final doctorDoc = await _firestore.collection('users').doc(doctorId).get();
-      final patientDoc = await _firestore.collection('users').doc(patientId).get();
+      final doctorDoc = await _firestore
+          .collection('users')
+          .doc(doctorId)
+          .get();
+      final patientDoc = await _firestore
+          .collection('users')
+          .doc(patientId)
+          .get();
 
       final doctorName = doctorDoc.data()?['fullName'] ?? 'Unknown Doctor';
       final patientName = patientDoc.data()?['name'] ?? 'Unknown Patient';
@@ -434,7 +481,7 @@ class ConsentService {
   static Future<void> expireOldConsentRequests() async {
     try {
       final now = DateTime.now();
-      
+
       // Expire pending requests older than 7 days
       final oldPendingSnapshot = await _firestore
           .collection('consent_requests')
@@ -493,7 +540,9 @@ class ConsentService {
   // ============ PATIENT CONSENT SETTINGS ============
 
   /// Get patient consent settings
-  static Future<PatientConsentSettings?> getPatientConsentSettings(String patientId) async {
+  static Future<PatientConsentSettings?> getPatientConsentSettings(
+    String patientId,
+  ) async {
     try {
       final snapshot = await _firestore
           .collection('patient_consent_settings')
@@ -553,7 +602,8 @@ class ConsentService {
         'recipientId': patientId,
         'recipientType': 'patient',
         'title': 'Medical Records Access Request',
-        'message': 'Dr. $doctorName has requested access to your ${_getRequestTypeDisplayName(requestType)} for: $purpose',
+        'message':
+            'Dr. $doctorName has requested access to your ${_getRequestTypeDisplayName(requestType)} for: $purpose',
         'type': 'consent_request',
         'relatedId': requestId,
         'isRead': false,
@@ -571,11 +621,12 @@ class ConsentService {
     required String requestType,
   }) async {
     try {
-      final title = response == 'approved' 
+      final title = response == 'approved'
           ? 'Medical Records Access Approved'
           : 'Medical Records Access Denied';
-      
-      final message = '$patientName has ${response} your request to access their ${_getRequestTypeDisplayName(requestType)}';
+
+      final message =
+          '$patientName has ${response} your request to access their ${_getRequestTypeDisplayName(requestType)}';
 
       await _firestore.collection('notifications').add({
         'recipientId': doctorId,

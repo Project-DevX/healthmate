@@ -853,7 +853,9 @@ class InterconnectService {
         purpose,
       );
     } catch (e) {
-      throw Exception('Failed to fetch patient medical history with consent: $e');
+      throw Exception(
+        'Failed to fetch patient medical history with consent: $e',
+      );
     }
   }
 

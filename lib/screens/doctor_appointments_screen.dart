@@ -81,6 +81,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: "doctor_appointments_fab",
         onPressed: () => _showAddAppointmentDialog(),
         backgroundColor: AppTheme.doctorColor,
         foregroundColor: Colors.white,
@@ -591,7 +592,9 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
     );
   }
 
-  Future<void> _handleMedicalRecordsAccess(QueryDocumentSnapshot appointment) async {
+  Future<void> _handleMedicalRecordsAccess(
+    QueryDocumentSnapshot appointment,
+  ) async {
     final data = appointment.data() as Map<String, dynamic>;
     final patientId = data['patientId'];
     final patientName = data['patientName'] ?? 'Unknown Patient';
@@ -873,20 +876,14 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
       decoration: BoxDecoration(
         color: AppTheme.infoBlue.withOpacity(0.05),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: AppTheme.infoBlue.withOpacity(0.2),
-        ),
+        border: Border.all(color: AppTheme.infoBlue.withOpacity(0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
-                Icons.security,
-                color: AppTheme.infoBlue,
-                size: 20,
-              ),
+              Icon(Icons.security, color: AppTheme.infoBlue, size: 20),
               const SizedBox(width: 8),
               Text(
                 'Request Medical History Access',
@@ -901,10 +898,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
           const SizedBox(height: 8),
           Text(
             'Request patient consent to view past lab reports and prescriptions for better diagnosis and treatment.',
-            style: TextStyle(
-              fontSize: 13,
-              color: AppTheme.textMedium,
-            ),
+            style: TextStyle(fontSize: 13, color: AppTheme.textMedium),
           ),
           const SizedBox(height: 12),
           Row(
@@ -992,10 +986,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
       builder: (context) => AlertDialog(
         title: Row(
           children: [
-            Icon(
-              Icons.folder_shared,
-              color: AppTheme.primaryBlue,
-            ),
+            Icon(Icons.folder_shared, color: AppTheme.primaryBlue),
             const SizedBox(width: 8),
             const Expanded(child: Text('Request Medical Records Access')),
           ],
@@ -1100,11 +1091,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
                     color: AppTheme.primaryBlue.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Icon(
-                    icon,
-                    color: AppTheme.primaryBlue,
-                    size: 20,
-                  ),
+                  child: Icon(icon, color: AppTheme.primaryBlue, size: 20),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1141,7 +1128,10 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
     );
   }
 
-  void _requestSpecificAccess(QueryDocumentSnapshot appointment, String requestType) {
+  void _requestSpecificAccess(
+    QueryDocumentSnapshot appointment,
+    String requestType,
+  ) {
     Navigator.pop(context); // Close the selection dialog
     _showConsentRequestDialog(appointment, requestType);
   }
@@ -1160,11 +1150,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
         builder: (context, setState) => AlertDialog(
           title: Row(
             children: [
-              Icon(
-                Icons.security,
-                color: AppTheme.infoBlue,
-                size: 24,
-              ),
+              Icon(Icons.security, color: AppTheme.infoBlue, size: 24),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

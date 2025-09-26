@@ -38,10 +38,12 @@ class _PatientConsentScreenState extends State<PatientConsentScreen>
     try {
       setState(() => _isLoading = true);
 
-      final pendingRequests = 
-          await ConsentService.getPatientPendingRequests(widget.patientId);
-      final allRequests = 
-          await ConsentService.getPatientConsentHistory(widget.patientId);
+      final pendingRequests = await ConsentService.getPatientPendingRequests(
+        widget.patientId,
+      );
+      final allRequests = await ConsentService.getPatientConsentHistory(
+        widget.patientId,
+      );
 
       setState(() {
         _pendingRequests = pendingRequests;
@@ -102,10 +104,7 @@ class _PatientConsentScreenState extends State<PatientConsentScreen>
               ),
               text: 'Pending',
             ),
-            const Tab(
-              icon: Icon(Icons.history),
-              text: 'History',
-            ),
+            const Tab(icon: Icon(Icons.history), text: 'History'),
           ],
         ),
       ),
@@ -113,10 +112,7 @@ class _PatientConsentScreenState extends State<PatientConsentScreen>
           ? const Center(child: CircularProgressIndicator())
           : TabBarView(
               controller: _tabController,
-              children: [
-                _buildPendingRequestsTab(),
-                _buildHistoryTab(),
-              ],
+              children: [_buildPendingRequestsTab(), _buildHistoryTab()],
             ),
     );
   }
@@ -144,10 +140,7 @@ class _PatientConsentScreenState extends State<PatientConsentScreen>
             const SizedBox(height: 8),
             Text(
               'You have no pending medical record access requests.',
-              style: TextStyle(
-                fontSize: 16,
-                color: AppTheme.textMedium,
-              ),
+              style: TextStyle(fontSize: 16, color: AppTheme.textMedium),
               textAlign: TextAlign.center,
             ),
           ],
@@ -178,11 +171,7 @@ class _PatientConsentScreenState extends State<PatientConsentScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.history,
-              size: 80,
-              color: AppTheme.textMedium,
-            ),
+            Icon(Icons.history, size: 80, color: AppTheme.textMedium),
             const SizedBox(height: 16),
             Text(
               'No History',
@@ -195,10 +184,7 @@ class _PatientConsentScreenState extends State<PatientConsentScreen>
             const SizedBox(height: 8),
             Text(
               'You have no consent request history.',
-              style: TextStyle(
-                fontSize: 16,
-                color: AppTheme.textMedium,
-              ),
+              style: TextStyle(fontSize: 16, color: AppTheme.textMedium),
               textAlign: TextAlign.center,
             ),
           ],
@@ -219,7 +205,10 @@ class _PatientConsentScreenState extends State<PatientConsentScreen>
     );
   }
 
-  Widget _buildConsentRequestCard(ConsentRequest request, {required bool isPending}) {
+  Widget _buildConsentRequestCard(
+    ConsentRequest request, {
+    required bool isPending,
+  }) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -335,18 +324,11 @@ class _PatientConsentScreenState extends State<PatientConsentScreen>
               // Date and actions
               Row(
                 children: [
-                  Icon(
-                    Icons.access_time,
-                    size: 16,
-                    color: AppTheme.textMedium,
-                  ),
+                  Icon(Icons.access_time, size: 16, color: AppTheme.textMedium),
                   const SizedBox(width: 4),
                   Text(
                     'Requested: ${DateFormat('MMM dd, yyyy').format(request.requestDate)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppTheme.textMedium,
-                    ),
+                    style: TextStyle(fontSize: 12, color: AppTheme.textMedium),
                   ),
                   const Spacer(),
                   if (isPending) ...[
@@ -369,9 +351,9 @@ class _PatientConsentScreenState extends State<PatientConsentScreen>
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                       ),
                     ),
-                  ] else if (request.status == 'approved' && 
-                           request.expiryDate != null && 
-                           DateTime.now().isBefore(request.expiryDate!)) ...[
+                  ] else if (request.status == 'approved' &&
+                      request.expiryDate != null &&
+                      DateTime.now().isBefore(request.expiryDate!)) ...[
                     OutlinedButton(
                       onPressed: () => _revokeConsent(request),
                       child: const Text('Revoke'),
@@ -386,7 +368,8 @@ class _PatientConsentScreenState extends State<PatientConsentScreen>
               ),
 
               // Expiry info for approved requests
-              if (request.status == 'approved' && request.expiryDate != null) ...[
+              if (request.status == 'approved' &&
+                  request.expiryDate != null) ...[
                 const SizedBox(height: 8),
                 Container(
                   width: double.infinity,
@@ -540,12 +523,16 @@ class _PatientConsentScreenState extends State<PatientConsentScreen>
             ElevatedButton(
               onPressed: () async {
                 Navigator.pop(context);
-                await _submitResponse(request, response, noteController.text.trim());
+                await _submitResponse(
+                  request,
+                  response,
+                  noteController.text.trim(),
+                );
               },
               child: Text(response == 'approved' ? 'Approve' : 'Deny'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: response == 'approved' 
-                    ? AppTheme.successGreen 
+                backgroundColor: response == 'approved'
+                    ? AppTheme.successGreen
                     : AppTheme.errorRed,
                 foregroundColor: Colors.white,
               ),
@@ -562,11 +549,7 @@ class _PatientConsentScreenState extends State<PatientConsentScreen>
     String? note,
   ) async {
     try {
-      await ConsentService.respondToConsentRequest(
-        request.id,
-        response,
-        note,
-      );
+      await ConsentService.respondToConsentRequest(request.id, response, note);
 
       await _loadConsentRequests();
 

@@ -8,12 +8,12 @@ import 'lib/models/shared_models.dart';
 void main() async {
   print('🔐 TESTING CONSENT SYSTEM');
   print('========================');
-  
+
   // Test data
   const testDoctorId = 'test_doctor_123';
   const testPatientId = 'test_patient_456';
   const testAppointmentId = 'test_appointment_789';
-  
+
   try {
     print('\n1. Testing Consent Request Creation...');
     final requestId = await ConsentService.requestMedicalRecordAccess(
@@ -28,15 +28,19 @@ void main() async {
       durationDays: 30,
     );
     print('✅ Consent request created with ID: $requestId');
-    
+
     print('\n2. Testing Patient Consent Requests Retrieval...');
-    final pendingRequests = await ConsentService.getPatientPendingRequests(testPatientId);
+    final pendingRequests = await ConsentService.getPatientPendingRequests(
+      testPatientId,
+    );
     print('✅ Found ${pendingRequests.length} pending requests');
-    
+
     print('\n3. Testing Doctor Consent Requests Retrieval...');
-    final doctorRequests = await ConsentService.getDoctorConsentRequests(testDoctorId);
+    final doctorRequests = await ConsentService.getDoctorConsentRequests(
+      testDoctorId,
+    );
     print('✅ Doctor has ${doctorRequests.length} consent requests');
-    
+
     if (pendingRequests.isNotEmpty) {
       print('\n4. Testing Patient Consent Response (Approval)...');
       await ConsentService.respondToConsentRequest(
@@ -45,7 +49,7 @@ void main() async {
         'Approved for better medical care',
       );
       print('✅ Consent request approved');
-      
+
       print('\n5. Testing Active Consent Check...');
       final hasConsent = await ConsentService.hasActiveConsent(
         testDoctorId,
@@ -53,7 +57,7 @@ void main() async {
         'lab_reports',
       );
       print('✅ Active consent status: $hasConsent');
-      
+
       print('\n6. Testing Active Consent Info Retrieval...');
       final consentInfo = await ConsentService.getActiveConsentInfo(
         testDoctorId,
@@ -61,10 +65,9 @@ void main() async {
       );
       print('✅ Active consent info: $consentInfo');
     }
-    
+
     print('\n🎉 ALL CONSENT SYSTEM TESTS PASSED!');
     print('The consent system is ready for production use.');
-    
   } catch (e) {
     print('❌ TEST FAILED: $e');
   }
