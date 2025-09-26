@@ -49,6 +49,9 @@ class _PatientMedicalRecordsScreenState
 
   Future<void> _loadMedicalRecords() async {
     try {
+      print(
+        '📋 MEDICAL RECORDS: Loading for Dr. ${widget.doctorId} -> Patient ${widget.patientId}',
+      );
       setState(() {
         _isLoading = true;
         _error = null;
@@ -61,11 +64,20 @@ class _PatientMedicalRecordsScreenState
         widget.purpose,
       );
 
+      print('📋 MEDICAL RECORDS: Loaded successfully');
+      print('   - Lab reports access: ${records['hasLabReportsAccess']}');
+      print('   - Prescriptions access: ${records['hasPrescriptionsAccess']}');
+      print('   - Full history access: ${records['hasFullHistoryAccess']}');
+      print('   - Appointments: ${records['appointments']?.length ?? 0}');
+      print('   - Lab reports: ${records['labReports']?.length ?? 0}');
+      print('   - Prescriptions: ${records['prescriptions']?.length ?? 0}');
+
       setState(() {
         _medicalRecords = records;
         _isLoading = false;
       });
     } catch (e) {
+      print('❌ MEDICAL RECORDS: Failed to load: $e');
       setState(() {
         _error = e.toString();
         _isLoading = false;

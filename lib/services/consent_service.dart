@@ -227,15 +227,17 @@ class ConsentService {
       // Find any active consent (not expired)
       for (final doc in snapshot.docs) {
         final data = doc.data();
-        final expiresAt = (data['expiresAt'] as Timestamp).toDate();
+        final expiryDate = data['expiryDate'] != null
+            ? (data['expiryDate'] as Timestamp).toDate()
+            : null;
 
-        if (expiresAt.isAfter(now)) {
+        if (expiryDate != null && expiryDate.isAfter(now)) {
           return {
             'hasConsent': true,
             'consentRequestId': data['requestId'],
             'requestType': data['requestType'],
             'purpose': data['purpose'],
-            'expiresAt': expiresAt,
+            'expiryDate': expiryDate,
           };
         }
       }
