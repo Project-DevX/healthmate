@@ -1604,6 +1604,7 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
                           patientId: widget.userData!['uid'],
                           patientName: widget.userData!['name'] ?? '',
                           patientEmail: widget.userData!['email'] ?? '',
+                          patientPhone: widget.userData!['phoneNumber'],
                         ),
                       ),
                     ).then((_) => _loadData()); // Refresh on return

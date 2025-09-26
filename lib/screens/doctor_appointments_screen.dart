@@ -158,7 +158,9 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
         }
 
         final allAppointments = snapshot.data?.docs ?? [];
-        print('🔍 UPCOMING: Found ${allAppointments.length} total appointments for doctor ${widget.doctorId}');
+        print(
+          '🔍 UPCOMING: Found ${allAppointments.length} total appointments for doctor ${widget.doctorId}',
+        );
 
         // Filter for all future appointments (after now) in memory
         final upcomingAppointments = allAppointments.where((doc) {
@@ -167,11 +169,13 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
           if (appointmentDate == null) return false;
           final date = appointmentDate.toDate();
           final isUpcoming = date.isAfter(now);
-          
+
           if (isUpcoming) {
-            print('✅ UPCOMING: Found appointment - ${data['patientName']} at ${data['timeSlot']} on ${date.toString()}');
+            print(
+              '✅ UPCOMING: Found appointment - ${data['patientName']} at ${data['timeSlot']} on ${date.toString()}',
+            );
           }
-          
+
           return isUpcoming;
         }).toList();
 
@@ -353,6 +357,13 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
                             fontSize: 16,
                           ),
                         ),
+                        if (data['patientEmail'] != null)
+                          Text(
+                            data['patientEmail'],
+                            style: AppTheme.bodySmall.copyWith(
+                              color: AppTheme.textMedium,
+                            ),
+                          ),
                         Text(appointmentType, style: AppTheme.bodySmall),
                       ],
                     ),
@@ -401,15 +412,123 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
                   Text(duration, style: AppTheme.bodySmall),
                 ],
               ),
+              // Patient details section
+              if (data['reason'] != null || data['symptoms'] != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryBlue.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppTheme.primaryBlue.withOpacity(0.1),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (data['reason'] != null) ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.medical_information,
+                              size: 16,
+                              color: AppTheme.primaryBlue,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Reason for Visit:',
+                                    style: AppTheme.bodySmall.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.primaryBlue,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    data['reason'],
+                                    style: AppTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (data['reason'] != null && data['symptoms'] != null)
+                        const SizedBox(height: 12),
+                      if (data['symptoms'] != null) ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.warning_amber,
+                              size: 16,
+                              color: AppTheme.warningOrange,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Symptoms:',
+                                    style: AppTheme.bodySmall.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.warningOrange,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    data['symptoms'],
+                                    style: AppTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+              
               if (notes.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                Text(
-                  notes,
-                  style: AppTheme.bodySmall.copyWith(
-                    fontStyle: FontStyle.italic,
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.textLight.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.note,
+                        size: 16,
+                        color: AppTheme.textMedium,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          notes,
+                          style: AppTheme.bodySmall.copyWith(
+                            fontStyle: FontStyle.italic,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
               if (!showHistory &&
@@ -463,38 +582,160 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Appointment Details'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildDetailRow('Patient', data['patientName'] ?? 'Unknown'),
-            _buildDetailRow('Type', data['appointmentType'] ?? 'Consultation'),
-            _buildDetailRow(
-              'Date',
-              DateFormat(
-                'MMMM dd, yyyy',
-              ).format((data['appointmentDate'] as Timestamp).toDate()),
-            ),
-            _buildDetailRow(
-              'Time',
-              DateFormat(
-                'hh:mm a',
-              ).format((data['appointmentDate'] as Timestamp).toDate()),
-            ),
-            _buildDetailRow('Duration', data['duration'] ?? '30 min'),
-            _buildDetailRow('Status', data['status'] ?? 'scheduled'),
-            if (data['notes'] != null && data['notes'].isNotEmpty)
-              _buildDetailRow('Notes', data['notes']),
-            if (data['patientPhone'] != null)
-              _buildDetailRow('Phone', data['patientPhone']),
-          ],
+        title: const Text('Appointment Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Patient Information Section
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Patient Information',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.primaryBlue,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildDetailRow('Name', data['patientName'] ?? 'Unknown'),
+                    if (data['patientEmail'] != null)
+                      _buildDetailRow('Email', data['patientEmail']),
+                    if (data['patientPhone'] != null)
+                      _buildDetailRow('Phone', data['patientPhone']),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 16),
+              
+              // Appointment Information Section
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.successGreen.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Appointment Information',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.successGreen,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildDetailRow('Type', data['appointmentType'] ?? 'Consultation'),
+                    _buildDetailRow(
+                      'Date',
+                      DateFormat('MMMM dd, yyyy').format(
+                        (data['appointmentDate'] as Timestamp).toDate(),
+                      ),
+                    ),
+                    _buildDetailRow(
+                      'Time',
+                      DateFormat('hh:mm a').format(
+                        (data['appointmentDate'] as Timestamp).toDate(),
+                      ),
+                    ),
+                    _buildDetailRow('Duration', data['duration'] ?? '30 min'),
+                    _buildDetailRow('Status', data['status'] ?? 'scheduled'),
+                  ],
+                ),
+              ),
+              
+              // Medical Information Section
+              if (data['reason'] != null || data['symptoms'] != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.warningOrange.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Medical Information',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.warningOrange,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      if (data['reason'] != null)
+                        _buildDetailRow('Reason for Visit', data['reason']),
+                      if (data['symptoms'] != null)
+                        _buildDetailRow('Symptoms', data['symptoms']),
+                    ],
+                  ),
+                ),
+              ],
+              
+              // Additional Notes
+              if (data['notes'] != null && data['notes'].isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.textLight.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Additional Notes',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textDark,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        data['notes'],
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
+          if ((data['status'] ?? 'scheduled') == 'scheduled') ...[
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _updateAppointmentStatus(appointment.id, 'confirmed');
+              },
+              child: const Text('Confirm'),
+            ),
+          ],
         ],
       ),
     );

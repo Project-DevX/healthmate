@@ -9,11 +9,11 @@ class InterconnectService {
 
   // ============ APPOINTMENT MANAGEMENT ============
 
-    // Get available doctors for appointments
+  // Get available doctors for appointments
   static Future<List<DoctorProfile>> getAvailableDoctors() async {
     try {
       print('🔍 INTERCONNECT: Fetching real doctors from Firestore...');
-      
+
       // Fetch real doctors from the users collection
       final doctorsSnapshot = await _firestore
           .collection('users')
@@ -21,16 +21,20 @@ class InterconnectService {
           .where('isAvailable', isEqualTo: true)
           .get();
 
-      print('🔍 INTERCONNECT: Found ${doctorsSnapshot.docs.length} available doctors');
+      print(
+        '🔍 INTERCONNECT: Found ${doctorsSnapshot.docs.length} available doctors',
+      );
 
       final doctors = <DoctorProfile>[];
-      
+
       for (var doc in doctorsSnapshot.docs) {
         final data = doc.data();
         final doctorId = doc.id;
-        
-        print('🔍 INTERCONNECT: Processing doctor: ${data['fullName']} (ID: $doctorId)');
-        
+
+        print(
+          '🔍 INTERCONNECT: Processing doctor: ${data['fullName']} (ID: $doctorId)',
+        );
+
         // Create DoctorProfile from real doctor data
         final doctor = DoctorProfile(
           id: doctorId, // Use the actual Firebase document ID
@@ -39,27 +43,31 @@ class InterconnectService {
           specialty: data['specialization'] ?? 'General Practice',
           hospitalId: data['affiliation'] ?? 'general-hospital',
           hospitalName: data['affiliation'] ?? 'General Hospital',
-          qualifications: data['qualifications'] != null ? 
-              List<String>.from(data['qualifications']) : 
-              ['MBBS'],
+          qualifications: data['qualifications'] != null
+              ? List<String>.from(data['qualifications'])
+              : ['MBBS'],
           experienceYears: data['experienceYears'] ?? 5,
           rating: data['rating']?.toDouble() ?? 4.5,
-          availableDays: data['availableDays'] != null ?
-              List<String>.from(data['availableDays']) :
-              ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-          timeSlots: data['timeSlots'] != null ?
-              List<String>.from(data['timeSlots']) :
-              ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '03:00 PM'],
+          availableDays: data['availableDays'] != null
+              ? List<String>.from(data['availableDays'])
+              : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+          timeSlots: data['timeSlots'] != null
+              ? List<String>.from(data['timeSlots'])
+              : ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '03:00 PM'],
           consultationFee: data['consultationFee']?.toDouble() ?? 100.0,
           isAvailable: data['isAvailable'] ?? true,
         );
-        
+
         doctors.add(doctor);
-        print('✅ INTERCONNECT: Added doctor: ${doctor.name} (${doctor.specialty})');
+        print(
+          '✅ INTERCONNECT: Added doctor: ${doctor.name} (${doctor.specialty})',
+        );
       }
 
       if (doctors.isEmpty) {
-        print('⚠️ INTERCONNECT: No real doctors found, using fallback sample data');
+        print(
+          '⚠️ INTERCONNECT: No real doctors found, using fallback sample data',
+        );
         // If no real doctors found, return one sample doctor with the real doctor's ID
         return [
           DoctorProfile(
@@ -72,8 +80,21 @@ class InterconnectService {
             qualifications: ['MBBS', 'MD Cardiology'],
             experienceYears: 8,
             rating: 4.8,
-            availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-            timeSlots: ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '03:00 PM', '04:00 PM'],
+            availableDays: [
+              'Monday',
+              'Tuesday',
+              'Wednesday',
+              'Thursday',
+              'Friday',
+            ],
+            timeSlots: [
+              '09:00 AM',
+              '10:00 AM',
+              '11:00 AM',
+              '02:00 PM',
+              '03:00 PM',
+              '04:00 PM',
+            ],
             consultationFee: 150.0,
             isAvailable: true,
           ),
@@ -82,7 +103,6 @@ class InterconnectService {
 
       print('✅ INTERCONNECT: Returning ${doctors.length} available doctors');
       return doctors;
-      
     } catch (e) {
       print('❌ INTERCONNECT: Error fetching doctors: $e');
       // Fallback to sample data with real doctor ID
@@ -97,8 +117,21 @@ class InterconnectService {
           qualifications: ['MBBS', 'MD Cardiology'],
           experienceYears: 8,
           rating: 4.8,
-          availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-          timeSlots: ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '03:00 PM', '04:00 PM'],
+          availableDays: [
+            'Monday',
+            'Tuesday',
+            'Wednesday',
+            'Thursday',
+            'Friday',
+          ],
+          timeSlots: [
+            '09:00 AM',
+            '10:00 AM',
+            '11:00 AM',
+            '02:00 PM',
+            '03:00 PM',
+            '04:00 PM',
+          ],
           consultationFee: 150.0,
           isAvailable: true,
         ),

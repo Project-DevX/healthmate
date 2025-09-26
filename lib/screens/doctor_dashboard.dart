@@ -79,14 +79,14 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
             .collection('appointments')
             .where('doctorId', isEqualTo: uid)
             .get();
-        
+
         // Get all appointments and sort by date in memory
         final allAppointments = apptSnap.docs.map((d) {
           final data = d.data();
           data['id'] = d.id; // Include document ID
           return data;
         }).toList();
-        
+
         // Sort by appointment date
         allAppointments.sort((a, b) {
           final aDate = (a['appointmentDate'] as Timestamp?)?.toDate();
@@ -94,12 +94,13 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
           if (aDate == null || bDate == null) return 0;
           return aDate.compareTo(bDate);
         });
-        
+
         // Take only the first 5 for dashboard
         appointments = allAppointments.take(5).toList();
-        
-        print('✅ Doctor Dashboard: Loaded ${appointments.length} appointments for doctor $uid');
-        
+
+        print(
+          '✅ Doctor Dashboard: Loaded ${appointments.length} appointments for doctor $uid',
+        );
       } catch (e) {
         print('❌ Error fetching appointments: $e');
         appointments = []; // Don't use sample data, use empty list

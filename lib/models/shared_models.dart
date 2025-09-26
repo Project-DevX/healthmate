@@ -7,6 +7,7 @@ class Appointment {
   final String patientId;
   final String patientName;
   final String patientEmail;
+  final String? patientPhone;
   final String doctorId;
   final String doctorName;
   final String doctorSpecialty;
@@ -28,6 +29,7 @@ class Appointment {
     required this.patientId,
     required this.patientName,
     required this.patientEmail,
+    this.patientPhone,
     required this.doctorId,
     required this.doctorName,
     required this.doctorSpecialty,
@@ -52,6 +54,7 @@ class Appointment {
       patientId: data['patientId'] ?? '',
       patientName: data['patientName'] ?? '',
       patientEmail: data['patientEmail'] ?? '',
+      patientPhone: data['patientPhone'],
       doctorId: data['doctorId'] ?? '',
       doctorName: data['doctorName'] ?? '',
       doctorSpecialty: data['doctorSpecialty'] ?? '',
@@ -75,6 +78,7 @@ class Appointment {
       'patientId': patientId,
       'patientName': patientName,
       'patientEmail': patientEmail,
+      'patientPhone': patientPhone,
       'doctorId': doctorId,
       'doctorName': doctorName,
       'doctorSpecialty': doctorSpecialty,

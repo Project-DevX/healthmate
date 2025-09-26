@@ -15,9 +15,7 @@ void main() async {
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: AppointmentTester(),
-    );
+    return MaterialApp(home: AppointmentTester());
   }
 }
 
@@ -30,7 +28,8 @@ class _AppointmentTesterState extends State<AppointmentTester> {
   String status = 'Ready to test...';
   List<Map<String, dynamic>> appointments = [];
 
-  final String doctorId = '8FLajrsoGGP1nKaxIT8t7nkX5fU2'; // Dr. Sarah Wilson's ID
+  final String doctorId =
+      '8FLajrsoGGP1nKaxIT8t7nkX5fU2'; // Dr. Sarah Wilson's ID
   final String patientId = 'test-patient-123';
 
   @override
@@ -59,7 +58,10 @@ class _AppointmentTesterState extends State<AppointmentTester> {
               child: Text('3. Verify Appointment in Database'),
             ),
             SizedBox(height: 20),
-            Text('Appointments found:', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(
+              'Appointments found:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
             Expanded(
               child: ListView.builder(
                 itemCount: appointments.length,
@@ -67,8 +69,12 @@ class _AppointmentTesterState extends State<AppointmentTester> {
                   final appt = appointments[index];
                   return Card(
                     child: ListTile(
-                      title: Text('${appt['patientName']} - ${appt['timeSlot']}'),
-                      subtitle: Text('${appt['appointmentDate']} - Status: ${appt['status']}'),
+                      title: Text(
+                        '${appt['patientName']} - ${appt['timeSlot']}',
+                      ),
+                      subtitle: Text(
+                        '${appt['appointmentDate']} - Status: ${appt['status']}',
+                      ),
                       trailing: Text('ID: ${appt['id']}'),
                     ),
                   );
@@ -83,25 +89,28 @@ class _AppointmentTesterState extends State<AppointmentTester> {
 
   Future<void> checkExistingAppointments() async {
     setState(() => status = 'Checking existing appointments...');
-    
+
     try {
       final snapshot = await FirebaseFirestore.instance
           .collection('appointments')
           .where('doctorId', isEqualTo: doctorId)
           .get();
-      
+
       setState(() {
         appointments = snapshot.docs.map((doc) {
           final data = doc.data();
           data['id'] = doc.id;
           return data;
         }).toList();
-        status = 'Found ${appointments.length} existing appointments for doctor $doctorId';
+        status =
+            'Found ${appointments.length} existing appointments for doctor $doctorId';
       });
-      
+
       print('🔍 Found ${appointments.length} appointments:');
       for (var appt in appointments) {
-        print('   - ${appt['patientName']} at ${appt['timeSlot']} on ${appt['appointmentDate']}');
+        print(
+          '   - ${appt['patientName']} at ${appt['timeSlot']} on ${appt['appointmentDate']}',
+        );
       }
     } catch (e) {
       setState(() => status = 'Error checking appointments: $e');
@@ -111,12 +120,18 @@ class _AppointmentTesterState extends State<AppointmentTester> {
 
   Future<void> bookTestAppointment() async {
     setState(() => status = 'Booking test appointment...');
-    
+
     try {
       // Create appointment for tomorrow at 10:00 AM
       final tomorrow = DateTime.now().add(Duration(days: 1));
-      final appointmentDateTime = DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 10, 0);
-      
+      final appointmentDateTime = DateTime(
+        tomorrow.year,
+        tomorrow.month,
+        tomorrow.day,
+        10,
+        0,
+      );
+
       final appointmentData = {
         'patientId': patientId,
         'patientName': 'Test Patient',
@@ -134,17 +149,16 @@ class _AppointmentTesterState extends State<AppointmentTester> {
         'createdAt': Timestamp.fromDate(DateTime.now()),
         'caregiverId': null,
       };
-      
+
       final docRef = await FirebaseFirestore.instance
           .collection('appointments')
           .add(appointmentData);
-      
+
       setState(() => status = 'Test appointment booked with ID: ${docRef.id}');
       print('✅ Appointment booked: ${docRef.id}');
-      
+
       // Refresh the appointments list
       await checkExistingAppointments();
-      
     } catch (e) {
       setState(() => status = 'Error booking appointment: $e');
       print('❌ Error booking: $e');
@@ -153,13 +167,18 @@ class _AppointmentTesterState extends State<AppointmentTester> {
 
   Future<void> verifyAppointmentExists() async {
     setState(() => status = 'Verifying appointments in database...');
-    
+
     await checkExistingAppointments();
-    
+
     if (appointments.isNotEmpty) {
-      setState(() => status = 'SUCCESS: ${appointments.length} appointments found in database!');
+      setState(
+        () => status =
+            'SUCCESS: ${appointments.length} appointments found in database!',
+      );
     } else {
-      setState(() => status = 'ISSUE: No appointments found for doctor $doctorId');
+      setState(
+        () => status = 'ISSUE: No appointments found for doctor $doctorId',
+      );
     }
   }
 }
