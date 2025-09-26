@@ -141,12 +141,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
   }
 
   Widget _buildUpcomingAppointments() {
-    final tomorrow = DateTime.now().add(const Duration(days: 1));
-    final startOfTomorrow = DateTime(
-      tomorrow.year,
-      tomorrow.month,
-      tomorrow.day,
-    );
+    final now = DateTime.now();
 
     return StreamBuilder<QuerySnapshot>(
       stream: _firestore
@@ -163,15 +158,21 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
         }
 
         final allAppointments = snapshot.data?.docs ?? [];
+        print('🔍 UPCOMING: Found ${allAppointments.length} total appointments for doctor ${widget.doctorId}');
 
-        // Filter for upcoming appointments in memory
+        // Filter for all future appointments (after now) in memory
         final upcomingAppointments = allAppointments.where((doc) {
-          final appointmentDate =
-              (doc.data() as Map<String, dynamic>)['appointmentDate']
-                  as Timestamp?;
+          final data = doc.data() as Map<String, dynamic>;
+          final appointmentDate = data['appointmentDate'] as Timestamp?;
           if (appointmentDate == null) return false;
           final date = appointmentDate.toDate();
-          return date.isAfter(startOfTomorrow);
+          final isUpcoming = date.isAfter(now);
+          
+          if (isUpcoming) {
+            print('✅ UPCOMING: Found appointment - ${data['patientName']} at ${data['timeSlot']} on ${date.toString()}');
+          }
+          
+          return isUpcoming;
         }).toList();
 
         final appointments = _sortAppointments(

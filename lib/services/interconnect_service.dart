@@ -9,128 +9,104 @@ class InterconnectService {
 
   // ============ APPOINTMENT MANAGEMENT ============
 
-  // Get available doctors for appointment booking
-  static Future<List<DoctorProfile>> getAvailableDoctors({
-    String? specialty,
-    String? hospitalId,
-  }) async {
+    // Get available doctors for appointments
+  static Future<List<DoctorProfile>> getAvailableDoctors() async {
     try {
-      Query query = _firestore
+      print('🔍 INTERCONNECT: Fetching real doctors from Firestore...');
+      
+      // Fetch real doctors from the users collection
+      final doctorsSnapshot = await _firestore
           .collection('users')
-          .where('role', isEqualTo: 'doctor');
+          .where('userType', isEqualTo: 'doctor')
+          .where('isAvailable', isEqualTo: true)
+          .get();
 
-      if (specialty != null && specialty.isNotEmpty) {
-        query = query.where('specialty', isEqualTo: specialty);
+      print('🔍 INTERCONNECT: Found ${doctorsSnapshot.docs.length} available doctors');
+
+      final doctors = <DoctorProfile>[];
+      
+      for (var doc in doctorsSnapshot.docs) {
+        final data = doc.data();
+        final doctorId = doc.id;
+        
+        print('🔍 INTERCONNECT: Processing doctor: ${data['fullName']} (ID: $doctorId)');
+        
+        // Create DoctorProfile from real doctor data
+        final doctor = DoctorProfile(
+          id: doctorId, // Use the actual Firebase document ID
+          name: data['fullName'] ?? 'Unknown Doctor',
+          email: data['email'] ?? '',
+          specialty: data['specialization'] ?? 'General Practice',
+          hospitalId: data['affiliation'] ?? 'general-hospital',
+          hospitalName: data['affiliation'] ?? 'General Hospital',
+          qualifications: data['qualifications'] != null ? 
+              List<String>.from(data['qualifications']) : 
+              ['MBBS'],
+          experienceYears: data['experienceYears'] ?? 5,
+          rating: data['rating']?.toDouble() ?? 4.5,
+          availableDays: data['availableDays'] != null ?
+              List<String>.from(data['availableDays']) :
+              ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+          timeSlots: data['timeSlots'] != null ?
+              List<String>.from(data['timeSlots']) :
+              ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '03:00 PM'],
+          consultationFee: data['consultationFee']?.toDouble() ?? 100.0,
+          isAvailable: data['isAvailable'] ?? true,
+        );
+        
+        doctors.add(doctor);
+        print('✅ INTERCONNECT: Added doctor: ${doctor.name} (${doctor.specialty})');
       }
 
-      if (hospitalId != null && hospitalId.isNotEmpty) {
-        query = query.where('hospitalId', isEqualTo: hospitalId);
-      }
-
-      final snapshot = await query.get();
-      final doctors = snapshot.docs
-          .map((doc) => DoctorProfile.fromFirestore(doc))
-          .toList();
-
-      // If no doctors found, return sample doctors for testing
       if (doctors.isEmpty) {
-        return _getSampleDoctors();
+        print('⚠️ INTERCONNECT: No real doctors found, using fallback sample data');
+        // If no real doctors found, return one sample doctor with the real doctor's ID
+        return [
+          DoctorProfile(
+            id: '8FLajrsoGGP1nKaxIT8t7nkX5fU2', // Use the real doctor ID
+            name: 'Dr. Sarah Wilson',
+            email: 'dr.sarah.wilson@gmail.com',
+            specialty: 'Cardiology',
+            hospitalId: 'city-general-hospital',
+            hospitalName: 'City General Hospital',
+            qualifications: ['MBBS', 'MD Cardiology'],
+            experienceYears: 8,
+            rating: 4.8,
+            availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+            timeSlots: ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '03:00 PM', '04:00 PM'],
+            consultationFee: 150.0,
+            isAvailable: true,
+          ),
+        ];
       }
 
+      print('✅ INTERCONNECT: Returning ${doctors.length} available doctors');
       return doctors;
+      
     } catch (e) {
-      // Return sample doctors if query fails
-      print('Failed to fetch doctors, returning sample data: $e');
-      return _getSampleDoctors();
+      print('❌ INTERCONNECT: Error fetching doctors: $e');
+      // Fallback to sample data with real doctor ID
+      return [
+        DoctorProfile(
+          id: '8FLajrsoGGP1nKaxIT8t7nkX5fU2', // Use the real doctor ID
+          name: 'Dr. Sarah Wilson',
+          email: 'dr.sarah.wilson@gmail.com',
+          specialty: 'Cardiology',
+          hospitalId: 'city-general-hospital',
+          hospitalName: 'City General Hospital',
+          qualifications: ['MBBS', 'MD Cardiology'],
+          experienceYears: 8,
+          rating: 4.8,
+          availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+          timeSlots: ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '03:00 PM', '04:00 PM'],
+          consultationFee: 150.0,
+          isAvailable: true,
+        ),
+      ];
     }
   }
 
   // Sample doctors for testing when no real doctors are registered
-  static List<DoctorProfile> _getSampleDoctors() {
-    return [
-      DoctorProfile(
-        id: 'sample_doctor_1',
-        name: 'Dr. Sarah Wilson',
-        email: 'sarah.wilson@hospital.com',
-        specialty: 'Cardiology',
-        hospitalId: 'sample_hospital_1',
-        hospitalName: 'City General Hospital',
-        qualifications: ['MBBS', 'MD Cardiology'],
-        experienceYears: 8,
-        rating: 4.8,
-        availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-        timeSlots: [
-          '09:00 AM',
-          '10:00 AM',
-          '11:00 AM',
-          '02:00 PM',
-          '03:00 PM',
-          '04:00 PM',
-        ],
-        consultationFee: 150.0,
-        isAvailable: true,
-      ),
-      DoctorProfile(
-        id: 'sample_doctor_2',
-        name: 'Dr. Michael Chen',
-        email: 'michael.chen@hospital.com',
-        specialty: 'General Medicine',
-        hospitalId: 'sample_hospital_1',
-        hospitalName: 'City General Hospital',
-        qualifications: ['MBBS', 'MD Internal Medicine'],
-        experienceYears: 12,
-        rating: 4.9,
-        availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-        timeSlots: [
-          '09:30 AM',
-          '10:30 AM',
-          '11:30 AM',
-          '02:30 PM',
-          '03:30 PM',
-          '04:30 PM',
-        ],
-        consultationFee: 120.0,
-        isAvailable: true,
-      ),
-      DoctorProfile(
-        id: 'sample_doctor_3',
-        name: 'Dr. Emily Rodriguez',
-        email: 'emily.rodriguez@hospital.com',
-        specialty: 'Pediatrics',
-        hospitalId: 'sample_hospital_2',
-        hospitalName: 'Metro Medical Center',
-        qualifications: ['MBBS', 'MD Pediatrics'],
-        experienceYears: 6,
-        rating: 4.7,
-        availableDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-        timeSlots: ['10:00 AM', '11:00 AM', '02:00 PM', '03:00 PM', '04:00 PM'],
-        consultationFee: 130.0,
-        isAvailable: true,
-      ),
-      DoctorProfile(
-        id: 'sample_doctor_4',
-        name: 'Dr. David Kumar',
-        email: 'david.kumar@hospital.com',
-        specialty: 'Orthopedics',
-        hospitalId: 'sample_hospital_1',
-        hospitalName: 'City General Hospital',
-        qualifications: ['MBBS', 'MS Orthopedics'],
-        experienceYears: 10,
-        rating: 4.6,
-        availableDays: [
-          'Tuesday',
-          'Wednesday',
-          'Thursday',
-          'Friday',
-          'Saturday',
-        ],
-        timeSlots: ['09:00 AM', '10:00 AM', '11:00 AM', '03:00 PM', '04:00 PM'],
-        consultationFee: 180.0,
-        isAvailable: true,
-      ),
-    ];
-  }
-
   // Book appointment (from patient/caregiver)
   static Future<String> bookAppointment(Appointment appointment) async {
     try {

@@ -116,46 +116,67 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       final today = DateTime(now.year, now.month, now.day);
       final tomorrow = today.add(const Duration(days: 1));
 
+      print('🔍 Loading statistics for doctor: $doctorId');
+
       // Get total appointments count
       final appointmentsQuery = await _firestore
           .collection('appointments')
           .where('doctorId', isEqualTo: doctorId)
           .get();
 
-      // Get today's appointments count
-      final todayAppointmentsQuery = await _firestore
-          .collection('appointments')
-          .where('doctorId', isEqualTo: doctorId)
-          .where(
-            'appointmentDate',
-            isGreaterThanOrEqualTo: Timestamp.fromDate(today),
-          )
-          .where('appointmentDate', isLessThan: Timestamp.fromDate(tomorrow))
-          .get();
-
-      // Get pending lab reports count
-      final pendingLabsQuery = await _firestore
-          .collection('labReports')
-          .where('doctorId', isEqualTo: doctorId)
-          .where('status', whereIn: ['requested', 'in_progress'])
-          .get();
-
-      // Get unique patients count
-      final uniquePatientsQuery = await _firestore
-          .collection('appointments')
-          .where('doctorId', isEqualTo: doctorId)
-          .get();
-
+      // Count today's appointments by filtering in memory
+      int todayCount = 0;
       final Set<String> uniquePatientIds = {};
-      for (var doc in uniquePatientsQuery.docs) {
-        uniquePatientIds.add(doc['patientId']);
+      
+      for (var doc in appointmentsQuery.docs) {
+        final data = doc.data();
+        final appointmentDate = data['appointmentDate'] as Timestamp?;
+        
+        // Count unique patients
+        final patientId = data['patientId'] as String?;
+        if (patientId != null) {
+          uniquePatientIds.add(patientId);
+        }
+        
+        // Count today's appointments
+        if (appointmentDate != null) {
+          final date = appointmentDate.toDate();
+          if (date.isAfter(today.subtract(const Duration(seconds: 1))) && 
+              date.isBefore(tomorrow)) {
+            todayCount++;
+          }
+        }
       }
+
+      // Get pending lab reports count (simple query)  
+      int pendingLabsCount = 0;
+      try {
+        final pendingLabsQuery = await _firestore
+            .collection('labReports')
+            .where('doctorId', isEqualTo: doctorId)
+            .get();
+        
+        // Filter by status in memory
+        pendingLabsCount = pendingLabsQuery.docs.where((doc) {
+          final status = doc.data()['status'] as String?;
+          return status == 'requested' || status == 'in_progress';
+        }).length;
+      } catch (e) {
+        print('⚠️ Could not load lab reports: $e');
+        pendingLabsCount = 0;
+      }
+
+      print('✅ Statistics loaded:');
+      print('   - Total appointments: ${appointmentsQuery.docs.length}');
+      print('   - Today\'s appointments: $todayCount');
+      print('   - Pending lab reports: $pendingLabsCount');
+      print('   - Unique patients: ${uniquePatientIds.length}');
 
       if (mounted) {
         setState(() {
           totalAppointments = appointmentsQuery.docs.length;
-          todayAppointments = todayAppointmentsQuery.docs.length;
-          pendingLabReports = pendingLabsQuery.docs.length;
+          todayAppointments = todayCount;
+          pendingLabReports = pendingLabsCount;
           totalPatients = uniquePatientIds.length;
         });
       }
@@ -170,19 +191,36 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       final today = DateTime(now.year, now.month, now.day);
       final tomorrow = today.add(const Duration(days: 1));
 
-      final todayAppointmentsSnapshot = await _firestore
+      print('🔍 Loading today\'s appointments for doctor: $doctorId');
+
+      // Fetch all appointments for this doctor and filter in memory to avoid compound query issues
+      final allAppointmentsSnapshot = await _firestore
           .collection('appointments')
           .where('doctorId', isEqualTo: doctorId)
-          .where(
-            'appointmentDate',
-            isGreaterThanOrEqualTo: Timestamp.fromDate(today),
-          )
-          .where('appointmentDate', isLessThan: Timestamp.fromDate(tomorrow))
-          .orderBy('appointmentDate')
-          .limit(5)
           .get();
 
-      final appointments = todayAppointmentsSnapshot.docs.map((doc) {
+      print('📋 Found ${allAppointmentsSnapshot.docs.length} total appointments for doctor');
+
+      // Filter for today's appointments in memory
+      final todaysAppointments = allAppointmentsSnapshot.docs.where((doc) {
+        final data = doc.data();
+        final appointmentDate = data['appointmentDate'] as Timestamp?;
+        if (appointmentDate == null) return false;
+        
+        final date = appointmentDate.toDate();
+        return date.isAfter(today.subtract(const Duration(seconds: 1))) && 
+               date.isBefore(tomorrow);
+      }).toList();
+
+      // Sort by appointment date
+      todaysAppointments.sort((a, b) {
+        final aDate = (a.data()['appointmentDate'] as Timestamp?)?.toDate();
+        final bDate = (b.data()['appointmentDate'] as Timestamp?)?.toDate();
+        if (aDate == null || bDate == null) return 0;
+        return aDate.compareTo(bDate);
+      });
+
+      final appointments = todaysAppointments.take(5).map((doc) {
         final data = doc.data();
         return {
           'id': doc.id,
@@ -193,6 +231,11 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
           'reason': data['reason'] ?? 'Check-up',
         };
       }).toList();
+
+      print('✅ Loaded ${appointments.length} appointments for today');
+      for (var appt in appointments) {
+        print('   - ${appt['patientName']} at ${appt['timeSlot']} (${appt['status']})');
+      }
 
       if (mounted) {
         setState(() {
