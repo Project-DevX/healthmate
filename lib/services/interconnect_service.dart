@@ -2,6 +2,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/shared_models.dart';
+import 'consent_service.dart';
 
 class InterconnectService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -833,6 +834,26 @@ class InterconnectService {
       };
     } catch (e) {
       throw Exception('Failed to fetch patient medical history: $e');
+    }
+  }
+
+  // Enhanced patient medical history with consent check
+  static Future<Map<String, dynamic>> getPatientMedicalHistoryWithConsent(
+    String patientId,
+    String requestingDoctorId,
+    String consentRequestId,
+    String purpose,
+  ) async {
+    try {
+      // Use the ConsentService to get accessible records with proper consent verification
+      return await ConsentService.getAccessiblePatientRecords(
+        requestingDoctorId,
+        patientId,
+        consentRequestId,
+        purpose,
+      );
+    } catch (e) {
+      throw Exception('Failed to fetch patient medical history with consent: $e');
     }
   }
 

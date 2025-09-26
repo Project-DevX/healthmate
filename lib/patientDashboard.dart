@@ -18,9 +18,11 @@ import 'screens/lab_report_content_screen.dart';
 import 'screens/privacy_settings_screen.dart';
 import 'screens/notifications_settings_screen.dart';
 import 'screens/patient_profile_edit_screen.dart';
+import 'screens/patient_consent_screen.dart';
 import 'widgets/trend_test_data_widget.dart';
 import 'widgets/doctor_booking_widget.dart';
 import 'screens/chat_page.dart';
+import 'services/consent_service.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -496,6 +498,11 @@ class _DashboardContentState extends State<DashboardContent> {
                   ),
                 ),
               ),
+
+              const SizedBox(height: 16),
+
+              // Consent Notifications Card
+              _buildConsentNotificationsCard(),
 
               const SizedBox(height: 16),
 
@@ -1257,6 +1264,189 @@ class _DashboardContentState extends State<DashboardContent> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildConsentNotificationsCard() {
+    if (widget.userData?['uid'] == null) {
+      return const SizedBox.shrink();
+    }
+
+    return FutureBuilder<List<ConsentRequest>>(
+      future: ConsentService.getPatientPendingRequests(widget.userData!['uid']),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox.shrink(); // Don't show loading for this card
+        }
+
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const SizedBox.shrink(); // No pending requests
+        }
+
+        final pendingRequests = snapshot.data!;
+        
+        return Card(
+          elevation: 2,
+          margin: const EdgeInsets.symmetric(horizontal: 0),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: AppTheme.warningOrange.withOpacity(0.3),
+              width: 1,
+            ),
+          ),
+          child: InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PatientConsentScreen(
+                    patientId: widget.userData!['uid'],
+                  ),
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                gradient: LinearGradient(
+                  colors: [
+                    AppTheme.warningOrange.withOpacity(0.05),
+                    AppTheme.warningOrange.withOpacity(0.1),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.warningOrange.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.security,
+                            color: AppTheme.warningOrange,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Medical Records Access Request',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.warningOrange,
+                                ),
+                              ),
+                              Text(
+                                'You have ${pendingRequests.length} pending consent request${pendingRequests.length > 1 ? 's' : ''}',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: AppTheme.textMedium,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.warningOrange,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${pendingRequests.length}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ...pendingRequests.take(2).map((request) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.local_hospital,
+                              size: 16,
+                              color: AppTheme.doctorColor,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Dr. ${request.doctorName} - ${request.requestTypeDisplayName}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )),
+                    if (pendingRequests.length > 2)
+                      Text(
+                        'and ${pendingRequests.length - 2} more...',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textMedium,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        const Spacer(),
+                        Text(
+                          'Tap to review',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.warningOrange,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          size: 12,
+                          color: AppTheme.warningOrange,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
