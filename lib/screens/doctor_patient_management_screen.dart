@@ -349,7 +349,6 @@ class _DoctorPatientManagementScreenState
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        heroTag: "doctor_patient_management_fab",
         onPressed: _showAddPatientDialog,
         backgroundColor: AppTheme.doctorColor,
         foregroundColor: Colors.white,

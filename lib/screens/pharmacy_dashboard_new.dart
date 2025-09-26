@@ -184,24 +184,26 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
             ...prescription.medicines.map(
               (medicine) => Padding(
                 padding: const EdgeInsets.only(left: 16, top: 4),
-                child: Text(
-                  '• ${medicine.name} (${medicine.dosage}) - ${medicine.duration}',
-                ),
+                child: Text('• ${medicine.name} (${medicine.dosage})'),
               ),
             ),
             const SizedBox(height: 16),
             Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                Text(
+                  'Total: \$${prescription.totalAmount.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
                 Row(
                   children: [
                     if (prescription.status == 'pending')
                       ElevatedButton(
-                        onPressed: () => _updatePrescriptionStatus(
-                          prescription.id,
-                          'ready',
-                          prescription.medicines,
-                        ),
+                        onPressed: () =>
+                            _updatePrescriptionStatus(prescription.id, 'ready'),
                         child: const Text('Mark Ready'),
                       ),
                     if (prescription.status == 'ready')
@@ -209,7 +211,6 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
                         onPressed: () => _updatePrescriptionStatus(
                           prescription.id,
                           'delivered',
-                          prescription.medicines,
                         ),
                         child: const Text('Deliver'),
                       ),
@@ -441,10 +442,6 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
   }
 
   void _showBillDetails(dynamic bill) {
-    print(
-      '🔍 BILL DETAILS: Showing bill details for bill type: ${bill.runtimeType}',
-    );
-
     String billNumber = '';
     String customerName = '';
     double totalAmount = 0.0;
@@ -453,33 +450,19 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
     List<dynamic> medicines = [];
 
     if (bill is Map<String, dynamic>) {
-      print('🔍 BILL DETAILS: Processing Map bill data');
       billNumber = bill['billNumber'] ?? 'N/A';
       customerName = bill['patientName'] ?? 'Unknown';
       totalAmount = (bill['totalAmount'] ?? 0).toDouble();
       doctorName = bill['doctorName'] ?? 'Unknown';
       timestamp = bill['timestamp']?.toDate();
       medicines = bill['medicines'] ?? [];
-      print(
-        '🔍 BILL DETAILS: Map medicines type: ${medicines.runtimeType}, length: ${medicines.length}',
-      );
     } else {
-      print('🔍 BILL DETAILS: Processing PharmacyBill object');
       billNumber = bill.billNumber ?? 'N/A';
       customerName = bill.patientInfo?.name ?? 'Unknown';
       totalAmount = bill.totalAmount ?? 0.0;
       doctorName = bill.doctorInfo?.name ?? 'Unknown';
       timestamp = bill.timestamp;
       medicines = bill.medicines ?? [];
-      print(
-        '🔍 BILL DETAILS: Object medicines type: ${medicines.runtimeType}, length: ${medicines.length}',
-      );
-    }
-
-    // Debug each medicine
-    for (int i = 0; i < medicines.length; i++) {
-      final medicine = medicines[i];
-      print('🔍 BILL DETAILS: Medicine $i type: ${medicine.runtimeType}');
     }
 
     showDialog(
@@ -505,23 +488,14 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
                 'Medicines:',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              ...medicines.map((medicine) {
-                String medicineName = 'Unknown';
-                int medicineQuantity = 0;
-
-                if (medicine is Map<String, dynamic>) {
-                  medicineName = medicine['name'] ?? 'Unknown';
-                  medicineQuantity = medicine['quantity'] ?? 0;
-                } else if (medicine is Medicine) {
-                  medicineName = medicine.name;
-                  medicineQuantity = medicine.quantity;
-                }
-
-                return Padding(
+              ...medicines.map(
+                (medicine) => Padding(
                   padding: const EdgeInsets.only(left: 16, top: 4),
-                  child: Text('• $medicineName - Qty: $medicineQuantity'),
-                );
-              }),
+                  child: Text(
+                    '• ${medicine['name'] ?? 'Unknown'} - Qty: ${medicine['quantity'] ?? 0}',
+                  ),
+                ),
+              ),
               const SizedBox(height: 16),
               Text(
                 'Total Amount: \$${totalAmount.toStringAsFixed(2)}',
@@ -746,146 +720,20 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
   Future<void> _updatePrescriptionStatus(
     String prescriptionId,
     String newStatus,
-    List<Medicine> medicines,
   ) async {
     try {
-      print(
-        '🔍 UI: Updating prescription $prescriptionId to $newStatus with ${medicines.length} medicines',
+      await _pharmacyService.updatePrescriptionStatus(
+        prescriptionId,
+        newStatus,
       );
-
-      // Use inventory-aware method for status updates
-      final result = await _pharmacyService
-          .updatePrescriptionStatusWithInventoryCheck(
-            prescriptionId,
-            newStatus,
-            medicines,
-          );
-
-      print('🔍 UI: Inventory check result: $result');
-
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Prescription status updated to $newStatus')),
-        );
-      } else if (result['requiresConfirmation'] == true) {
-        print('🔍 UI: Showing inventory warning dialog');
-        // Show inventory warnings and get user confirmation
-        await _showInventoryWarningDialog(
-          prescriptionId,
-          newStatus,
-          medicines,
-          result['inventoryCheck'],
-        );
-      } else {
-        throw Exception(result['error'] ?? 'Unknown error');
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Prescription status updated to $newStatus')),
+      );
     } catch (e) {
-      print('❌ UI: Error updating prescription status: $e');
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error updating status: $e')));
     }
-  }
-
-  Future<void> _showInventoryWarningDialog(
-    String prescriptionId,
-    String newStatus,
-    List<Medicine> medicines,
-    Map<String, dynamic> inventoryCheck,
-  ) async {
-    final warnings = inventoryCheck['warnings'] as List<String>;
-    final availableMedicines =
-        inventoryCheck['availableMedicines'] as List<Medicine>;
-    final hasUnavailable = inventoryCheck['hasUnavailable'] as bool;
-
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Inventory Warning'),
-          content: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Some medicines have inventory issues:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                ...warnings.map(
-                  (warning) => Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      '• $warning',
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                if (availableMedicines.isNotEmpty) ...[
-                  const Text(
-                    'Available medicines that can be processed:',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  ...availableMedicines.map(
-                    (med) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        '• ${med.name} (${med.availableQuantity}/${med.quantity})',
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-            if (availableMedicines.isNotEmpty)
-              TextButton(
-                child: Text(
-                  hasUnavailable ? 'Process Available Only' : 'Continue',
-                ),
-                onPressed: () async {
-                  Navigator.of(context).pop();
-                  // Process with available medicines only - always use partial method since we have availability issues
-                  try {
-                    // Always use the partial quantities method when there are inventory issues
-                    await _pharmacyService
-                        .updatePrescriptionStatusWithPartialQuantities(
-                          prescriptionId,
-                          newStatus,
-                          availableMedicines,
-                        );
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          hasUnavailable
-                              ? 'Prescription updated with available medicines only'
-                              : 'Prescription status updated to $newStatus',
-                        ),
-                      ),
-                    );
-                  } catch (e) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error updating status: $e')),
-                    );
-                  }
-                },
-              ),
-          ],
-        );
-      },
-    );
   }
 
   Future<void> _generateBill(PharmacyPrescription prescription) async {

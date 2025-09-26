@@ -15,12 +15,10 @@ class PatientMedicalHistoryWidget extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<PatientMedicalHistoryWidget> createState() =>
-      _PatientMedicalHistoryWidgetState();
+  State<PatientMedicalHistoryWidget> createState() => _PatientMedicalHistoryWidgetState();
 }
 
-class _PatientMedicalHistoryWidgetState
-    extends State<PatientMedicalHistoryWidget> {
+class _PatientMedicalHistoryWidgetState extends State<PatientMedicalHistoryWidget> {
   List<Map<String, dynamic>> _patients = [];
   Map<String, dynamic>? _selectedPatient;
   Map<String, dynamic>? _medicalHistory;
@@ -55,9 +53,7 @@ class _PatientMedicalHistoryWidgetState
   Future<void> _loadPatientHistory(String patientId) async {
     setState(() => _isLoadingHistory = true);
     try {
-      final history = await InterconnectService.getPatientMedicalHistory(
-        patientId,
-      );
+      final history = await InterconnectService.getPatientMedicalHistory(patientId);
       setState(() {
         _medicalHistory = history;
         _isLoadingHistory = false;
@@ -116,29 +112,19 @@ class _PatientMedicalHistoryWidgetState
                             itemCount: _patients.length,
                             itemBuilder: (context, index) {
                               final patient = _patients[index];
-                              final isSelected =
-                                  _selectedPatient?['id'] == patient['id'];
-
+                              final isSelected = _selectedPatient?['id'] == patient['id'];
+                              
                               return Container(
-
-                                color: isSelected
-                                    ? Theme.of(
-                                        context,
-                                      ).primaryColor.withOpacity(0.1)
-                                    : null,
-
+                                color: isSelected ? Theme.of(context).primaryColor.withValues(alpha: 0.1) : null,
                                 child: ListTile(
                                   leading: CircleAvatar(
                                     child: Text(
-                                      (patient['name'] ?? 'U')
-                                          .substring(0, 1)
-                                          .toUpperCase(),
+                                      (patient['name'] ?? 'U').substring(0, 1).toUpperCase(),
                                     ),
                                   ),
                                   title: Text(patient['name'] ?? 'Unknown'),
                                   subtitle: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(patient['email'] ?? ''),
                                       if (patient['dateOfBirth'] != null)
@@ -177,8 +163,8 @@ class _PatientMedicalHistoryWidgetState
                     ),
                   )
                 : _isLoadingHistory
-                ? const Center(child: CircularProgressIndicator())
-                : _buildMedicalHistoryPanel(),
+                    ? const Center(child: CircularProgressIndicator())
+                    : _buildMedicalHistoryPanel(),
           ),
         ],
       ),
@@ -220,9 +206,7 @@ class _PatientMedicalHistoryWidgetState
                 CircleAvatar(
                   radius: 30,
                   child: Text(
-                    (_selectedPatient!['name'] ?? 'U')
-                        .substring(0, 1)
-                        .toUpperCase(),
+                    (_selectedPatient!['name'] ?? 'U').substring(0, 1).toUpperCase(),
                     style: const TextStyle(fontSize: 24),
                   ),
                 ),
@@ -247,7 +231,7 @@ class _PatientMedicalHistoryWidgetState
               ],
             ),
           ),
-
+          
           // Tab Bar
           const TabBar(
             tabs: [
@@ -256,7 +240,7 @@ class _PatientMedicalHistoryWidgetState
               Tab(text: 'Prescriptions'),
             ],
           ),
-
+          
           // Tab Content
           Expanded(
             child: TabBarView(
@@ -274,10 +258,9 @@ class _PatientMedicalHistoryWidgetState
 
   Widget _buildAppointmentsTab() {
     if (_medicalHistory == null) return const SizedBox();
-
-    final appointments =
-        _medicalHistory!['appointments'] as List<Appointment>? ?? [];
-
+    
+    final appointments = _medicalHistory!['appointments'] as List<Appointment>? ?? [];
+    
     if (appointments.isEmpty) {
       return const Center(child: Text('No appointments found'));
     }
@@ -291,7 +274,11 @@ class _PatientMedicalHistoryWidgetState
           child: ListTile(
             leading: CircleAvatar(
               backgroundColor: _getStatusColor(appointment.status),
-              child: Icon(Icons.calendar_today, color: Colors.white, size: 20),
+              child: Icon(
+                Icons.calendar_today,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
             title: Text(
               '${DateFormat('MMM dd, yyyy').format(appointment.appointmentDate)} at ${appointment.timeSlot}',
@@ -317,9 +304,9 @@ class _PatientMedicalHistoryWidgetState
 
   Widget _buildLabReportsTab() {
     if (_medicalHistory == null) return const SizedBox();
-
+    
     final labReports = _medicalHistory!['labReports'] as List<LabReport>? ?? [];
-
+    
     if (labReports.isEmpty) {
       return const Center(child: Text('No lab reports found'));
     }
@@ -333,7 +320,11 @@ class _PatientMedicalHistoryWidgetState
           child: ListTile(
             leading: CircleAvatar(
               backgroundColor: _getStatusColor(report.status),
-              child: Icon(Icons.science, color: Colors.white, size: 20),
+              child: Icon(
+                Icons.science,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
             title: Text(
               report.testName,
@@ -343,11 +334,10 @@ class _PatientMedicalHistoryWidgetState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Lab: ${report.labName}'),
-                Text(
-                  'Date: ${DateFormat('MMM dd, yyyy').format(report.testDate)}',
-                ),
+                Text('Date: ${DateFormat('MMM dd, yyyy').format(report.testDate)}'),
                 Text('Status: ${report.status.toUpperCase()}'),
-                if (report.notes != null) Text('Notes: ${report.notes}'),
+                if (report.notes != null)
+                  Text('Notes: ${report.notes}'),
               ],
             ),
             trailing: report.status == 'completed' && report.reportUrl != null
@@ -366,10 +356,9 @@ class _PatientMedicalHistoryWidgetState
 
   Widget _buildPrescriptionsTab() {
     if (_medicalHistory == null) return const SizedBox();
-
-    final prescriptions =
-        _medicalHistory!['prescriptions'] as List<Prescription>? ?? [];
-
+    
+    final prescriptions = _medicalHistory!['prescriptions'] as List<Prescription>? ?? [];
+    
     if (prescriptions.isEmpty) {
       return const Center(child: Text('No prescriptions found'));
     }
@@ -383,7 +372,11 @@ class _PatientMedicalHistoryWidgetState
           child: ExpansionTile(
             leading: CircleAvatar(
               backgroundColor: _getStatusColor(prescription.status),
-              child: Icon(Icons.medication, color: Colors.white, size: 20),
+              child: Icon(
+                Icons.medication,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
             title: Text(
               'Prescribed: ${DateFormat('MMM dd, yyyy').format(prescription.prescribedDate)}',
@@ -408,29 +401,25 @@ class _PatientMedicalHistoryWidgetState
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
-                    ...prescription.medicines.map(
-                      (medicine) => Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                medicine.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              Text('Dosage: ${medicine.dosage}'),
-                              Text('Frequency: ${medicine.frequency}'),
-                              Text('Duration: ${medicine.duration} days'),
-                              if (medicine.instructions.isNotEmpty)
-                                Text('Instructions: ${medicine.instructions}'),
-                            ],
-                          ),
+                    ...prescription.medicines.map((medicine) => Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              medicine.name,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            Text('Dosage: ${medicine.dosage}'),
+                            Text('Frequency: ${medicine.frequency}'),
+                            Text('Duration: ${medicine.duration} days'),
+                            if (medicine.instructions.isNotEmpty)
+                              Text('Instructions: ${medicine.instructions}'),
+                          ],
                         ),
                       ),
-                    ),
+                    )),
                     if (prescription.notes != null) ...[
                       const SizedBox(height: 8),
                       Text(
@@ -493,9 +482,9 @@ class _PatientMedicalHistoryWidgetState
                   icon: const Icon(Icons.add),
                   label: const Text('Add Medicine'),
                 ),
-
+                
                 const SizedBox(height: 16),
-
+                
                 // Medicines List
                 Expanded(
                   child: ListView.builder(
@@ -505,9 +494,7 @@ class _PatientMedicalHistoryWidgetState
                       return Card(
                         child: ListTile(
                           title: Text(medicine.name),
-                          subtitle: Text(
-                            '${medicine.dosage} - ${medicine.frequency} - ${medicine.duration}',
-                          ),
+                          subtitle: Text('${medicine.dosage} - ${medicine.frequency}'),
                           trailing: IconButton(
                             icon: const Icon(Icons.remove_circle),
                             onPressed: () {
@@ -521,7 +508,7 @@ class _PatientMedicalHistoryWidgetState
                     },
                   ),
                 ),
-
+                
                 // Notes
                 TextField(
                   controller: notesController,
@@ -553,17 +540,13 @@ class _PatientMedicalHistoryWidgetState
                           medicines: medicinesController,
                           prescribedDate: DateTime.now(),
                           status: 'prescribed',
-                          notes: notesController.text.trim().isEmpty
-                              ? null
-                              : notesController.text.trim(),
+                          notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
                         );
 
-                        await InterconnectService.createPrescription(
-                          prescription,
-                        );
+                        await InterconnectService.createPrescription(prescription);
                         Navigator.of(context).pop();
                         _loadPatientHistory(_selectedPatient!['id']);
-
+                        
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Prescription created successfully!'),
@@ -572,9 +555,7 @@ class _PatientMedicalHistoryWidgetState
                         );
                       } catch (e) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Failed to create prescription: $e'),
-                          ),
+                          SnackBar(content: Text('Failed to create prescription: $e')),
                         );
                       }
                     }
@@ -676,7 +657,7 @@ class _PatientMedicalHistoryWidgetState
   void _showRequestLabTestDialog() {
     final testTypes = [
       'Blood Test',
-      'Urine Test',
+      'Urine Test', 
       'X-Ray',
       'CT Scan',
       'MRI',
@@ -685,7 +666,7 @@ class _PatientMedicalHistoryWidgetState
       'Biopsy',
       'Other',
     ];
-
+    
     String selectedTestType = testTypes[0];
     final testNameController = TextEditingController();
     final notesController = TextEditingController();
@@ -751,20 +732,16 @@ class _PatientMedicalHistoryWidgetState
                           doctorName: widget.doctorName,
                           testType: selectedTestType,
                           testName: testNameController.text.trim(),
-                          testDate: DateTime.now().add(
-                            const Duration(days: 1),
-                          ), // Default to tomorrow
+                          testDate: DateTime.now().add(const Duration(days: 1)), // Default to tomorrow
                           status: 'requested',
-                          notes: notesController.text.trim().isEmpty
-                              ? null
-                              : notesController.text.trim(),
+                          notes: notesController.text.trim().isEmpty ? null : notesController.text.trim(),
                           createdAt: DateTime.now(),
                         );
 
                         await InterconnectService.requestLabTest(labReport);
                         Navigator.of(context).pop();
                         _loadPatientHistory(_selectedPatient!['id']);
-
+                        
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Lab test requested successfully!'),
@@ -773,9 +750,7 @@ class _PatientMedicalHistoryWidgetState
                         );
                       } catch (e) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Failed to request lab test: $e'),
-                          ),
+                          SnackBar(content: Text('Failed to request lab test: $e')),
                         );
                       }
                     }

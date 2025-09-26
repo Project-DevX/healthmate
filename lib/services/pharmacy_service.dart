@@ -113,7 +113,6 @@ class PharmacyService {
                   id: med['id'] ?? '',
                   name: med['name'] ?? '',
                   dosage: med['dosage'] ?? '',
-                  duration: med['duration'] ?? '7 days',
                   quantity: med['quantity'] ?? 0,
                   price: (med['price'] ?? 0).toDouble(),
                   instructions: med['instructions'] ?? '',
@@ -174,7 +173,6 @@ class PharmacyService {
                       quantity: med['quantity'] ?? 0,
                       price: (med['price'] ?? 0).toDouble(),
                       instructions: med['instructions'] ?? '',
-                      duration: med['duration'] ?? '',
                     ),
                   )
                   .toList(),
@@ -281,230 +279,6 @@ class PharmacyService {
           print('❌ Stream error: $error');
           return <PharmacyBill>[];
         });
-  }
-
-  /// Check inventory availability for prescription medicines
-  Future<Map<String, dynamic>> checkInventoryAvailability(
-    List<Medicine> medicines,
-  ) async {
-    try {
-      print(
-        '🔍 INVENTORY: Checking availability for ${medicines.length} medicines',
-      );
-      print('🔍 INVENTORY: Current pharmacy ID: $currentPharmacyId');
-
-      List<Medicine> availableMedicines = [];
-      List<Medicine> unavailableMedicines = [];
-      List<String> warnings = [];
-
-      for (final medicine in medicines) {
-        print(
-          '🔍 INVENTORY: Checking medicine: ${medicine.name} (need ${medicine.quantity})',
-        );
-
-        // Query inventory for this medicine by name (since IDs might differ)
-        final querySnapshot = await _firestore
-            .collection('pharmacy_inventory')
-            .doc(currentPharmacyId)
-            .collection('medicines')
-            .where('name', isEqualTo: medicine.name)
-            .get();
-
-        print(
-          '🔍 INVENTORY: Found ${querySnapshot.docs.length} inventory records for ${medicine.name}',
-        );
-
-        if (querySnapshot.docs.isNotEmpty) {
-          final inventoryDoc = querySnapshot.docs.first;
-          final inventoryData = inventoryDoc.data();
-          final availableQuantity = inventoryData['quantity'] ?? 0;
-          final requiredQuantity = medicine.quantity;
-
-          print(
-            '🔍 INVENTORY: ${medicine.name} - Available: $availableQuantity, Required: $requiredQuantity',
-          );
-
-          if (availableQuantity >= requiredQuantity) {
-            // Sufficient stock
-            medicine.availableQuantity = requiredQuantity;
-            availableMedicines.add(medicine);
-            print('✅ INVENTORY: ${medicine.name} - Sufficient stock');
-          } else if (availableQuantity > 0) {
-            // Partial stock
-            medicine.availableQuantity = availableQuantity;
-            availableMedicines.add(medicine);
-            final warning =
-                '${medicine.name}: Only $availableQuantity available (requested: $requiredQuantity)';
-            warnings.add(warning);
-            print('⚠️ INVENTORY: ${medicine.name} - Partial stock: $warning');
-          } else {
-            // No stock
-            unavailableMedicines.add(medicine);
-            final warning =
-                '${medicine.name}: Out of stock (requested: $requiredQuantity)';
-            warnings.add(warning);
-            print('❌ INVENTORY: ${medicine.name} - Out of stock: $warning');
-          }
-        } else {
-          // Medicine not found in inventory
-          unavailableMedicines.add(medicine);
-          final warning = '${medicine.name}: Not found in inventory';
-          warnings.add(warning);
-          print('❌ INVENTORY: ${medicine.name} - Not found in inventory');
-        }
-      }
-
-      final result = {
-        'availableMedicines': availableMedicines,
-        'unavailableMedicines': unavailableMedicines,
-        'warnings': warnings,
-        'hasUnavailable': unavailableMedicines.isNotEmpty,
-        'hasPartialStock': warnings.any(
-          (w) => w.contains('Only') && w.contains('available'),
-        ),
-      };
-
-      print(
-        '🔍 INVENTORY: Final result - Available: ${availableMedicines.length}, Unavailable: ${unavailableMedicines.length}, Warnings: ${warnings.length}',
-      );
-
-      return result;
-    } catch (e) {
-      print('❌ INVENTORY: Error checking inventory availability: $e');
-      throw e;
-    }
-  }
-
-  /// Update prescription status with inventory check
-  Future<Map<String, dynamic>> updatePrescriptionStatusWithInventoryCheck(
-    String prescriptionId,
-    String status,
-    List<Medicine> medicines,
-  ) async {
-    try {
-      print(
-        '🔍 SERVICE: Checking prescription $prescriptionId for status $status with ${medicines.length} medicines',
-      );
-
-      // If changing to 'ready' or 'delivered', check inventory availability first
-      if (status.toLowerCase() == 'ready' ||
-          status.toLowerCase() == 'delivered') {
-        print(
-          '🔍 SERVICE: Status is $status, checking inventory availability...',
-        );
-        final inventoryCheck = await checkInventoryAvailability(medicines);
-
-        print('🔍 SERVICE: Inventory check result: $inventoryCheck');
-
-        if (inventoryCheck['hasUnavailable'] ||
-            inventoryCheck['hasPartialStock']) {
-          print('🔍 SERVICE: Inventory issues found, requiring confirmation');
-          // Return inventory check results for UI to handle
-          return {
-            'success': false,
-            'requiresConfirmation': true,
-            'inventoryCheck': inventoryCheck,
-          };
-        }
-        print('🔍 SERVICE: Inventory check passed, proceeding with update');
-      }
-
-      // Update prescription status
-      await _firestore.collection('prescriptions').doc(prescriptionId).update({
-        'status': status,
-        'lastUpdated': FieldValue.serverTimestamp(),
-      });
-
-      // If status is delivered, automatically generate and save a bill
-      if (status.toLowerCase() == 'delivered') {
-        await _generateBillForDeliveredPrescription(prescriptionId);
-        // Also reduce inventory when dispensed - use ALL medicines since inventory check passed
-        await updateInventoryAfterSale(medicines);
-      }
-
-      print('✅ SERVICE: Prescription status updated to: $status');
-      return {'success': true};
-    } catch (e) {
-      print('❌ SERVICE: Error updating prescription status: $e');
-      return {'success': false, 'error': e.toString()};
-    }
-  }
-
-  /// Update prescription status with partial quantities (for available medicines only)
-  Future<void> updatePrescriptionStatusWithPartialQuantities(
-    String prescriptionId,
-    String status,
-    List<Medicine> availableMedicines,
-  ) async {
-    try {
-      print(
-        '🔍 PARTIAL UPDATE: Updating prescription $prescriptionId to status "$status" with ${availableMedicines.length} available medicines',
-      );
-
-      // Update prescription status
-      await _firestore.collection('prescriptions').doc(prescriptionId).update({
-        'status': status,
-        'lastUpdated': FieldValue.serverTimestamp(),
-      });
-
-      // If status is delivered, generate bill with available medicines and update inventory
-      if (status.toLowerCase() == 'delivered') {
-        print(
-          '🔍 PARTIAL UPDATE: Processing delivery with available medicines only',
-        );
-
-        // Get the original prescription data
-        final prescriptionDoc = await _firestore
-            .collection('prescriptions')
-            .doc(prescriptionId)
-            .get();
-
-        if (prescriptionDoc.exists) {
-          final prescriptionData = prescriptionDoc.data()!;
-          final originalPrescription = PharmacyPrescription.fromFirestore(
-            prescriptionData,
-            prescriptionId,
-          );
-
-          // Create a modified prescription with available medicines only
-          final modifiedPrescription = PharmacyPrescription(
-            id: originalPrescription.id,
-            orderNumber: originalPrescription.orderNumber,
-            pharmacyId: originalPrescription.pharmacyId,
-            patientInfo: originalPrescription.patientInfo,
-            doctorInfo: originalPrescription.doctorInfo,
-            medicines: availableMedicines, // Use only available medicines
-            status: status,
-            timestamp: originalPrescription.timestamp,
-            prescriptionDate: originalPrescription.prescriptionDate,
-            totalAmount: 0, // Will be recalculated in generateBill
-          );
-
-          // Generate bill with modified prescription (available medicines only)
-          final bill = await generateBill(modifiedPrescription);
-          await incrementBillNumber();
-
-          // Update inventory with available medicines only
-          await updateInventoryAfterSale(availableMedicines);
-
-          print(
-            '✅ PARTIAL UPDATE: Bill generated with partial quantities: ${bill.billNumber}',
-          );
-          print(
-            '🔍 PARTIAL UPDATE: Bill includes ${modifiedPrescription.medicines.length} medicines with available quantities',
-          );
-        }
-      } else {
-        print(
-          '🔍 PARTIAL UPDATE: Status updated to "$status" - no billing or inventory update needed',
-        );
-      }
-    } catch (e) {
-      print(
-        '❌ PARTIAL UPDATE: Error updating prescription status with partial quantities: $e',
-      );
-      throw e;
-    }
   }
 
   /// Update prescription status and generate bill if delivered
@@ -617,48 +391,26 @@ class PharmacyService {
   /// Update inventory after sale
   Future<void> updateInventoryAfterSale(List<Medicine> medicines) async {
     try {
-      print(
-        '🔍 INVENTORY UPDATE: Updating inventory for ${medicines.length} medicines',
-      );
+      final batch = _firestore.batch();
 
       for (final medicine in medicines) {
-        print(
-          '🔍 INVENTORY UPDATE: Processing ${medicine.name} - reducing by ${medicine.availableQuantity ?? medicine.quantity}',
-        );
-
-        // Find inventory document by medicine name (not ID)
-        final querySnapshot = await _firestore
+        final inventoryRef = _firestore
             .collection('pharmacy_inventory')
             .doc(currentPharmacyId)
             .collection('medicines')
-            .where('name', isEqualTo: medicine.name)
-            .get();
+            .doc(medicine.id);
 
-        if (querySnapshot.docs.isNotEmpty) {
-          final inventoryDoc = querySnapshot.docs.first;
-          final currentQuantity = inventoryDoc.data()['quantity'] ?? 0;
-          final reductionAmount =
-              medicine.availableQuantity ?? medicine.quantity;
-          final newQuantity = currentQuantity - reductionAmount;
-
-          print(
-            '🔍 INVENTORY UPDATE: ${medicine.name} - Current: $currentQuantity, Reducing: $reductionAmount, New: $newQuantity',
-          );
-
-          await inventoryDoc.reference.update({
-            'quantity': newQuantity,
-            'lastUpdated': FieldValue.serverTimestamp(),
-          });
-
-          print(
-            '✅ INVENTORY UPDATE: ${medicine.name} inventory updated successfully',
-          );
-        } else {
-          print('❌ INVENTORY UPDATE: ${medicine.name} not found in inventory');
-        }
+        batch.update(inventoryRef, {
+          'quantity': FieldValue.increment(
+            -(medicine.availableQuantity ?? medicine.quantity),
+          ),
+          'lastUpdated': FieldValue.serverTimestamp(),
+        });
       }
+
+      await batch.commit();
     } catch (e) {
-      print('❌ INVENTORY UPDATE: Error updating inventory: $e');
+      print('Error updating inventory: $e');
     }
   }
 
@@ -843,7 +595,6 @@ class PharmacyService {
               'name': 'Amoxicillin 500mg',
               'quantity': 21,
               'dosage': '1 tablet 3x daily',
-              'duration': '7 days',
               'instructions': 'Take with food',
               'price': 15.00,
             },
@@ -852,7 +603,6 @@ class PharmacyService {
               'name': 'Ibuprofen 400mg',
               'quantity': 30,
               'dosage': '1 tablet 2x daily',
-              'duration': '15 days',
               'instructions': 'Take after meals',
               'price': 8.50,
             },
@@ -881,7 +631,6 @@ class PharmacyService {
               'name': 'Lisinopril 10mg',
               'quantity': 30,
               'dosage': '1 tablet daily',
-              'duration': '30 days',
               'instructions': 'Take in the morning',
               'price': 12.75,
             },
@@ -910,7 +659,6 @@ class PharmacyService {
               'name': 'Metformin 500mg',
               'quantity': 60,
               'dosage': '1 tablet 2x daily',
-              'duration': '30 days',
               'instructions': 'Take with meals',
               'price': 18.25,
             },
@@ -919,7 +667,6 @@ class PharmacyService {
               'name': 'Insulin Glargine',
               'quantity': 1,
               'dosage': '10 units daily',
-              'duration': '30 days',
               'instructions': 'Inject subcutaneously',
               'price': 45.00,
             },
@@ -1029,7 +776,6 @@ class PharmacyService {
               'name': 'Amoxicillin 500mg',
               'quantity': 21,
               'dosage': '1 tablet 3x daily',
-              'duration': '7 days',
               'instructions': 'Take with food',
               'price': 15.00,
               'availability': 'pending',
@@ -1039,7 +785,6 @@ class PharmacyService {
               'name': 'Ibuprofen 400mg',
               'quantity': 30,
               'dosage': '1 tablet 2x daily',
-              'duration': '15 days',
               'instructions': 'Take after meals',
               'price': 8.50,
               'availability': 'pending',
@@ -1068,111 +813,8 @@ class PharmacyService {
               'name': 'Lisinopril 10mg',
               'quantity': 30,
               'dosage': '1 tablet daily',
-              'duration': '30 days',
               'instructions': 'Take in the morning',
               'price': 12.75,
-              'availability': 'pending',
-            },
-          ],
-          'status': 'pending',
-          'timestamp': FieldValue.serverTimestamp(),
-        },
-        // TEST CASE: Low stock warning prescription
-        {
-          'id': 'prescription_003_low_stock_test',
-          'pharmacyId': currentPharmacyId,
-          'patientInfo': {
-            'name': 'Alice Johnson',
-            'age': 28,
-            'phone': '+1234567892',
-            'email': 'alice.johnson@email.com',
-          },
-          'doctorInfo': {
-            'name': 'Dr. Emily Davis',
-            'specialization': 'Family Medicine',
-            'hospital': 'Community Health Center',
-          },
-          'medicines': [
-            {
-              'id': 'med_002_test',
-              'name': 'Ibuprofen 400mg',
-              'quantity':
-                  20, // Requesting 20, but only 5 available - should trigger warning
-              'dosage': '1 tablet 3x daily',
-              'duration': '7 days',
-              'instructions': 'Take with food to reduce stomach irritation',
-              'price': 8.50,
-              'availability': 'pending',
-            },
-          ],
-          'status': 'pending',
-          'timestamp': FieldValue.serverTimestamp(),
-        },
-        // TEST CASE: Out of stock prescription
-        {
-          'id': 'prescription_004_out_of_stock_test',
-          'pharmacyId': currentPharmacyId,
-          'patientInfo': {
-            'name': 'Bob Wilson',
-            'age': 45,
-            'phone': '+1234567893',
-            'email': 'bob.wilson@email.com',
-          },
-          'doctorInfo': {
-            'name': 'Dr. Sarah Johnson',
-            'specialization': 'Internal Medicine',
-            'hospital': 'Regional Medical Center',
-          },
-          'medicines': [
-            {
-              'id': 'med_unavailable_test',
-              'name':
-                  'Metformin 500mg', // This medicine is NOT in inventory - should trigger not found warning
-              'quantity': 30,
-              'dosage': '1 tablet 2x daily',
-              'duration': '30 days',
-              'instructions': 'Take with meals',
-              'price': 15.00,
-              'availability': 'pending',
-            },
-          ],
-          'status': 'pending',
-          'timestamp': FieldValue.serverTimestamp(),
-        },
-        // TEST CASE: Mixed availability prescription
-        {
-          'id': 'prescription_005_mixed_test',
-          'pharmacyId': currentPharmacyId,
-          'patientInfo': {
-            'name': 'Carol Martinez',
-            'age': 38,
-            'phone': '+1234567894',
-            'email': 'carol.martinez@email.com',
-          },
-          'doctorInfo': {
-            'name': 'Dr. James Wilson',
-            'specialization': 'Cardiology',
-            'hospital': 'Heart Care Institute',
-          },
-          'medicines': [
-            {
-              'id': 'med_001_mixed',
-              'name': 'Amoxicillin 500mg',
-              'quantity': 10, // Available (150 in stock)
-              'dosage': '1 tablet 3x daily',
-              'duration': '5 days',
-              'instructions': 'Complete full course',
-              'price': 15.00,
-              'availability': 'pending',
-            },
-            {
-              'id': 'med_002_mixed',
-              'name': 'Ibuprofen 400mg',
-              'quantity': 15, // Partial stock (only 5 available)
-              'dosage': '1 tablet 2x daily',
-              'duration': '10 days',
-              'instructions': 'Take after meals',
-              'price': 8.50,
               'availability': 'pending',
             },
           ],
@@ -1197,9 +839,7 @@ class PharmacyService {
           'category': 'Antibiotics',
           'quantity': 150,
           'unitPrice': 0.71,
-          'expiryDate': Timestamp.fromDate(
-            DateTime.now().add(const Duration(days: 365)),
-          ),
+          'expiryDate': DateTime.now().add(const Duration(days: 365)),
           'batchNumber': 'AMX2024001',
           'supplier': 'MedSupply Co.',
           'minStock': 20,
@@ -1210,9 +850,7 @@ class PharmacyService {
           'category': 'Pain Relief',
           'quantity': 5, // Low stock for testing
           'unitPrice': 0.28,
-          'expiryDate': Timestamp.fromDate(
-            DateTime.now().add(const Duration(days: 180)),
-          ),
+          'expiryDate': DateTime.now().add(const Duration(days: 180)),
           'batchNumber': 'IBU2024001',
           'supplier': 'PharmaCorp',
           'minStock': 10,
@@ -1223,9 +861,7 @@ class PharmacyService {
           'category': 'Cardiovascular',
           'quantity': 75,
           'unitPrice': 0.425,
-          'expiryDate': Timestamp.fromDate(
-            DateTime.now().add(const Duration(days: 300)),
-          ),
+          'expiryDate': DateTime.now().add(const Duration(days: 300)),
           'batchNumber': 'LIS2024001',
           'supplier': 'MedSupply Co.',
           'minStock': 15,
@@ -1233,33 +869,16 @@ class PharmacyService {
       ];
 
       // Add inventory to Firestore
-      print(
-        '🔍 SAMPLE DATA: Creating ${sampleInventory.length} inventory items for pharmacy $currentPharmacyId',
-      );
       for (final medicine in sampleInventory) {
-        final medicineData = {
-          ...medicine,
-          'lastUpdated': FieldValue.serverTimestamp(),
-        };
-        print(
-          '🔍 SAMPLE DATA: Creating inventory for ${medicine['name']} with quantity ${medicine['quantity']}',
-        );
         await _firestore
             .collection('pharmacy_inventory')
             .doc(currentPharmacyId)
             .collection('medicines')
             .doc(medicine['id'] as String)
-            .set(medicineData);
+            .set({...medicine, 'lastUpdated': FieldValue.serverTimestamp()});
       }
 
       print('✅ Sample data created successfully');
-
-      // Test inventory retrieval
-      print('🔍 SAMPLE DATA: Testing inventory retrieval...');
-      final testInventory = await getInventory();
-      print(
-        '🔍 SAMPLE DATA: Retrieved ${testInventory.length} inventory items',
-      );
     } catch (e) {
       print('❌ Error creating sample data: $e');
     }
@@ -1381,7 +1000,6 @@ class Medicine {
   final String name;
   final int quantity;
   final String dosage;
-  final String duration; // e.g., "7 days", "2 weeks", "1 month"
   final String instructions;
   final double price;
   String availability;
@@ -1392,7 +1010,6 @@ class Medicine {
     required this.name,
     required this.quantity,
     required this.dosage,
-    required this.duration,
     required this.instructions,
     required this.price,
     this.availability = 'pending',
@@ -1405,7 +1022,6 @@ class Medicine {
       name: data['name'] ?? '',
       quantity: data['quantity'] ?? 0,
       dosage: data['dosage'] ?? '',
-      duration: data['duration'] ?? '7 days', // Default duration
       instructions: data['instructions'] ?? '',
       price: (data['price'] ?? 0.0).toDouble(),
       availability: data['availability'] ?? 'pending',
@@ -1419,7 +1035,6 @@ class Medicine {
       name: data['name'] ?? '',
       quantity: data['quantity'] ?? 0,
       dosage: data['dosage'] ?? '',
-      duration: data['duration'] ?? '7 days', // Default duration
       instructions: data['instructions'] ?? '',
       price: (data['unitPrice'] ?? 0.0).toDouble(),
     );
@@ -1431,7 +1046,6 @@ class Medicine {
       'name': name,
       'quantity': availableQuantity ?? quantity,
       'dosage': dosage,
-      'duration': duration,
       'instructions': instructions,
       'price': price,
       'availability': availability,

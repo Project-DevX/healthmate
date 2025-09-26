@@ -58,7 +58,6 @@ class _LabReportsPageState extends State<LabReportsPage> {
               },
             ),
       floatingActionButton: FloatingActionButton(
-        heroTag: "lab_reports_fab",
         onPressed: user == null ? null : () => _pickAndUploadPhoto(context),
         child: _isUploading
             ? const CircularProgressIndicator(color: Colors.white)
