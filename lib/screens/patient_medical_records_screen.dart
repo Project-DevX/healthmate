@@ -1,6 +1,7 @@
 // lib/screens/patient_medical_records_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/shared_models.dart';
 import '../services/consent_service.dart';
 import '../theme/app_theme.dart';
@@ -314,7 +315,7 @@ class _PatientMedicalRecordsScreenState
     }
 
     final labReports =
-        (_medicalRecords?['labReports'] as List<LabReport>?) ?? [];
+        (_medicalRecords?['labReports'] as List<Map<String, dynamic>>?) ?? [];
 
     if (labReports.isEmpty) {
       return _buildEmptyState(
@@ -329,7 +330,7 @@ class _PatientMedicalRecordsScreenState
       itemCount: labReports.length,
       itemBuilder: (context, index) {
         final report = labReports[index];
-        return _buildLabReportCard(report);
+        return _buildLabReportDocumentCard(report);
       },
     );
   }
@@ -346,7 +347,8 @@ class _PatientMedicalRecordsScreenState
     }
 
     final prescriptions =
-        (_medicalRecords?['prescriptions'] as List<Prescription>?) ?? [];
+        (_medicalRecords?['prescriptions'] as List<Map<String, dynamic>>?) ??
+        [];
 
     if (prescriptions.isEmpty) {
       return _buildEmptyState(
@@ -361,7 +363,7 @@ class _PatientMedicalRecordsScreenState
       itemCount: prescriptions.length,
       itemBuilder: (context, index) {
         final prescription = prescriptions[index];
-        return _buildPrescriptionCard(prescription);
+        return _buildPrescriptionDocumentCard(prescription);
       },
     );
   }
@@ -515,6 +517,99 @@ class _PatientMedicalRecordsScreenState
     );
   }
 
+  Widget _buildLabReportDocumentCard(Map<String, dynamic> report) {
+    final fileName = report['fileName'] as String? ?? 'Unknown File';
+    final fileType = report['fileType'] as String? ?? 'unknown';
+    final uploadDate = report['uploadDate'] as Timestamp?;
+    final labReportType = report['labReportType'] as String? ?? 'General';
+    final downloadUrl = report['downloadUrl'] as String? ?? '';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.successGreen.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.description,
+                    color: AppTheme.successGreen,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        fileName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        '${uploadDate != null ? DateFormat('MMM dd, yyyy').format(uploadDate.toDate()) : 'Unknown date'} • $labReportType',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppTheme.textMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Text(
+                  'File Type: ',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textDark,
+                  ),
+                ),
+                Text(
+                  fileType.toUpperCase(),
+                  style: TextStyle(color: AppTheme.textMedium),
+                ),
+              ],
+            ),
+            if (downloadUrl.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: () {
+                  // TODO: Implement download/view functionality
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Download feature coming soon'),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.download, size: 16),
+                label: const Text('Download Report'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryBlue,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildLabReportCard(LabReport report) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -612,153 +707,187 @@ class _PatientMedicalRecordsScreenState
     );
   }
 
-  Widget _buildPrescriptionCard(Prescription prescription) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.warningOrange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.medication,
-                    color: AppTheme.warningOrange,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Prescription',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                        ),
-                      ),
-                      Text(
-                        '${DateFormat('MMM dd, yyyy').format(prescription.prescribedDate)} • Dr. ${prescription.doctorName}',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppTheme.textMedium,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _getPrescriptionStatusColor(
-                      prescription.status,
-                    ).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    prescription.status.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _getPrescriptionStatusColor(prescription.status),
+  Widget _buildPrescriptionDocumentCard(Map<String, dynamic> prescription) {
+    final source = prescription['source'] as String;
+
+    if (source == 'formal') {
+      // Formal prescription from doctor/pharmacy
+      final medicines = prescription['medicines'] as List<dynamic>? ?? [];
+      final prescribedDate = prescription['prescribedDate'] as DateTime?;
+      final doctorName =
+          prescription['doctorName'] as String? ?? 'Unknown Doctor';
+      final status = prescription['status'] as String? ?? 'Unknown';
+
+      return Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.warningOrange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.medication,
+                      color: AppTheme.warningOrange,
+                      size: 20,
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (prescription.medicines.isNotEmpty) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Prescription',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                        Text(
+                          '${prescribedDate != null ? DateFormat('MMM dd, yyyy').format(prescribedDate) : 'Unknown date'} • Dr. $doctorName',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.textMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
               Text(
-                'Medications:',
+                'Status: $status',
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   color: AppTheme.textDark,
                 ),
               ),
-              const SizedBox(height: 8),
-              ...prescription.medicines.map(
-                (medicine) => Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryBlue.withOpacity(0.05),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        medicine.name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Dosage: ${medicine.dosage}',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                      Text(
-                        'Frequency: ${medicine.frequency}',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                      if (medicine.duration > 0)
-                        Text(
-                          'Duration: ${medicine.duration} days',
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                      if (medicine.instructions.isNotEmpty)
-                        Text(
-                          'Instructions: ${medicine.instructions}',
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                    ],
+              if (medicines.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Medications:',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textDark,
                   ),
                 ),
-              ),
+                const SizedBox(height: 4),
+                ...medicines
+                    .map(
+                      (med) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          '• ${med['name']} - ${med['dosage']} (${med['frequency']})',
+                          style: TextStyle(color: AppTheme.textMedium),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ],
             ],
-            if (prescription.notes != null &&
-                prescription.notes!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Notes: ${prescription.notes}',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontStyle: FontStyle.italic,
-                  color: AppTheme.textMedium,
-                ),
-              ),
-            ],
-          ],
+          ),
         ),
-      ),
-    );
-  }
+      );
+    } else {
+      // Uploaded prescription document
+      final fileName = prescription['fileName'] as String? ?? 'Unknown File';
+      final fileType = prescription['fileType'] as String? ?? 'unknown';
+      final uploadDate = prescription['uploadDate'] as Timestamp?;
+      final downloadUrl = prescription['downloadUrl'] as String? ?? '';
 
-  Color _getPrescriptionStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'filled':
-        return AppTheme.successGreen;
-      case 'pending':
-        return AppTheme.warningOrange;
-      case 'cancelled':
-        return AppTheme.errorRed;
-      default:
-        return AppTheme.infoBlue;
+      return Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.warningOrange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      Icons.description,
+                      color: AppTheme.warningOrange,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          fileName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                        Text(
+                          '${uploadDate != null ? DateFormat('MMM dd, yyyy').format(uploadDate.toDate()) : 'Unknown date'} • Uploaded Document',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.textMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Text(
+                    'File Type: ',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textDark,
+                    ),
+                  ),
+                  Text(
+                    fileType.toUpperCase(),
+                    style: TextStyle(color: AppTheme.textMedium),
+                  ),
+                ],
+              ),
+              if (downloadUrl.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    // TODO: Implement download/view functionality
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Download feature coming soon'),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.download, size: 16),
+                  label: const Text('Download Document'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryBlue,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
     }
   }
 }

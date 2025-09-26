@@ -369,15 +369,42 @@ class ConsentService {
 
       // Get lab reports if consent exists
       if (records['hasLabReportsAccess']) {
+        print('🔬 CONSENT: Getting lab reports from patient documents...');
+
+        // Lab reports are stored as documents in users/{patientId}/documents/ with category 'lab_reports'
         final labReportsSnapshot = await _firestore
-            .collection('lab_reports')
-            .where('patientId', isEqualTo: patientId)
+            .collection('users')
+            .doc(patientId)
+            .collection('documents')
+            .where('category', isEqualTo: 'lab_reports')
             .get();
 
-        final labReports = labReportsSnapshot.docs
-            .map((doc) => LabReport.fromFirestore(doc))
-            .toList();
-        labReports.sort((a, b) => b.testDate.compareTo(a.testDate));
+        print(
+          '🔬 CONSENT: Found ${labReportsSnapshot.docs.length} lab report documents',
+        );
+
+        // Convert document records to a simplified lab report format
+        final labReports = labReportsSnapshot.docs.map((doc) {
+          final data = doc.data();
+          return {
+            'id': doc.id,
+            'fileName': data['fileName'] ?? 'Unknown',
+            'fileType': data['fileType'] ?? 'unknown',
+            'downloadUrl': data['downloadUrl'] ?? '',
+            'uploadDate': data['uploadDate'],
+            'labReportType': data['labReportType'] ?? 'General',
+            'category': data['category'] ?? 'lab_reports',
+            'classificationConfidence': data['classificationConfidence'] ?? 0.0,
+          };
+        }).toList();
+
+        // Sort by upload date (most recent first)
+        labReports.sort((a, b) {
+          final aDate = a['uploadDate'] as Timestamp?;
+          final bDate = b['uploadDate'] as Timestamp?;
+          if (aDate == null || bDate == null) return 0;
+          return bDate.compareTo(aDate);
+        });
         records['labReports'] = labReports;
 
         // Log access
@@ -386,7 +413,7 @@ class ConsentService {
             doctorId: doctorId,
             patientId: patientId,
             recordType: 'lab_report',
-            recordId: report.id,
+            recordId: report['id'] as String,
             consentRequestId: consentRequestId,
             purpose: purpose,
           );
@@ -395,26 +422,104 @@ class ConsentService {
 
       // Get prescriptions if consent exists
       if (records['hasPrescriptionsAccess']) {
+        print('💊 CONSENT: Getting prescriptions from both collections...');
+
+        final allPrescriptions = <Map<String, dynamic>>[];
+
+        // 1. Get formal prescriptions from top-level collection (created by doctors/pharmacies)
         final prescriptionsSnapshot = await _firestore
             .collection('prescriptions')
             .where('patientId', isEqualTo: patientId)
             .get();
 
-        final prescriptions = prescriptionsSnapshot.docs
-            .map((doc) => Prescription.fromFirestore(doc))
-            .toList();
-        prescriptions.sort(
-          (a, b) => b.prescribedDate.compareTo(a.prescribedDate),
+        // Convert formal prescriptions
+        for (var doc in prescriptionsSnapshot.docs) {
+          try {
+            final prescription = Prescription.fromFirestore(doc);
+            allPrescriptions.add({
+              'id': prescription.id,
+              'source': 'formal',
+              'medicines': prescription.medicines
+                  .map(
+                    (med) => {
+                      'name': med.name,
+                      'dosage': med.dosage,
+                      'frequency': med.frequency,
+                      'duration': med.duration,
+                      'instructions': med.instructions,
+                    },
+                  )
+                  .toList(),
+              'prescribedDate': prescription.prescribedDate,
+              'status': prescription.status,
+              'notes': prescription.notes,
+              'doctorName': prescription.doctorName,
+              'pharmacyName': prescription.pharmacyName,
+              'type': 'formal_prescription',
+            });
+          } catch (e) {
+            print('⚠️ Error parsing formal prescription: $e');
+          }
+        }
+
+        // 2. Get uploaded prescription documents from user's collection
+        final prescriptionDocsSnapshot = await _firestore
+            .collection('users')
+            .doc(patientId)
+            .collection('documents')
+            .where('category', isEqualTo: 'prescriptions')
+            .get();
+
+        // Convert prescription documents
+        for (var doc in prescriptionDocsSnapshot.docs) {
+          final data = doc.data();
+          allPrescriptions.add({
+            'id': doc.id,
+            'source': 'uploaded',
+            'fileName': data['fileName'] ?? 'Unknown',
+            'fileType': data['fileType'] ?? 'unknown',
+            'downloadUrl': data['downloadUrl'] ?? '',
+            'uploadDate': data['uploadDate'],
+            'category': data['category'] ?? 'prescriptions',
+            'type': 'uploaded_document',
+          });
+        }
+
+        // Sort all prescriptions by date (most recent first)
+        allPrescriptions.sort((a, b) {
+          final DateTime? aDate;
+          final DateTime? bDate;
+
+          if (a['source'] == 'formal') {
+            aDate = a['prescribedDate'] as DateTime?;
+          } else {
+            final timestamp = a['uploadDate'] as Timestamp?;
+            aDate = timestamp?.toDate();
+          }
+
+          if (b['source'] == 'formal') {
+            bDate = b['prescribedDate'] as DateTime?;
+          } else {
+            final timestamp = b['uploadDate'] as Timestamp?;
+            bDate = timestamp?.toDate();
+          }
+
+          if (aDate == null || bDate == null) return 0;
+          return bDate.compareTo(aDate);
+        });
+
+        records['prescriptions'] = allPrescriptions;
+        print(
+          '💊 CONSENT: Found ${allPrescriptions.length} prescriptions (${prescriptionsSnapshot.docs.length} formal + ${prescriptionDocsSnapshot.docs.length} uploaded)',
         );
-        records['prescriptions'] = prescriptions;
 
         // Log access
-        for (var prescription in prescriptions) {
+        for (var prescription in allPrescriptions) {
           await logMedicalRecordAccess(
             doctorId: doctorId,
             patientId: patientId,
             recordType: 'prescription',
-            recordId: prescription.id,
+            recordId: prescription['id'] as String,
             consentRequestId: consentRequestId,
             purpose: purpose,
           );
