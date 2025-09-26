@@ -342,7 +342,7 @@ class _AppointmentsPageState extends State<AppointmentsPage> {
                                   decoration: BoxDecoration(
                                     color: _getStatusColor(
                                       appointment['status'] ?? '',
-                                    ).withOpacity(0.1),
+                                    ).withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
                                       color: _getStatusColor(

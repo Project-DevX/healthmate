@@ -120,11 +120,13 @@ class _PatientMedicalHistoryWidgetState
                                   _selectedPatient?['id'] == patient['id'];
 
                               return Container(
+
                                 color: isSelected
                                     ? Theme.of(
                                         context,
                                       ).primaryColor.withOpacity(0.1)
                                     : null,
+
                                 child: ListTile(
                                   leading: CircleAvatar(
                                     child: Text(

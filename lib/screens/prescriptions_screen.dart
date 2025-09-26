@@ -4,8 +4,17 @@ import '../theme/app_theme.dart';
 
 class PrescriptionsScreen extends StatefulWidget {
   final String doctorId;
+  final String? patientId;
+  final String? patientName;
+  final String? appointmentId;
 
-  const PrescriptionsScreen({super.key, required this.doctorId});
+  const PrescriptionsScreen({
+    super.key,
+    required this.doctorId,
+    this.patientId,
+    this.patientName,
+    this.appointmentId,
+  });
 
   @override
   State<PrescriptionsScreen> createState() => _PrescriptionsScreenState();
@@ -28,6 +37,14 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
   void initState() {
     super.initState();
     _addMedicationField();
+
+    // Pre-fill patient information if provided
+    if (widget.patientId != null) {
+      _patientIdController.text = widget.patientId!;
+    }
+    if (widget.patientName != null) {
+      _patientNameController.text = widget.patientName!;
+    }
   }
 
   @override
@@ -155,7 +172,7 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: AppTheme.doctorColor.withOpacity(0.1),
+                                color: AppTheme.doctorColor.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Icon(

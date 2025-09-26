@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
+
 import '../services/consent_service.dart';
 import 'patient_medical_records_screen.dart';
+
+import 'doctor_appointment_details_screen.dart';
 
 class DoctorAppointmentsScreen extends StatefulWidget {
   final String doctorId;
@@ -337,7 +340,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
               Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: AppTheme.doctorColor.withOpacity(0.1),
+                    backgroundColor: AppTheme.doctorColor.withValues(alpha: 0.1),
                     child: Text(
                       patientName.isNotEmpty
                           ? patientName[0].toUpperCase()
@@ -377,7 +380,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
+                      color: statusColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -628,6 +631,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
   }
 
   void _showAppointmentDetails(QueryDocumentSnapshot appointment) {
+
     final data = appointment.data() as Map<String, dynamic>;
 
     showDialog(
@@ -792,6 +796,7 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
             ),
           ],
         ],
+
       ),
     );
   }

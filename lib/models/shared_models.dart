@@ -427,6 +427,7 @@ class NotificationModel {
   }
 }
 
+
 // Medical Record Access Consent Model
 class ConsentRequest {
   final String id;
@@ -493,11 +494,55 @@ class ConsentRequest {
           : null,
       appointmentId: data['appointmentId'] ?? '',
       durationDays: data['durationDays'] ?? 30,
+
+// Friend Request Model
+class FriendRequest {
+  final String id;
+  final String senderId;
+  final String senderName;
+  final String senderType;
+  final String receiverId;
+  final String receiverName;
+  final String receiverType;
+  final String status; // 'pending', 'accepted', 'declined'
+  final DateTime createdAt;
+  final DateTime? respondedAt;
+
+  FriendRequest({
+    required this.id,
+    required this.senderId,
+    required this.senderName,
+    required this.senderType,
+    required this.receiverId,
+    required this.receiverName,
+    required this.receiverType,
+    required this.status,
+    required this.createdAt,
+    this.respondedAt,
+  });
+
+  factory FriendRequest.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return FriendRequest(
+      id: doc.id,
+      senderId: data['senderId'] ?? '',
+      senderName: data['senderName'] ?? '',
+      senderType: data['senderType'] ?? '',
+      receiverId: data['receiverId'] ?? '',
+      receiverName: data['receiverName'] ?? '',
+      receiverType: data['receiverType'] ?? '',
+      status: data['status'] ?? 'pending',
+      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      respondedAt: data['respondedAt'] != null
+          ? (data['respondedAt'] as Timestamp).toDate()
+          : null,
+
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
+
       'requestId': requestId,
       'doctorId': doctorId,
       'doctorName': doctorName,
@@ -592,11 +637,58 @@ class MedicalRecordAccess {
       purpose: data['purpose'] ?? '',
       ipAddress: data['ipAddress'] ?? '',
       metadata: data['metadata'],
+
+    };
+  }
+}
+
+// Friend Model
+class Friend {
+  final String id;
+  final String userId;
+  final String friendId;
+  final String friendName;
+  final String friendType;
+  final DateTime addedAt;
+
+  Friend({
+    required this.id,
+    required this.userId,
+    required this.friendId,
+    required this.friendName,
+    required this.friendType,
+    required this.addedAt,
+  });
+
+  factory Friend.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return Friend(
+      id: doc.id,
+      userId: data['userId'] ?? '',
+      friendId: data['friendId'] ?? '',
+      friendName: data['friendName'] ?? '',
+      friendType: data['friendType'] ?? '',
+      addedAt: (data['addedAt'] as Timestamp).toDate(),
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
+      'userId': userId,
+      'friendId': friendId,
+      'friendName': friendName,
+      'friendType': friendType,
+      'addedAt': Timestamp.fromDate(addedAt),
+    };
+  }
+}
+
+// Medical Record Permission Model
+
+
+  Map<String, dynamic> toMap() {
+    return {
+
       'doctorId': doctorId,
       'doctorName': doctorName,
       'patientId': patientId,
@@ -648,12 +740,67 @@ class PatientConsentSettings {
       trustedDoctors: List<String>.from(data['trustedDoctors'] ?? []),
       blockedDoctors: List<String>.from(data['blockedDoctors'] ?? []),
       lastUpdated: (data['lastUpdated'] as Timestamp).toDate(),
+
+    };
+  }
+}
+
+// Lab Referral Model
+class LabReferral {
+  final String id;
+  final String patientId;
+  final String patientName;
+  final String doctorId;
+  final String doctorName;
+  final String labId;
+  final String labName;
+  final String appointmentId;
+  final List<String> testTypes;
+  final String status; // 'pending', 'accepted', 'completed', 'cancelled'
+  final String? notes;
+  final DateTime createdAt;
+  final DateTime? completedAt;
+
+  LabReferral({
+    required this.id,
+    required this.patientId,
+    required this.patientName,
+    required this.doctorId,
+    required this.doctorName,
+    required this.labId,
+    required this.labName,
+    required this.appointmentId,
+    required this.testTypes,
+    required this.status,
+    this.notes,
+    required this.createdAt,
+    this.completedAt,
+  });
+
+  factory LabReferral.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return LabReferral(
+      id: doc.id,
+      patientId: data['patientId'] ?? '',
+      patientName: data['patientName'] ?? '',
+      doctorId: data['doctorId'] ?? '',
+      doctorName: data['doctorName'] ?? '',
+      labId: data['labId'] ?? '',
+      labName: data['labName'] ?? '',
+      appointmentId: data['appointmentId'] ?? '',
+      testTypes: List<String>.from(data['testTypes'] ?? []),
+      status: data['status'] ?? 'pending',
+      notes: data['notes'],
+      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      completedAt: data['completedAt'] != null ? (data['completedAt'] as Timestamp).toDate() : null,
+
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
       'patientId': patientId,
+
       'autoApproveLabReports': autoApproveLabReports,
       'autoApprovePrescriptions': autoApprovePrescriptions,
       'allowEmergencyAccess': allowEmergencyAccess,
@@ -661,6 +808,7 @@ class PatientConsentSettings {
       'trustedDoctors': trustedDoctors,
       'blockedDoctors': blockedDoctors,
       'lastUpdated': Timestamp.fromDate(lastUpdated),
+
     };
   }
 }

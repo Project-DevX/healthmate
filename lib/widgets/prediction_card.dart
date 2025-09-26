@@ -79,12 +79,12 @@ class PredictionCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: _getConfidenceColor(
                 prediction.confidence,
-              ).withOpacity(0.1),
+              ).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: _getConfidenceColor(
                   prediction.confidence,
-                ).withOpacity(0.3),
+                ).withValues(alpha: 0.3),
               ),
             ),
             child: Text(

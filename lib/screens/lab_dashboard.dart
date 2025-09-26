@@ -1151,156 +1151,156 @@ class _LabDashboardState extends State<LabDashboard> {
           : _selectedBottomNav == 0
           ? Container(
               color: scaffoldBg,
-              child: ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  // Welcome Card
-                  Card(
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 28,
-                            backgroundColor: mainBlue,
-                            child: Icon(
-                              Icons.science,
-                              color: Colors.white,
-                              size: 28,
-                            ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Responsive column count based on screen width
+                  final screenWidth = constraints.maxWidth;
+                  final crossAxisCount = screenWidth > 600 ? 3 : 2;
+
+                  return ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    children: [
+                      // Welcome Card - Compact version
+                      Card(
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundColor: mainBlue,
+                                child: Icon(
+                                  Icons.science,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Welcome, Lab Staff!',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: textColor,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Laboratory Department',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: subTextColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Welcome, Lab Staff!',
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: textColor,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Laboratory Department',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    color: subTextColor,
-                                  ),
-                                ),
-                              ],
-                            ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Statistics Cards - Responsive grid
+                      GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: crossAxisCount,
+                        crossAxisSpacing: 8,
+                        mainAxisSpacing: 8,
+                        childAspectRatio: crossAxisCount == 3 ? 1.1 : 1.3,
+                        children: [
+                          _buildStatCard(
+                            'Total Tests',
+                            '$totalTests',
+                            Icons.assignment_turned_in,
+                            Colors.green,
+                          ),
+                          _buildStatCard(
+                            'Pending Uploads',
+                            '$pendingUploads',
+                            Icons.upload_file,
+                            Colors.orange,
+                          ),
+                          _buildStatCard(
+                            "Today's Appointments",
+                            '$todaysAppointments',
+                            Icons.calendar_today,
+                            AppTheme.labColor,
+                          ),
+                          _buildStatCard(
+                            'Completed',
+                            '${totalTests - pendingUploads}',
+                            Icons.check_circle,
+                            Colors.teal,
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  // Statistics Cards
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatCard(
-                          'Total Tests',
-                          '$totalTests',
-                          Icons.assignment_turned_in,
-                          Colors.green,
+                      const SizedBox(height: 16),
+                      // Quick Actions - Responsive grid
+                      Text(
+                        'Quick Actions',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          'Pending Uploads',
-                          '$pendingUploads',
-                          Icons.upload_file,
-                          Colors.orange,
+                      const SizedBox(height: 8),
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: crossAxisCount,
+                          crossAxisSpacing: 8,
+                          mainAxisSpacing: 8,
+                          childAspectRatio: crossAxisCount == 3 ? 0.9 : 1.0,
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatCard(
-                          "Today's Appointments",
-                          '$todaysAppointments',
-                          Icons.calendar_today,
-                          AppTheme.labColor,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatCard(
-                          'Completed',
-                          '${totalTests - pendingUploads}',
-                          Icons.check_circle,
-                          Colors.teal,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  // Quick Actions
-                  Text(
-                    'Quick Actions',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 1.2,
-                        ),
-                    itemCount: _features.length,
-                    itemBuilder: (context, index) {
-                      final feature = _features[index];
-                      return GestureDetector(
-                        onTap: () => _onFeatureTap(feature.label),
-                        child: Card(
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(feature.icon, size: 32, color: mainBlue),
-                                const SizedBox(height: 8),
-                                Text(
-                                  feature.label,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: textColor,
-                                  ),
-                                  textAlign: TextAlign.center,
+                        itemCount: _features.length,
+                        itemBuilder: (context, index) {
+                          final feature = _features[index];
+                          return GestureDetector(
+                            onTap: () => _onFeatureTap(feature.label),
+                            child: Card(
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(feature.icon, size: 28, color: mainBlue),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      feature.label,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: textColor,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ],
+                          );
+                        },
+                      ),
+                    ],
+                  );
+                },
               ),
             )
           : _selectedBottomNav == 1

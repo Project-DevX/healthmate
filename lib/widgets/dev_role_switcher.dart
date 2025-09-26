@@ -238,7 +238,7 @@ class _DevRoleSwitcherState extends State<DevRoleSwitcher> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
+                      color: Colors.orange.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.orange),
                     ),
@@ -340,7 +340,7 @@ class _DevRoleSwitcherState extends State<DevRoleSwitcher> {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.1),
+        color: Colors.orange.withValues(alpha: 0.1),
         border: Border.all(color: Colors.orange),
         borderRadius: BorderRadius.circular(8),
       ),
