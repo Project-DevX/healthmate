@@ -55,6 +55,7 @@ Future<void> main() async {
             dosage: '1 tablet',
             instructions: 'Test instructions',
             price: 10.0,
+            duration: '7 days',
           ),
         ],
         status: 'ready',

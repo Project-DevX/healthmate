@@ -592,7 +592,6 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        heroTag: "medical_records_fab",
         onPressed: () async {
           await _documentService.uploadDocument(context, widget.userId);
           _loadDocuments(); // Reload after upload

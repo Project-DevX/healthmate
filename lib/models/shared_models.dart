@@ -1,6 +1,5 @@
 // lib/models/shared_models.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/material.dart';
 
 // Shared Appointment Model for all roles
 class Appointment {
@@ -298,8 +297,8 @@ class Prescription {
       status: data['status'] ?? 'prescribed',
       notes: data['notes'],
       appointmentId: data['appointmentId'],
-      filledDate: data['filledDate'] != null
-          ? (data['filledDate'] as Timestamp).toDate()
+      filledDate: data['filledDate'] != null 
+          ? (data['filledDate'] as Timestamp).toDate() 
           : null,
     );
   }
@@ -508,6 +507,7 @@ class ConsentRequest {
   Color get statusColor {
     switch (status) {
       case 'approved':
+
         return Colors.green;
       case 'denied':
         return Colors.red;
@@ -517,11 +517,13 @@ class ConsentRequest {
         return Colors.grey;
       default:
         return Colors.blue;
+
     }
   }
 
   Map<String, dynamic> toMap() {
     return {
+
       'requestId': requestId,
       'doctorId': doctorId,
       'doctorName': doctorName,
@@ -540,6 +542,7 @@ class ConsentRequest {
       'specificRecordIds': specificRecordIds,
       'appointmentId': appointmentId,
       'durationDays': durationDays,
+
     };
   }
 }
@@ -837,6 +840,7 @@ class LabReferral {
   }
 }
 
+
 // Medical Record Permission Model for Doctor Access
 class MedicalRecordPermission {
   final String id;
@@ -864,6 +868,7 @@ class MedicalRecordPermission {
     this.grantedBy,
     this.isActive = true,
   });
+
 
   factory MedicalRecordPermission.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
