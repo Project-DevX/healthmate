@@ -422,6 +422,129 @@ class NotificationModel {
   }
 }
 
+// Medical Record Access Consent Model
+class ConsentRequest {
+  final String id;
+  final String requestId;
+  final String doctorId;
+  final String doctorName;
+  final String doctorSpecialty;
+  final String patientId;
+  final String patientName;
+  final String requestType; // 'lab_reports', 'prescriptions', 'full_history'
+  final String purpose; // Reason for access request
+  final DateTime requestDate;
+  final String status; // 'pending', 'approved', 'denied', 'expired'
+  final DateTime? responseDate;
+  final DateTime? expiryDate; // When consent expires
+  final String? patientResponse; // Patient's reason for approval/denial
+  final List<String>? specificRecordIds; // If requesting specific records
+  final String appointmentId; // Related appointment
+  final int durationDays; // Consent duration in days
+
+  ConsentRequest({
+    required this.id,
+    required this.requestId,
+    required this.doctorId,
+    required this.doctorName,
+    required this.doctorSpecialty,
+    required this.patientId,
+    required this.patientName,
+    required this.requestType,
+    required this.purpose,
+    required this.requestDate,
+    required this.status,
+    this.responseDate,
+    this.expiryDate,
+    this.patientResponse,
+    this.specificRecordIds,
+    required this.appointmentId,
+    this.durationDays = 30, // Default 30 days
+  });
+
+  factory ConsentRequest.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return ConsentRequest(
+      id: doc.id,
+      requestId: data['requestId'] ?? '',
+      doctorId: data['doctorId'] ?? '',
+      doctorName: data['doctorName'] ?? '',
+      doctorSpecialty: data['doctorSpecialty'] ?? '',
+      patientId: data['patientId'] ?? '',
+      patientName: data['patientName'] ?? '',
+      requestType: data['requestType'] ?? '',
+      purpose: data['purpose'] ?? '',
+      requestDate: (data['requestDate'] as Timestamp).toDate(),
+      status: data['status'] ?? 'pending',
+      responseDate: data['responseDate'] != null
+          ? (data['responseDate'] as Timestamp).toDate()
+          : null,
+      expiryDate: data['expiryDate'] != null
+          ? (data['expiryDate'] as Timestamp).toDate()
+          : null,
+      patientResponse: data['patientResponse'],
+      specificRecordIds: data['specificRecordIds'] != null
+          ? List<String>.from(data['specificRecordIds'])
+          : null,
+      appointmentId: data['appointmentId'] ?? '',
+      durationDays: data['durationDays'] ?? 30,
+    );
+  }
+
+  String get requestTypeDisplayName {
+    switch (requestType) {
+      case 'lab_reports':
+        return 'Lab Reports';
+      case 'prescriptions':
+        return 'Prescriptions';
+      case 'full_history':
+        return 'Full Medical History';
+      default:
+        return requestType;
+    }
+  }
+
+  Color get statusColor {
+    switch (status) {
+      case 'approved':
+        return const Color(0xFF4CAF50); // Green
+      case 'denied':
+        return const Color(0xFFF44336); // Red
+      case 'pending':
+        return const Color(0xFFFF9800); // Orange
+      case 'expired':
+        return const Color(0xFF9E9E9E); // Grey
+      default:
+        return const Color(0xFF2196F3); // Blue
+    }
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'requestId': this.requestId,
+      'doctorId': this.doctorId,
+      'doctorName': this.doctorName,
+      'doctorSpecialty': this.doctorSpecialty,
+      'patientId': this.patientId,
+      'patientName': this.patientName,
+      'requestType': this.requestType,
+      'purpose': this.purpose,
+      'requestDate': Timestamp.fromDate(this.requestDate),
+      'status': this.status,
+      'responseDate': this.responseDate != null
+          ? Timestamp.fromDate(this.responseDate!)
+          : null,
+      'expiryDate': this.expiryDate != null
+          ? Timestamp.fromDate(this.expiryDate!)
+          : null,
+      'patientResponse': this.patientResponse,
+      'specificRecordIds': this.specificRecordIds,
+      'appointmentId': this.appointmentId,
+      'durationDays': this.durationDays,
+    };
+  }
+}
+
 // Friend Request Model
 class FriendRequest {
   final String id;
@@ -468,15 +591,82 @@ class FriendRequest {
 
   Map<String, dynamic> toMap() {
     return {
-      'senderId': senderId,
-      'senderName': senderName,
-      'senderType': senderType,
-      'receiverId': receiverId,
-      'receiverName': receiverName,
-      'receiverType': receiverType,
-      'status': status,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'respondedAt': respondedAt != null ? Timestamp.fromDate(respondedAt!) : null,
+      'senderId': this.senderId,
+      'senderName': this.senderName,
+      'senderType': this.senderType,
+      'receiverId': this.receiverId,
+      'receiverName': this.receiverName,
+      'receiverType': this.receiverType,
+      'status': this.status,
+      'createdAt': Timestamp.fromDate(this.createdAt),
+      'respondedAt': this.respondedAt != null
+          ? Timestamp.fromDate(this.respondedAt!)
+          : null,
+    };
+  }
+}
+
+// Medical Record Access Audit Model
+class MedicalRecordAccess {
+  final String id;
+  final String doctorId;
+  final String doctorName;
+  final String patientId;
+  final String patientName;
+  final String recordType; // 'lab_report', 'prescription', 'appointment'
+  final String recordId;
+  final DateTime accessTime;
+  final String consentRequestId;
+  final String purpose;
+  final String ipAddress;
+  final Map<String, dynamic>? metadata;
+
+  MedicalRecordAccess({
+    required this.id,
+    required this.doctorId,
+    required this.doctorName,
+    required this.patientId,
+    required this.patientName,
+    required this.recordType,
+    required this.recordId,
+    required this.accessTime,
+    required this.consentRequestId,
+    required this.purpose,
+    required this.ipAddress,
+    this.metadata,
+  });
+
+  factory MedicalRecordAccess.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return MedicalRecordAccess(
+      id: doc.id,
+      doctorId: data['doctorId'] ?? '',
+      doctorName: data['doctorName'] ?? '',
+      patientId: data['patientId'] ?? '',
+      patientName: data['patientName'] ?? '',
+      recordType: data['recordType'] ?? '',
+      recordId: data['recordId'] ?? '',
+      accessTime: (data['accessTime'] as Timestamp).toDate(),
+      consentRequestId: data['consentRequestId'] ?? '',
+      purpose: data['purpose'] ?? '',
+      ipAddress: data['ipAddress'] ?? '',
+      metadata: data['metadata'],
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'doctorId': this.doctorId,
+      'doctorName': this.doctorName,
+      'patientId': this.patientId,
+      'patientName': this.patientName,
+      'recordType': this.recordType,
+      'recordId': this.recordId,
+      'accessTime': Timestamp.fromDate(this.accessTime),
+      'consentRequestId': this.consentRequestId,
+      'purpose': this.purpose,
+      'ipAddress': this.ipAddress,
+      'metadata': this.metadata,
     };
   }
 }
@@ -522,55 +712,55 @@ class Friend {
   }
 }
 
-// Medical Record Permission Model
-class MedicalRecordPermission {
+// Patient Consent Settings Model
+class PatientConsentSettings {
   final String id;
   final String patientId;
-  final String doctorId;
-  final String appointmentId;
-  final bool canViewRecords;
-  final bool canViewAnalysis;
-  final bool canWritePrescriptions;
-  final DateTime grantedAt;
-  final DateTime? expiresAt;
+  final bool autoApproveLabReports;
+  final bool autoApprovePrescriptions;
+  final bool allowEmergencyAccess;
+  final int defaultConsentDuration; // in days
+  final List<String> trustedDoctors;
+  final List<String> blockedDoctors;
+  final DateTime lastUpdated;
 
-  MedicalRecordPermission({
+  PatientConsentSettings({
     required this.id,
     required this.patientId,
-    required this.doctorId,
-    required this.appointmentId,
-    required this.canViewRecords,
-    required this.canViewAnalysis,
-    required this.canWritePrescriptions,
-    required this.grantedAt,
-    this.expiresAt,
+    this.autoApproveLabReports = false,
+    this.autoApprovePrescriptions = false,
+    this.allowEmergencyAccess = true,
+    this.defaultConsentDuration = 30,
+    this.trustedDoctors = const [],
+    this.blockedDoctors = const [],
+    required this.lastUpdated,
   });
 
-  factory MedicalRecordPermission.fromFirestore(DocumentSnapshot doc) {
+  factory PatientConsentSettings.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
-    return MedicalRecordPermission(
+    return PatientConsentSettings(
       id: doc.id,
       patientId: data['patientId'] ?? '',
-      doctorId: data['doctorId'] ?? '',
-      appointmentId: data['appointmentId'] ?? '',
-      canViewRecords: data['canViewRecords'] ?? false,
-      canViewAnalysis: data['canViewAnalysis'] ?? false,
-      canWritePrescriptions: data['canWritePrescriptions'] ?? false,
-      grantedAt: (data['grantedAt'] as Timestamp).toDate(),
-      expiresAt: data['expiresAt'] != null ? (data['expiresAt'] as Timestamp).toDate() : null,
+      autoApproveLabReports: data['autoApproveLabReports'] ?? false,
+      autoApprovePrescriptions: data['autoApprovePrescriptions'] ?? false,
+      allowEmergencyAccess: data['allowEmergencyAccess'] ?? true,
+      defaultConsentDuration: data['defaultConsentDuration'] ?? 30,
+      trustedDoctors: List<String>.from(data['trustedDoctors'] ?? []),
+      blockedDoctors: List<String>.from(data['blockedDoctors'] ?? []),
+      lastUpdated: (data['lastUpdated'] as Timestamp).toDate(),
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'patientId': patientId,
-      'doctorId': doctorId,
-      'appointmentId': appointmentId,
-      'canViewRecords': canViewRecords,
-      'canViewAnalysis': canViewAnalysis,
-      'canWritePrescriptions': canWritePrescriptions,
-      'grantedAt': Timestamp.fromDate(grantedAt),
-      'expiresAt': expiresAt != null ? Timestamp.fromDate(expiresAt!) : null,
+      'patientId': this.patientId,
+      'autoApproveLabReports': this.autoApproveLabReports,
+      'autoApprovePrescriptions': this.autoApprovePrescriptions,
+      'allowEmergencyAccess': this.allowEmergencyAccess,
+      'defaultConsentDuration': this.defaultConsentDuration,
+      'trustedDoctors': this.trustedDoctors,
+      'blockedDoctors': this.blockedDoctors,
+      'lastUpdated': Timestamp.fromDate(this.lastUpdated),
     };
   }
 }
@@ -622,7 +812,9 @@ class LabReferral {
       status: data['status'] ?? 'pending',
       notes: data['notes'],
       createdAt: (data['createdAt'] as Timestamp).toDate(),
-      completedAt: data['completedAt'] != null ? (data['completedAt'] as Timestamp).toDate() : null,
+      completedAt: data['completedAt'] != null
+          ? (data['completedAt'] as Timestamp).toDate()
+          : null,
     );
   }
 
@@ -639,7 +831,81 @@ class LabReferral {
       'status': status,
       'notes': notes,
       'createdAt': Timestamp.fromDate(createdAt),
-      'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
+      'completedAt': completedAt != null
+          ? Timestamp.fromDate(completedAt!)
+          : null,
     };
+  }
+}
+
+// Medical Record Permission Model for Doctor Access
+class MedicalRecordPermission {
+  final String id;
+  final String patientId;
+  final String doctorId;
+  final String appointmentId;
+  final bool canViewRecords;
+  final bool canViewAnalysis;
+  final bool canWritePrescriptions;
+  final DateTime grantedAt;
+  final DateTime? expiresAt;
+  final String? grantedBy; // patient id or system
+  final bool isActive;
+
+  MedicalRecordPermission({
+    required this.id,
+    required this.patientId,
+    required this.doctorId,
+    required this.appointmentId,
+    required this.canViewRecords,
+    required this.canViewAnalysis,
+    required this.canWritePrescriptions,
+    required this.grantedAt,
+    this.expiresAt,
+    this.grantedBy,
+    this.isActive = true,
+  });
+
+  factory MedicalRecordPermission.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return MedicalRecordPermission(
+      id: doc.id,
+      patientId: data['patientId'] ?? '',
+      doctorId: data['doctorId'] ?? '',
+      appointmentId: data['appointmentId'] ?? '',
+      canViewRecords: data['canViewRecords'] ?? false,
+      canViewAnalysis: data['canViewAnalysis'] ?? false,
+      canWritePrescriptions: data['canWritePrescriptions'] ?? false,
+      grantedAt: (data['grantedAt'] as Timestamp).toDate(),
+      expiresAt: data['expiresAt'] != null
+          ? (data['expiresAt'] as Timestamp).toDate()
+          : null,
+      grantedBy: data['grantedBy'],
+      isActive: data['isActive'] ?? true,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'patientId': patientId,
+      'doctorId': doctorId,
+      'appointmentId': appointmentId,
+      'canViewRecords': canViewRecords,
+      'canViewAnalysis': canViewAnalysis,
+      'canWritePrescriptions': canWritePrescriptions,
+      'grantedAt': Timestamp.fromDate(grantedAt),
+      'expiresAt': expiresAt != null ? Timestamp.fromDate(expiresAt!) : null,
+      'grantedBy': grantedBy,
+      'isActive': isActive,
+    };
+  }
+
+  bool get isExpired {
+    if (expiresAt == null) return false;
+    return DateTime.now().isAfter(expiresAt!);
+  }
+
+  bool get isValidForUse {
+    return isActive && !isExpired;
   }
 }
