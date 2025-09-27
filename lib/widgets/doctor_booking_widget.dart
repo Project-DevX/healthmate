@@ -177,7 +177,6 @@ class _DoctorBookingWidgetState extends State<DoctorBookingWidget> {
         patientId: widget.patientId,
         patientName: widget.patientName,
         patientEmail: widget.patientEmail,
-        patientPhone: widget.patientPhone,
         doctorId: _selectedDoctor!.id,
         doctorName: _selectedDoctor!.name,
         doctorSpecialty: _selectedDoctor!.specialty,

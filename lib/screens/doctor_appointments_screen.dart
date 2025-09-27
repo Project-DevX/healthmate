@@ -340,7 +340,9 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
               Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: AppTheme.doctorColor.withValues(alpha: 0.1),
+                    backgroundColor: AppTheme.doctorColor.withValues(
+                      alpha: 0.1,
+                    ),
                     child: Text(
                       patientName.isNotEmpty
                           ? patientName[0].toUpperCase()
@@ -631,7 +633,6 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
   }
 
   void _showAppointmentDetails(QueryDocumentSnapshot appointment) {
-
     final data = appointment.data() as Map<String, dynamic>;
 
     showDialog(
@@ -796,7 +797,6 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
             ),
           ],
         ],
-
       ),
     );
   }

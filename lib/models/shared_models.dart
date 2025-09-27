@@ -8,7 +8,6 @@ class Appointment {
   final String patientId;
   final String patientName;
   final String patientEmail;
-  final String? patientPhone;
   final String doctorId;
   final String doctorName;
   final String doctorSpecialty;
@@ -30,7 +29,6 @@ class Appointment {
     required this.patientId,
     required this.patientName,
     required this.patientEmail,
-    this.patientPhone,
     required this.doctorId,
     required this.doctorName,
     required this.doctorSpecialty,
@@ -55,7 +53,6 @@ class Appointment {
       patientId: data['patientId'] ?? '',
       patientName: data['patientName'] ?? '',
       patientEmail: data['patientEmail'] ?? '',
-      patientPhone: data['patientPhone'],
       doctorId: data['doctorId'] ?? '',
       doctorName: data['doctorName'] ?? '',
       doctorSpecialty: data['doctorSpecialty'] ?? '',
@@ -79,7 +76,6 @@ class Appointment {
       'patientId': patientId,
       'patientName': patientName,
       'patientEmail': patientEmail,
-      'patientPhone': patientPhone,
       'doctorId': doctorId,
       'doctorName': doctorName,
       'doctorSpecialty': doctorSpecialty,
@@ -427,7 +423,6 @@ class NotificationModel {
   }
 }
 
-
 // Medical Record Access Consent Model
 class ConsentRequest {
   final String id;
@@ -494,6 +489,60 @@ class ConsentRequest {
           : null,
       appointmentId: data['appointmentId'] ?? '',
       durationDays: data['durationDays'] ?? 30,
+    );
+  }
+
+  String get requestTypeDisplayName {
+    switch (requestType) {
+      case 'lab_reports':
+        return 'Lab Reports';
+      case 'prescriptions':
+        return 'Prescriptions';
+      case 'full_history':
+        return 'Full Medical History';
+      default:
+        return requestType;
+    }
+  }
+
+  Color get statusColor {
+    switch (status) {
+      case 'approved':
+        return Colors.green;
+      case 'denied':
+        return Colors.red;
+      case 'pending':
+        return Colors.orange;
+      case 'expired':
+        return Colors.grey;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'requestId': requestId,
+      'doctorId': doctorId,
+      'doctorName': doctorName,
+      'doctorSpecialty': doctorSpecialty,
+      'patientId': patientId,
+      'patientName': patientName,
+      'requestType': requestType,
+      'purpose': purpose,
+      'requestDate': Timestamp.fromDate(requestDate),
+      'status': status,
+      'responseDate': responseDate != null
+          ? Timestamp.fromDate(responseDate!)
+          : null,
+      'expiryDate': expiryDate != null ? Timestamp.fromDate(expiryDate!) : null,
+      'patientResponse': patientResponse,
+      'specificRecordIds': specificRecordIds,
+      'appointmentId': appointmentId,
+      'durationDays': durationDays,
+    };
+  }
+}
 
 // Friend Request Model
 class FriendRequest {
@@ -536,59 +585,23 @@ class FriendRequest {
       respondedAt: data['respondedAt'] != null
           ? (data['respondedAt'] as Timestamp).toDate()
           : null,
-
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-
-      'requestId': requestId,
-      'doctorId': doctorId,
-      'doctorName': doctorName,
-      'doctorSpecialty': doctorSpecialty,
-      'patientId': patientId,
-      'patientName': patientName,
-      'requestType': requestType,
-      'purpose': purpose,
-      'requestDate': Timestamp.fromDate(requestDate),
-      'status': status,
-      'responseDate': responseDate != null
-          ? Timestamp.fromDate(responseDate!)
+      'senderId': this.senderId,
+      'senderName': this.senderName,
+      'senderType': this.senderType,
+      'receiverId': this.receiverId,
+      'receiverName': this.receiverName,
+      'receiverType': this.receiverType,
+      'status': this.status,
+      'createdAt': Timestamp.fromDate(this.createdAt),
+      'respondedAt': this.respondedAt != null
+          ? Timestamp.fromDate(this.respondedAt!)
           : null,
-      'expiryDate': expiryDate != null ? Timestamp.fromDate(expiryDate!) : null,
-      'patientResponse': patientResponse,
-      'specificRecordIds': specificRecordIds,
-      'appointmentId': appointmentId,
-      'durationDays': durationDays,
     };
-  }
-
-  String get requestTypeDisplayName {
-    switch (requestType) {
-      case 'lab_reports':
-        return 'Lab Reports';
-      case 'prescriptions':
-        return 'Prescriptions';
-      case 'full_history':
-        return 'Full Medical History';
-      default:
-        return requestType;
-    }
-  }
-
-  Color get statusColor {
-    switch (status) {
-      case 'approved':
-        return Colors.green;
-      case 'denied':
-        return Colors.red;
-      case 'expired':
-        return Colors.grey;
-      case 'pending':
-      default:
-        return Colors.orange;
-    }
   }
 }
 
@@ -637,7 +650,22 @@ class MedicalRecordAccess {
       purpose: data['purpose'] ?? '',
       ipAddress: data['ipAddress'] ?? '',
       metadata: data['metadata'],
+    );
+  }
 
+  Map<String, dynamic> toMap() {
+    return {
+      'doctorId': this.doctorId,
+      'doctorName': this.doctorName,
+      'patientId': this.patientId,
+      'patientName': this.patientName,
+      'recordType': this.recordType,
+      'recordId': this.recordId,
+      'accessTime': Timestamp.fromDate(this.accessTime),
+      'consentRequestId': this.consentRequestId,
+      'purpose': this.purpose,
+      'ipAddress': this.ipAddress,
+      'metadata': this.metadata,
     };
   }
 }
@@ -683,27 +711,6 @@ class Friend {
   }
 }
 
-// Medical Record Permission Model
-
-
-  Map<String, dynamic> toMap() {
-    return {
-
-      'doctorId': doctorId,
-      'doctorName': doctorName,
-      'patientId': patientId,
-      'patientName': patientName,
-      'recordType': recordType,
-      'recordId': recordId,
-      'accessTime': Timestamp.fromDate(accessTime),
-      'consentRequestId': consentRequestId,
-      'purpose': purpose,
-      'ipAddress': ipAddress,
-      'metadata': metadata,
-    };
-  }
-}
-
 // Patient Consent Settings Model
 class PatientConsentSettings {
   final String id;
@@ -740,7 +747,19 @@ class PatientConsentSettings {
       trustedDoctors: List<String>.from(data['trustedDoctors'] ?? []),
       blockedDoctors: List<String>.from(data['blockedDoctors'] ?? []),
       lastUpdated: (data['lastUpdated'] as Timestamp).toDate(),
+    );
+  }
 
+  Map<String, dynamic> toMap() {
+    return {
+      'patientId': this.patientId,
+      'autoApproveLabReports': this.autoApproveLabReports,
+      'autoApprovePrescriptions': this.autoApprovePrescriptions,
+      'allowEmergencyAccess': this.allowEmergencyAccess,
+      'defaultConsentDuration': this.defaultConsentDuration,
+      'trustedDoctors': this.trustedDoctors,
+      'blockedDoctors': this.blockedDoctors,
+      'lastUpdated': Timestamp.fromDate(this.lastUpdated),
     };
   }
 }
@@ -792,23 +811,100 @@ class LabReferral {
       status: data['status'] ?? 'pending',
       notes: data['notes'],
       createdAt: (data['createdAt'] as Timestamp).toDate(),
-      completedAt: data['completedAt'] != null ? (data['completedAt'] as Timestamp).toDate() : null,
-
+      completedAt: data['completedAt'] != null
+          ? (data['completedAt'] as Timestamp).toDate()
+          : null,
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
       'patientId': patientId,
-
-      'autoApproveLabReports': autoApproveLabReports,
-      'autoApprovePrescriptions': autoApprovePrescriptions,
-      'allowEmergencyAccess': allowEmergencyAccess,
-      'defaultConsentDuration': defaultConsentDuration,
-      'trustedDoctors': trustedDoctors,
-      'blockedDoctors': blockedDoctors,
-      'lastUpdated': Timestamp.fromDate(lastUpdated),
-
+      'patientName': patientName,
+      'doctorId': doctorId,
+      'doctorName': doctorName,
+      'labId': labId,
+      'labName': labName,
+      'appointmentId': appointmentId,
+      'testTypes': testTypes,
+      'status': status,
+      'notes': notes,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'completedAt': completedAt != null
+          ? Timestamp.fromDate(completedAt!)
+          : null,
     };
+  }
+}
+
+// Medical Record Permission Model for Doctor Access
+class MedicalRecordPermission {
+  final String id;
+  final String patientId;
+  final String doctorId;
+  final String appointmentId;
+  final bool canViewRecords;
+  final bool canViewAnalysis;
+  final bool canWritePrescriptions;
+  final DateTime grantedAt;
+  final DateTime? expiresAt;
+  final String? grantedBy; // patient id or system
+  final bool isActive;
+
+  MedicalRecordPermission({
+    required this.id,
+    required this.patientId,
+    required this.doctorId,
+    required this.appointmentId,
+    required this.canViewRecords,
+    required this.canViewAnalysis,
+    required this.canWritePrescriptions,
+    required this.grantedAt,
+    this.expiresAt,
+    this.grantedBy,
+    this.isActive = true,
+  });
+
+  factory MedicalRecordPermission.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return MedicalRecordPermission(
+      id: doc.id,
+      patientId: data['patientId'] ?? '',
+      doctorId: data['doctorId'] ?? '',
+      appointmentId: data['appointmentId'] ?? '',
+      canViewRecords: data['canViewRecords'] ?? false,
+      canViewAnalysis: data['canViewAnalysis'] ?? false,
+      canWritePrescriptions: data['canWritePrescriptions'] ?? false,
+      grantedAt: (data['grantedAt'] as Timestamp).toDate(),
+      expiresAt: data['expiresAt'] != null
+          ? (data['expiresAt'] as Timestamp).toDate()
+          : null,
+      grantedBy: data['grantedBy'],
+      isActive: data['isActive'] ?? true,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'patientId': patientId,
+      'doctorId': doctorId,
+      'appointmentId': appointmentId,
+      'canViewRecords': canViewRecords,
+      'canViewAnalysis': canViewAnalysis,
+      'canWritePrescriptions': canWritePrescriptions,
+      'grantedAt': Timestamp.fromDate(grantedAt),
+      'expiresAt': expiresAt != null ? Timestamp.fromDate(expiresAt!) : null,
+      'grantedBy': grantedBy,
+      'isActive': isActive,
+    };
+  }
+
+  bool get isExpired {
+    if (expiresAt == null) return false;
+    return DateTime.now().isAfter(expiresAt!);
+  }
+
+  bool get isValidForUse {
+    return isActive && !isExpired;
   }
 }
