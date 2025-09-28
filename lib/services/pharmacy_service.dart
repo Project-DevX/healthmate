@@ -622,6 +622,43 @@ class PharmacyService {
 
       print('💰 BILL: Generating bill with dynamic pricing from inventory...');
 
+      // CRUCIAL FIX: Fetch fresh prescription data from Firestore to get accurate patient/doctor names
+      print(
+        '🔍 BILL: Fetching fresh prescription data from Firestore for ID: ${prescription.id}',
+      );
+      final freshPrescriptionDoc = await _firestore
+          .collection('prescriptions')
+          .doc(prescription.id)
+          .get();
+
+      String patientName = 'Unknown Patient';
+      String doctorName = 'Unknown Doctor';
+      String doctorSpecialization = 'General Medicine';
+      String doctorHospital = 'Unknown Hospital';
+      String patientEmail = '';
+      String patientPhone = '';
+      int patientAge = 0;
+
+      if (freshPrescriptionDoc.exists) {
+        final freshData = freshPrescriptionDoc.data()!;
+        patientName = freshData['patientName'] ?? 'Unknown Patient';
+        doctorName = freshData['doctorName'] ?? 'Unknown Doctor';
+        doctorSpecialization =
+            freshData['doctorSpecialization'] ?? 'General Medicine';
+        doctorHospital = freshData['doctorHospital'] ?? 'Unknown Hospital';
+        patientEmail = freshData['patientEmail'] ?? '';
+        patientPhone = freshData['patientPhone'] ?? '';
+        patientAge = freshData['patientAge'] ?? 0;
+
+        print(
+          '✅ BILL: Fresh data fetched - Patient: "$patientName", Doctor: "$doctorName"',
+        );
+      } else {
+        print(
+          '⚠️ BILL: Could not fetch fresh prescription data, using fallback values',
+        );
+      }
+
       // Get medicines with current inventory pricing
       final medicinesWithCurrentPricing = <Medicine>[];
       double subtotal = 0.0;
@@ -701,15 +738,40 @@ class PharmacyService {
         '💰 BILL: Calculated totals - Subtotal: \$${subtotal.toStringAsFixed(2)}, Tax: \$${tax.toStringAsFixed(2)}, Total: \$${total.toStringAsFixed(2)}',
       );
 
+      // Create fresh PatientInfo and DoctorInfo objects with the correct data
+      final freshPatientInfo = PatientInfo(
+        id: prescription.patientInfo.id,
+        name: patientName,
+        age: patientAge,
+        phone: patientPhone,
+        email: patientEmail,
+      );
+
+      final freshDoctorInfo = DoctorInfo(
+        id: prescription.doctorInfo.id,
+        name: doctorName,
+        specialization: doctorSpecialization,
+        hospital: doctorHospital,
+      );
+
+      // Debug patient and doctor info with fresh data
+      print(
+        '💰 BILL: Using Fresh Patient Info - Name: "$patientName", Age: $patientAge, Phone: "$patientPhone"',
+      );
+      print(
+        '💰 BILL: Using Fresh Doctor Info - Name: "$doctorName", Specialization: "$doctorSpecialization", Hospital: "$doctorHospital"',
+      );
+
       final billData = {
         'id': billId,
         'billNumber': billNumber,
         'prescriptionId': prescription.id,
         'pharmacyId': currentPharmacyId,
-        'patientName': prescription.patientInfo.name,
+        'patientName': patientName, // Use fresh patient name directly
+        'doctorName': doctorName, // Add doctor name directly to bill
         'medicines': medicinesWithCurrentPricing.map((m) => m.toMap()).toList(),
-        'patientInfo': prescription.patientInfo.toMap(),
-        'doctorInfo': prescription.doctorInfo.toMap(),
+        'patientInfo': freshPatientInfo.toMap(), // Use fresh patient info
+        'doctorInfo': freshDoctorInfo.toMap(), // Use fresh doctor info
         'subtotal': subtotal,
         'tax': tax,
         'totalAmount': total,
@@ -1417,12 +1479,33 @@ class PharmacyPrescription {
     Map<String, dynamic> data,
     String id,
   ) {
+    // Create PatientInfo from flat fields in prescription document
+    final patientInfo = PatientInfo(
+      id: data['patientId'] ?? '',
+      name: data['patientName'] ?? '', // Direct from prescription field
+      age: data['patientAge'] ?? 0, // Direct from prescription field
+      phone: data['patientPhone'] ?? '', // Direct from prescription field
+      email: data['patientEmail'] ?? '', // Direct from prescription field
+    );
+
+    // Create DoctorInfo from flat fields in prescription document
+    final doctorInfo = DoctorInfo(
+      id: data['doctorId'] ?? '',
+      name: data['doctorName'] ?? '', // Direct from prescription field
+      specialization:
+          data['doctorSpecialization'] ??
+          'General Medicine', // Direct from prescription field
+      hospital:
+          data['doctorHospital'] ??
+          'Unknown Hospital', // Direct from prescription field
+    );
+
     return PharmacyPrescription(
       id: id,
       orderNumber: data['orderNumber'] ?? 0,
       pharmacyId: data['pharmacyId'] ?? '',
-      patientInfo: PatientInfo.fromMap(data['patientInfo'] ?? {}),
-      doctorInfo: DoctorInfo.fromMap(data['doctorInfo'] ?? {}),
+      patientInfo: patientInfo, // Use constructed PatientInfo
+      doctorInfo: doctorInfo, // Use constructed DoctorInfo
       medicines: (data['medicines'] as List<dynamic>? ?? [])
           .map((m) => Medicine.fromMap(m))
           .toList(),
