@@ -1849,10 +1849,22 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
         userId,
         'patient',
       );
+      print('🔍 PATIENT: Fetching prescriptions for patient: $userId');
       final prescriptions = await InterconnectService.getUserPrescriptions(
         userId,
         'patient',
       );
+      print(
+        '🔍 PATIENT: Found ${prescriptions.length} prescriptions for patient',
+      );
+
+      for (final prescription in prescriptions.take(3)) {
+        print('   - Prescription: ${prescription.id}');
+        print('     Doctor: ${prescription.doctorName}');
+        print('     Status: ${prescription.status}');
+        print('     Date: ${prescription.prescribedDate}');
+        print('     Medicines: ${prescription.medicines.length}');
+      }
 
       if (mounted) {
         setState(() {
@@ -2114,7 +2126,12 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
   }
 
   Widget _buildPrescriptionsList() {
+    print(
+      '🔍 PATIENT UI: Building prescriptions list with ${_prescriptions.length} prescriptions',
+    );
+
     if (_prescriptions.isEmpty) {
+      print('🔍 PATIENT UI: Showing empty state for prescriptions');
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -2127,6 +2144,10 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
         ),
       );
     }
+
+    print(
+      '🔍 PATIENT UI: Rendering prescription list with ${_prescriptions.length} items',
+    );
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),

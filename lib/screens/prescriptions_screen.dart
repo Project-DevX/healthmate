@@ -180,6 +180,73 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
     });
   }
 
+  Future<void> _fetchPatientInfo(String patientId) async {
+    try {
+      print('🔍 PRESCRIPTION: Fetching patient info for ID: $patientId');
+
+      // First try to find by exact user ID
+      var patientDoc = await _firestore
+          .collection('users')
+          .doc(patientId)
+          .get();
+
+      if (!patientDoc.exists) {
+        // If not found by ID, try searching by email or other identifiers
+        final patientQuery = await _firestore
+            .collection('users')
+            .where('userType', isEqualTo: 'patient')
+            .where('uid', isEqualTo: patientId)
+            .limit(1)
+            .get();
+
+        if (patientQuery.docs.isNotEmpty) {
+          patientDoc = patientQuery.docs.first;
+        }
+      }
+
+      if (patientDoc.exists) {
+        final patientData = patientDoc.data()!;
+        print('✅ PRESCRIPTION: Found patient data: ${patientData['fullName']}');
+
+        setState(() {
+          _patientNameController.text =
+              patientData['fullName'] ?? patientData['name'] ?? '';
+          _patientEmailController.text = patientData['email'] ?? '';
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Patient information loaded: ${patientData['fullName'] ?? patientData['name'] ?? 'Unknown'}',
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        print('⚠️ PRESCRIPTION: Patient not found for ID: $patientId');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Patient not found. Please enter details manually.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ PRESCRIPTION: Error fetching patient info: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error fetching patient info: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -273,7 +340,20 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
                         labelText: 'Patient ID (Optional)',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.badge),
+                        suffixIcon: Icon(Icons.search),
+                        helperText:
+                            'Enter patient ID to auto-fill name and email',
                       ),
+                      onChanged: (value) {
+                        if (value.isNotEmpty && value.length > 3) {
+                          _fetchPatientInfo(value);
+                        }
+                      },
+                      onFieldSubmitted: (value) {
+                        if (value.isNotEmpty) {
+                          _fetchPatientInfo(value);
+                        }
+                      },
                     ),
                     const SizedBox(height: 16),
 

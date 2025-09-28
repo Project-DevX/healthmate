@@ -302,20 +302,30 @@ class PharmacyService {
           '🔍 INVENTORY: Checking medicine: ${medicine.name} (need ${medicine.quantity})',
         );
 
-        // Query inventory for this medicine by name (since IDs might differ)
+        // Query inventory for this medicine by name (case-insensitive matching)
         final querySnapshot = await _firestore
             .collection('pharmacy_inventory')
             .doc(currentPharmacyId)
             .collection('medicines')
-            .where('name', isEqualTo: medicine.name)
-            .get();
+            .get(); // Get all medicines first, then filter locally for case-insensitive match
 
         print(
-          '🔍 INVENTORY: Found ${querySnapshot.docs.length} inventory records for ${medicine.name}',
+          '🔍 INVENTORY: Retrieved ${querySnapshot.docs.length} total medicines from inventory',
         );
 
-        if (querySnapshot.docs.isNotEmpty) {
-          final inventoryDoc = querySnapshot.docs.first;
+        // Find medicine with case-insensitive name matching
+        final matchingDocs = querySnapshot.docs.where((doc) {
+          final docName = (doc.data()['name'] ?? '').toString().toLowerCase();
+          final searchName = medicine.name.toLowerCase();
+          return docName == searchName;
+        }).toList();
+
+        print(
+          '🔍 INVENTORY: Found ${matchingDocs.length} matching records for "${medicine.name}"',
+        );
+
+        if (matchingDocs.isNotEmpty) {
+          final inventoryDoc = matchingDocs.first;
           final inventoryData = inventoryDoc.data();
           final availableQuantity = inventoryData['quantity'] ?? 0;
           final requiredQuantity = medicine.quantity;
@@ -324,19 +334,57 @@ class PharmacyService {
             '🔍 INVENTORY: ${medicine.name} - Available: $availableQuantity, Required: $requiredQuantity',
           );
 
+          // Get price from inventory
+          final inventoryPrice = (inventoryData['unitPrice'] ?? 0.0).toDouble();
+
+          print(
+            '🔍 INVENTORY: ${medicine.name} inventory data keys: ${inventoryData.keys.toList()}',
+          );
+          print(
+            '🔍 INVENTORY: ${medicine.name} full inventory data: $inventoryData',
+          );
+          print(
+            '🔍 INVENTORY: Raw unitPrice value: ${inventoryData['unitPrice']} (type: ${inventoryData['unitPrice'].runtimeType})',
+          );
+          print('🔍 INVENTORY: Extracted price: \$${inventoryPrice}');
+
           if (availableQuantity >= requiredQuantity) {
-            // Sufficient stock
-            medicine.availableQuantity = requiredQuantity;
-            availableMedicines.add(medicine);
-            print('✅ INVENTORY: ${medicine.name} - Sufficient stock');
+            // Sufficient stock - create new medicine with inventory price
+            final updatedMedicine = Medicine(
+              id: medicine.id,
+              name: medicine.name,
+              quantity: medicine.quantity,
+              dosage: medicine.dosage,
+              duration: medicine.duration,
+              instructions: medicine.instructions,
+              price: inventoryPrice, // Use inventory price
+              availability: medicine.availability,
+              availableQuantity: requiredQuantity,
+            );
+            availableMedicines.add(updatedMedicine);
+            print(
+              '✅ INVENTORY: ${medicine.name} - Sufficient stock at \$${inventoryPrice}',
+            );
           } else if (availableQuantity > 0) {
-            // Partial stock
-            medicine.availableQuantity = availableQuantity;
-            availableMedicines.add(medicine);
+            // Partial stock - create new medicine with inventory price
+            final updatedMedicine = Medicine(
+              id: medicine.id,
+              name: medicine.name,
+              quantity: medicine.quantity,
+              dosage: medicine.dosage,
+              duration: medicine.duration,
+              instructions: medicine.instructions,
+              price: inventoryPrice, // Use inventory price
+              availability: medicine.availability,
+              availableQuantity: availableQuantity,
+            );
+            availableMedicines.add(updatedMedicine);
             final warning =
                 '${medicine.name}: Only $availableQuantity available (requested: $requiredQuantity)';
             warnings.add(warning);
-            print('⚠️ INVENTORY: ${medicine.name} - Partial stock: $warning');
+            print(
+              '⚠️ INVENTORY: ${medicine.name} - Partial stock: $warning at \$${inventoryPrice}',
+            );
           } else {
             // No stock
             unavailableMedicines.add(medicine);
@@ -409,9 +457,9 @@ class PharmacyService {
         print('🔍 SERVICE: Inventory check passed, proceeding with update');
       }
 
-      // Update prescription status
+      // Update prescription pharmacy status
       await _firestore.collection('prescriptions').doc(prescriptionId).update({
-        'status': status,
+        'pharmacyStatus': status,
         'lastUpdated': FieldValue.serverTimestamp(),
       });
 
@@ -562,7 +610,7 @@ class PharmacyService {
     }
   }
 
-  /// Generate bill
+  /// Generate bill with dynamic pricing from inventory
   Future<PharmacyBill> generateBill(PharmacyPrescription prescription) async {
     try {
       final billId = _firestore.collection('pharmacy_bills').doc().id;
@@ -572,26 +620,158 @@ class PharmacyService {
       final billNumber =
           'BILL-${DateFormat('yyyyMMdd').format(DateTime.now())}-$currentBillNumber';
 
-      final subtotal = prescription.medicines.fold(
-        0.0,
-        (sum, medicine) =>
-            sum +
-            (medicine.price *
-                (medicine.availableQuantity ?? medicine.quantity)),
+      print('💰 BILL: Generating bill with dynamic pricing from inventory...');
+
+      // CRUCIAL FIX: Fetch fresh prescription data from Firestore to get accurate patient/doctor names
+      print(
+        '🔍 BILL: Fetching fresh prescription data from Firestore for ID: ${prescription.id}',
       );
+      final freshPrescriptionDoc = await _firestore
+          .collection('prescriptions')
+          .doc(prescription.id)
+          .get();
+
+      String patientName = 'Unknown Patient';
+      String doctorName = 'Unknown Doctor';
+      String doctorSpecialization = 'General Medicine';
+      String doctorHospital = 'Unknown Hospital';
+      String patientEmail = '';
+      String patientPhone = '';
+      int patientAge = 0;
+
+      if (freshPrescriptionDoc.exists) {
+        final freshData = freshPrescriptionDoc.data()!;
+        patientName = freshData['patientName'] ?? 'Unknown Patient';
+        doctorName = freshData['doctorName'] ?? 'Unknown Doctor';
+        doctorSpecialization =
+            freshData['doctorSpecialization'] ?? 'General Medicine';
+        doctorHospital = freshData['doctorHospital'] ?? 'Unknown Hospital';
+        patientEmail = freshData['patientEmail'] ?? '';
+        patientPhone = freshData['patientPhone'] ?? '';
+        patientAge = freshData['patientAge'] ?? 0;
+
+        print(
+          '✅ BILL: Fresh data fetched - Patient: "$patientName", Doctor: "$doctorName"',
+        );
+      } else {
+        print(
+          '⚠️ BILL: Could not fetch fresh prescription data, using fallback values',
+        );
+      }
+
+      // Get medicines with current inventory pricing
+      final medicinesWithCurrentPricing = <Medicine>[];
+      double subtotal = 0.0;
+
+      for (final medicine in prescription.medicines) {
+        // Fetch current price from inventory
+        final inventoryQuery = await _firestore
+            .collection('pharmacy_inventory')
+            .doc(currentPharmacyId)
+            .collection('medicines')
+            .get();
+
+        Medicine? medicineWithPrice;
+
+        for (final inventoryDoc in inventoryQuery.docs) {
+          final inventoryData = inventoryDoc.data();
+          final inventoryName = inventoryData['name'] ?? '';
+
+          // Case-insensitive medicine matching
+          if (inventoryName.toLowerCase() == medicine.name.toLowerCase()) {
+            final currentPrice = (inventoryData['unitPrice'] ?? 0.0).toDouble();
+            final quantityToUse =
+                medicine.availableQuantity ?? medicine.quantity;
+
+            print(
+              '💰 BILL: Found ${medicine.name} in inventory - Current price: \$${currentPrice}, Using quantity: $quantityToUse',
+            );
+
+            medicineWithPrice = Medicine(
+              id: medicine.id,
+              name: medicine.name,
+              dosage: medicine.dosage,
+              quantity: quantityToUse,
+              price: currentPrice, // Use current inventory price
+              instructions: medicine.instructions,
+              duration: medicine.duration,
+              availableQuantity: medicine.availableQuantity,
+            );
+
+            // Calculate line total
+            final lineTotal = currentPrice * quantityToUse;
+            subtotal += lineTotal;
+            print(
+              '💰 BILL: ${medicine.name} line total: \$${lineTotal.toStringAsFixed(2)} (${quantityToUse} × \$${currentPrice})',
+            );
+            break;
+          }
+        }
+
+        if (medicineWithPrice != null) {
+          medicinesWithCurrentPricing.add(medicineWithPrice);
+        } else {
+          print(
+            '⚠️ BILL: Medicine ${medicine.name} not found in inventory - using fallback price of \$0.00',
+          );
+          // Fallback: add medicine with zero price if not found in inventory
+          medicinesWithCurrentPricing.add(
+            Medicine(
+              id: medicine.id,
+              name: medicine.name,
+              dosage: medicine.dosage,
+              quantity: medicine.availableQuantity ?? medicine.quantity,
+              price: 0.0, // Zero price for unavailable items
+              instructions: medicine.instructions,
+              duration: medicine.duration,
+              availableQuantity: medicine.availableQuantity,
+            ),
+          );
+        }
+      }
+
       final tax = subtotal * 0.08; // 8% tax
       final total = subtotal + tax;
       final now = DateTime.now();
+
+      print(
+        '💰 BILL: Calculated totals - Subtotal: \$${subtotal.toStringAsFixed(2)}, Tax: \$${tax.toStringAsFixed(2)}, Total: \$${total.toStringAsFixed(2)}',
+      );
+
+      // Create fresh PatientInfo and DoctorInfo objects with the correct data
+      final freshPatientInfo = PatientInfo(
+        id: prescription.patientInfo.id,
+        name: patientName,
+        age: patientAge,
+        phone: patientPhone,
+        email: patientEmail,
+      );
+
+      final freshDoctorInfo = DoctorInfo(
+        id: prescription.doctorInfo.id,
+        name: doctorName,
+        specialization: doctorSpecialization,
+        hospital: doctorHospital,
+      );
+
+      // Debug patient and doctor info with fresh data
+      print(
+        '💰 BILL: Using Fresh Patient Info - Name: "$patientName", Age: $patientAge, Phone: "$patientPhone"',
+      );
+      print(
+        '💰 BILL: Using Fresh Doctor Info - Name: "$doctorName", Specialization: "$doctorSpecialization", Hospital: "$doctorHospital"',
+      );
 
       final billData = {
         'id': billId,
         'billNumber': billNumber,
         'prescriptionId': prescription.id,
         'pharmacyId': currentPharmacyId,
-        'patientName': prescription.patientInfo.name,
-        'medicines': prescription.medicines.map((m) => m.toMap()).toList(),
-        'patientInfo': prescription.patientInfo.toMap(),
-        'doctorInfo': prescription.doctorInfo.toMap(),
+        'patientName': patientName, // Use fresh patient name directly
+        'doctorName': doctorName, // Add doctor name directly to bill
+        'medicines': medicinesWithCurrentPricing.map((m) => m.toMap()).toList(),
+        'patientInfo': freshPatientInfo.toMap(), // Use fresh patient info
+        'doctorInfo': freshDoctorInfo.toMap(), // Use fresh doctor info
         'subtotal': subtotal,
         'tax': tax,
         'totalAmount': total,
@@ -607,9 +787,12 @@ class PharmacyService {
         'timestamp': Timestamp.fromDate(DateTime.now()),
       });
 
+      print(
+        '✅ BILL: Generated bill ${billNumber} with current inventory pricing',
+      );
       return PharmacyBill.fromMap(billData);
     } catch (e) {
-      print('Error generating bill: $e');
+      print('❌ BILL: Error generating bill: $e');
       throw e;
     }
   }
@@ -845,7 +1028,7 @@ class PharmacyService {
               'dosage': '1 tablet 3x daily',
               'duration': '7 days',
               'instructions': 'Take with food',
-              'price': 15.00,
+              // No price - will be calculated from inventory
             },
             {
               'id': 'med_002',
@@ -854,12 +1037,12 @@ class PharmacyService {
               'dosage': '1 tablet 2x daily',
               'duration': '15 days',
               'instructions': 'Take after meals',
-              'price': 8.50,
+              // No price - will be calculated from inventory
             },
           ],
           'status': 'pending',
           'prescriptionDate': FieldValue.serverTimestamp(),
-          'totalAmount': 23.50,
+          'totalAmount': 0.0, // Will be calculated dynamically
           'timestamp': FieldValue.serverTimestamp(),
         },
         {
@@ -883,12 +1066,12 @@ class PharmacyService {
               'dosage': '1 tablet daily',
               'duration': '30 days',
               'instructions': 'Take in the morning',
-              'price': 12.75,
+              // No price - will be calculated from inventory
             },
           ],
           'status': 'ready',
           'prescriptionDate': FieldValue.serverTimestamp(),
-          'totalAmount': 12.75,
+          'totalAmount': 0.0, // Will be calculated dynamically
           'timestamp': FieldValue.serverTimestamp(),
         },
         {
@@ -912,7 +1095,7 @@ class PharmacyService {
               'dosage': '1 tablet 2x daily',
               'duration': '30 days',
               'instructions': 'Take with meals',
-              'price': 18.25,
+              // No price - will be calculated from inventory
             },
             {
               'id': 'med_005',
@@ -921,12 +1104,12 @@ class PharmacyService {
               'dosage': '10 units daily',
               'duration': '30 days',
               'instructions': 'Inject subcutaneously',
-              'price': 45.00,
+              // No price - will be calculated from inventory
             },
           ],
           'status': 'delivered',
           'prescriptionDate': FieldValue.serverTimestamp(),
-          'totalAmount': 63.25,
+          'totalAmount': 0.0, // Will be calculated dynamically
           'timestamp': FieldValue.serverTimestamp(),
         },
       ];
@@ -1031,7 +1214,7 @@ class PharmacyService {
               'dosage': '1 tablet 3x daily',
               'duration': '7 days',
               'instructions': 'Take with food',
-              'price': 15.00,
+              // No price - will be calculated from inventory
               'availability': 'pending',
             },
             {
@@ -1041,7 +1224,7 @@ class PharmacyService {
               'dosage': '1 tablet 2x daily',
               'duration': '15 days',
               'instructions': 'Take after meals',
-              'price': 8.50,
+              // No price - will be calculated from inventory
               'availability': 'pending',
             },
           ],
@@ -1070,7 +1253,7 @@ class PharmacyService {
               'dosage': '1 tablet daily',
               'duration': '30 days',
               'instructions': 'Take in the morning',
-              'price': 12.75,
+              // No price - will be calculated from inventory
               'availability': 'pending',
             },
           ],
@@ -1101,7 +1284,7 @@ class PharmacyService {
               'dosage': '1 tablet 3x daily',
               'duration': '7 days',
               'instructions': 'Take with food to reduce stomach irritation',
-              'price': 8.50,
+              // No price - will be calculated from inventory
               'availability': 'pending',
             },
           ],
@@ -1132,7 +1315,7 @@ class PharmacyService {
               'dosage': '1 tablet 2x daily',
               'duration': '30 days',
               'instructions': 'Take with meals',
-              'price': 15.00,
+              // No price - will be calculated from inventory
               'availability': 'pending',
             },
           ],
@@ -1162,7 +1345,7 @@ class PharmacyService {
               'dosage': '1 tablet 3x daily',
               'duration': '5 days',
               'instructions': 'Complete full course',
-              'price': 15.00,
+              // No price - will be calculated from inventory
               'availability': 'pending',
             },
             {
@@ -1172,7 +1355,7 @@ class PharmacyService {
               'dosage': '1 tablet 2x daily',
               'duration': '10 days',
               'instructions': 'Take after meals',
-              'price': 8.50,
+              // No price - will be calculated from inventory
               'availability': 'pending',
             },
           ],
@@ -1296,12 +1479,33 @@ class PharmacyPrescription {
     Map<String, dynamic> data,
     String id,
   ) {
+    // Create PatientInfo from flat fields in prescription document
+    final patientInfo = PatientInfo(
+      id: data['patientId'] ?? '',
+      name: data['patientName'] ?? '', // Direct from prescription field
+      age: data['patientAge'] ?? 0, // Direct from prescription field
+      phone: data['patientPhone'] ?? '', // Direct from prescription field
+      email: data['patientEmail'] ?? '', // Direct from prescription field
+    );
+
+    // Create DoctorInfo from flat fields in prescription document
+    final doctorInfo = DoctorInfo(
+      id: data['doctorId'] ?? '',
+      name: data['doctorName'] ?? '', // Direct from prescription field
+      specialization:
+          data['doctorSpecialization'] ??
+          'General Medicine', // Direct from prescription field
+      hospital:
+          data['doctorHospital'] ??
+          'Unknown Hospital', // Direct from prescription field
+    );
+
     return PharmacyPrescription(
       id: id,
       orderNumber: data['orderNumber'] ?? 0,
       pharmacyId: data['pharmacyId'] ?? '',
-      patientInfo: PatientInfo.fromMap(data['patientInfo'] ?? {}),
-      doctorInfo: DoctorInfo.fromMap(data['doctorInfo'] ?? {}),
+      patientInfo: patientInfo, // Use constructed PatientInfo
+      doctorInfo: doctorInfo, // Use constructed DoctorInfo
       medicines: (data['medicines'] as List<dynamic>? ?? [])
           .map((m) => Medicine.fromMap(m))
           .toList(),

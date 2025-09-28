@@ -34,28 +34,108 @@ class PrescriptionService {
         pharmacyName = pharmacyData['institutionName'] ?? pharmacyName;
       }
 
+      // Fetch detailed patient information
+      Map<String, dynamic> patientDetails = {
+        'name': patientName,
+        'email': patientEmail,
+        'phone': '',
+        'age': 0,
+      };
+
+      try {
+        final patientDoc = await _firestore
+            .collection('users')
+            .doc(patientId)
+            .get();
+        if (patientDoc.exists) {
+          final patientData = patientDoc.data()!;
+          patientDetails = {
+            'name': patientData['fullName'] ?? patientName,
+            'email': patientData['email'] ?? patientEmail,
+            'phone': patientData['phoneNumber'] ?? '',
+            'age': _calculateAge(patientData['dateOfBirth']),
+          };
+          print('✅ PRESCRIPTION SERVICE: Enhanced patient details fetched');
+        }
+      } catch (e) {
+        print(
+          '⚠️ PRESCRIPTION SERVICE: Could not fetch enhanced patient details: $e',
+        );
+      }
+
+      // Fetch detailed doctor information
+      Map<String, dynamic> doctorDetails = {
+        'name': doctorName,
+        'specialization': 'General Medicine',
+        'hospital': 'Unknown Hospital',
+      };
+
+      try {
+        final doctorDoc = await _firestore
+            .collection('users')
+            .doc(doctorId)
+            .get();
+        if (doctorDoc.exists) {
+          final doctorData = doctorDoc.data()!;
+          doctorDetails = {
+            'name': doctorData['fullName'] ?? doctorName,
+            'specialization':
+                doctorData['specialization'] ?? 'General Medicine',
+            'hospital':
+                doctorData['hospitalName'] ??
+                doctorData['institution'] ??
+                'Unknown Hospital',
+          };
+          print('✅ PRESCRIPTION SERVICE: Enhanced doctor details fetched');
+        }
+      } catch (e) {
+        print(
+          '⚠️ PRESCRIPTION SERVICE: Could not fetch enhanced doctor details: $e',
+        );
+      }
+
       // Generate order number for pharmacy tracking
       final orderNumber = await _generateOrderNumber();
 
-      // Create prescription document
+      // Debug log the details we're about to save
+      print('💊 PRESCRIPTION SERVICE: About to save prescription with:');
+      print('  - Patient Name: "${patientDetails['name']}"');
+      print('  - Patient Email: "${patientDetails['email']}"');
+      print('  - Patient Age: ${patientDetails['age']}');
+      print('  - Doctor Name: "${doctorDetails['name']}"');
+      print('  - Doctor Specialization: "${doctorDetails['specialization']}"');
+      print('  - Doctor Hospital: "${doctorDetails['hospital']}"');
+
+      // Create prescription document with enhanced patient/doctor details
       final prescriptionData = {
         'doctorId': doctorId,
-        'doctorName': doctorName,
+        'doctorName': doctorDetails['name'],
+        'doctorSpecialization': doctorDetails['specialization'],
+        'doctorHospital': doctorDetails['hospital'],
         'patientId': patientId,
-        'patientName': patientName,
-        'patientEmail': patientEmail,
+        'patientName': patientDetails['name'],
+        'patientEmail': patientDetails['email'],
+        'patientPhone': patientDetails['phone'],
+        'patientAge': patientDetails['age'],
         'appointmentId': appointmentId,
         'medicines': medicines,
         'diagnosis': diagnosis,
         'notes': notes,
-        'status': 'pending', // pending -> processing -> ready -> delivered
+        'status':
+            'prescribed', // For patient dashboard compatibility: prescribed -> filled
+        'pharmacyStatus':
+            'pending', // For pharmacy workflow: pending -> processing -> ready -> delivered
         'pharmacyId': pharmacyId,
         'pharmacyEmail': defaultPharmacyEmail,
         'pharmacyName': pharmacyName,
         'orderNumber': orderNumber,
-        'prescriptionDate': FieldValue.serverTimestamp(),
+        'prescribedDate':
+            FieldValue.serverTimestamp(), // For patient dashboard compatibility
+        'prescriptionDate':
+            FieldValue.serverTimestamp(), // For pharmacy compatibility
         'createdAt': FieldValue.serverTimestamp(),
         'totalAmount': 0.0, // Will be calculated by pharmacy
+        'timestamp': FieldValue.serverTimestamp(), // For pharmacy compatibility
       };
 
       // Save prescription to Firestore
@@ -227,5 +307,35 @@ class PrescriptionService {
       return data;
     }
     return null;
+  }
+
+  // Helper method to calculate age from date of birth
+  static int _calculateAge(dynamic dateOfBirth) {
+    if (dateOfBirth == null) return 0;
+
+    try {
+      DateTime birthDate;
+      if (dateOfBirth is Timestamp) {
+        birthDate = dateOfBirth.toDate();
+      } else if (dateOfBirth is String) {
+        birthDate = DateTime.parse(dateOfBirth);
+      } else {
+        return 0;
+      }
+
+      final now = DateTime.now();
+      int age = now.year - birthDate.year;
+
+      // Adjust if birthday hasn't occurred this year
+      if (now.month < birthDate.month ||
+          (now.month == birthDate.month && now.day < birthDate.day)) {
+        age--;
+      }
+
+      return age > 0 ? age : 0;
+    } catch (e) {
+      print('⚠️ Error calculating age: $e');
+      return 0;
+    }
   }
 }
