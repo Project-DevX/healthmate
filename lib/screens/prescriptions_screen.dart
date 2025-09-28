@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
+import '../models/prescription_models.dart';
+import '../services/prescription_service.dart';
 
 class PrescriptionsScreen extends StatefulWidget {
   final String doctorId;
@@ -24,13 +26,14 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final _formKey = GlobalKey<FormState>();
 
-  // Form controllers
+  // Enhanced form controllers
   final _patientNameController = TextEditingController();
   final _patientIdController = TextEditingController();
+  final _patientEmailController = TextEditingController();
   final _diagnosisController = TextEditingController();
   final _notesController = TextEditingController();
 
-  List<PrescriptionMedication> _medications = [];
+  List<PrescriptionMedicine> _medications = [];
   bool _isLoading = false;
 
   @override
@@ -41,9 +44,30 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
     // Pre-fill patient information if provided
     if (widget.patientId != null) {
       _patientIdController.text = widget.patientId!;
+      _fetchPatientEmail(widget.patientId!);
     }
     if (widget.patientName != null) {
       _patientNameController.text = widget.patientName!;
+    }
+  }
+
+  Future<void> _fetchPatientEmail(String patientId) async {
+    try {
+      final patientDoc = await _firestore
+          .collection('users')
+          .doc(patientId)
+          .get();
+      if (patientDoc.exists) {
+        final patientData = patientDoc.data();
+        final email = patientData?['email'] ?? '';
+        if (email.isNotEmpty && mounted) {
+          setState(() {
+            _patientEmailController.text = email;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching patient email: $e');
     }
   }
 
@@ -51,6 +75,7 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
   void dispose() {
     _patientNameController.dispose();
     _patientIdController.dispose();
+    _patientEmailController.dispose();
     _diagnosisController.dispose();
     _notesController.dispose();
     for (var medication in _medications) {
@@ -61,7 +86,7 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
 
   void _addMedicationField() {
     setState(() {
-      _medications.add(PrescriptionMedication());
+      _medications.add(PrescriptionMedicine());
     });
   }
 
@@ -84,25 +109,39 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
     });
 
     try {
-      final prescriptionData = {
-        'doctorId': widget.doctorId,
-        'patientName': _patientNameController.text.trim(),
-        'patientId': _patientIdController.text.trim(),
-        'diagnosis': _diagnosisController.text.trim(),
-        'notes': _notesController.text.trim(),
-        'medications': _medications.map((med) => med.toMap()).toList(),
-        'createdAt': FieldValue.serverTimestamp(),
-        'prescriptionDate': DateTime.now(),
-        'status': 'active',
-      };
+      // Get doctor details
+      final doctorDoc = await _firestore
+          .collection('users')
+          .doc(widget.doctorId)
+          .get();
+      final doctorData = doctorDoc.data();
+      final doctorName = doctorData?['fullName'] ?? 'Doctor';
 
-      await _firestore.collection('prescriptions').add(prescriptionData);
+      // Prepare medicines data
+      final medicinesData = _medications.map((med) => med.toMap()).toList();
+
+      // Use prescription service to create and distribute prescription
+      final prescriptionId =
+          await PrescriptionService.createAndDistributePrescription(
+            doctorId: widget.doctorId,
+            doctorName: doctorName,
+            patientId: _patientIdController.text.trim(),
+            patientName: _patientNameController.text.trim(),
+            patientEmail: _patientEmailController.text.trim(),
+            medicines: medicinesData,
+            diagnosis: _diagnosisController.text.trim(),
+            notes: _notesController.text.trim(),
+            appointmentId: widget.appointmentId,
+          );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Prescription saved successfully!'),
+          SnackBar(
+            content: Text(
+              'Prescription created and sent to pharmacy successfully! ID: ${prescriptionId.substring(0, 8)}...',
+            ),
             backgroundColor: AppTheme.successGreen,
+            duration: const Duration(seconds: 4),
           ),
         );
         Navigator.pop(context);
@@ -128,6 +167,7 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
   void _clearForm() {
     _patientNameController.clear();
     _patientIdController.clear();
+    _patientEmailController.clear();
     _diagnosisController.clear();
     _notesController.clear();
 
@@ -172,7 +212,9 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: AppTheme.doctorColor.withValues(alpha: 0.1),
+                                color: AppTheme.doctorColor.withValues(
+                                  alpha: 0.1,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Icon(
@@ -232,6 +274,27 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.badge),
                       ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    TextFormField(
+                      controller: _patientEmailController,
+                      decoration: const InputDecoration(
+                        labelText: 'Patient Email',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.email),
+                        hintText: 'patient@example.com',
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter patient email';
+                        }
+                        if (!value.contains('@')) {
+                          return 'Please enter a valid email';
+                        }
+                        return null;
+                      },
                     ),
                     const SizedBox(height: 16),
 
@@ -379,6 +442,7 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
             Row(
               children: [
                 Expanded(
+                  flex: 2,
                   child: TextFormField(
                     controller: medication.dosageController,
                     decoration: const InputDecoration(
@@ -395,16 +459,16 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextFormField(
-                    controller: medication.frequencyController,
+                    controller: medication.quantityController,
                     decoration: const InputDecoration(
-                      labelText: 'Frequency',
+                      labelText: 'Quantity (Auto-calculated)',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.schedule),
-                      hintText: 'e.g., 2x daily',
+                      prefixIcon: Icon(Icons.inventory),
+                      hintText: 'Auto',
                     ),
-                    validator: (value) => value == null || value.isEmpty
-                        ? 'Please enter frequency'
-                        : null,
+                    readOnly: true,
+                    style: TextStyle(color: Colors.grey[600]),
+                    keyboardType: TextInputType.number,
                   ),
                 ),
               ],
@@ -413,6 +477,28 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
 
             Row(
               children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: medication.frequencyController,
+                    decoration: const InputDecoration(
+                      labelText: 'Frequency',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.schedule),
+                      hintText: 'e.g., 3 times daily',
+                    ),
+                    validator: (value) => value == null || value.isEmpty
+                        ? 'Please enter frequency'
+                        : null,
+                    onChanged: (value) {
+                      // Auto-calculate quantity when frequency changes
+                      if (medication.durationController.text.isNotEmpty) {
+                        medication.updateQuantity();
+                        setState(() {});
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: TextFormField(
                     controller: medication.durationController,
@@ -425,45 +511,48 @@ class _PrescriptionsScreenState extends State<PrescriptionsScreen> {
                     validator: (value) => value == null || value.isEmpty
                         ? 'Please enter duration'
                         : null,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: medication.timing,
-                    decoration: const InputDecoration(
-                      labelText: 'Timing',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.restaurant),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'Before Food',
-                        child: Text('Before Food'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'After Food',
-                        child: Text('After Food'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'With Food',
-                        child: Text('With Food'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Empty Stomach',
-                        child: Text('Empty Stomach'),
-                      ),
-                    ],
                     onChanged: (value) {
-                      setState(() {
-                        medication.timing = value;
-                      });
+                      // Auto-calculate quantity when duration changes
+                      if (medication.frequencyController.text.isNotEmpty) {
+                        medication.updateQuantity();
+                        setState(() {});
+                      }
                     },
-                    validator: (value) =>
-                        value == null ? 'Please select timing' : null,
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+
+            DropdownButtonFormField<String>(
+              value: medication.timing,
+              decoration: const InputDecoration(
+                labelText: 'Timing',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.restaurant),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'Before Food',
+                  child: Text('Before Food'),
+                ),
+                DropdownMenuItem(
+                  value: 'After Food',
+                  child: Text('After Food'),
+                ),
+                DropdownMenuItem(value: 'With Food', child: Text('With Food')),
+                DropdownMenuItem(
+                  value: 'Empty Stomach',
+                  child: Text('Empty Stomach'),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  medication.timing = value;
+                });
+              },
+              validator: (value) =>
+                  value == null ? 'Please select timing' : null,
             ),
             const SizedBox(height: 12),
 
