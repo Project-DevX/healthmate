@@ -196,7 +196,8 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
   }
 
   Widget _buildEnhancedPrescriptionCard(Map<String, dynamic> prescription) {
-    final status = prescription['status'] ?? 'pending';
+    final status =
+        prescription['pharmacyStatus'] ?? prescription['status'] ?? 'pending';
     final medicines = prescription['medicines'] as List<dynamic>? ?? [];
     final prescriptionDate = prescription['prescriptionDate'] as Timestamp?;
     final orderNumber = prescription['orderNumber'] ?? 0;
@@ -898,7 +899,10 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
 
       // Filter by status
       if (_selectedFilter != 'all') {
-        final status = prescription['status'] ?? 'pending';
+        final status =
+            prescription['pharmacyStatus'] ??
+            prescription['status'] ??
+            'pending';
         if (status != _selectedFilter) {
           return false;
         }
@@ -952,7 +956,17 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
             );
 
         if (result['success'] == true) {
-          // Status updated successfully
+          // Also update patient-visible status when delivered
+          if (newStatus.toLowerCase() == 'delivered') {
+            await FirebaseFirestore.instance
+                .collection('prescriptions')
+                .doc(prescriptionId)
+                .update({
+                  'status': 'filled', // Patient dashboard status
+                  'filledDate': FieldValue.serverTimestamp(),
+                });
+          }
+
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -974,11 +988,14 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
           throw Exception(result['error'] ?? 'Unknown error occurred');
         }
       } else {
-        // For other status updates, use the regular method
-        await PrescriptionService.updatePrescriptionStatus(
-          prescriptionId,
-          newStatus,
-        );
+        // For other status updates, update pharmacy status only
+        await FirebaseFirestore.instance
+            .collection('prescriptions')
+            .doc(prescriptionId)
+            .update({
+              'pharmacyStatus': newStatus,
+              'lastUpdated': FieldValue.serverTimestamp(),
+            });
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1062,31 +1079,223 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
     );
   }
 
-  void _generateBillFromMap(Map<String, dynamic> prescription) {
-    // Placeholder for bill generation - can be enhanced later
+  void _generateBillFromMap(Map<String, dynamic> prescription) async {
+    try {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('Generating bill...'),
+            ],
+          ),
+        ),
+      );
+
+      // Convert prescription map to PharmacyPrescription object
+      final medicines = (prescription['medicines'] as List<dynamic>? ?? [])
+          .map((data) => Medicine.fromMap(data as Map<String, dynamic>))
+          .toList();
+
+      // Check inventory to get current prices
+      print('🔍 BILL: Original medicines before inventory check:');
+      for (final med in medicines) {
+        print('   - ${med.name}: \$${med.price} x ${med.quantity}');
+      }
+
+      final inventoryCheck = await _pharmacyService.checkInventoryAvailability(
+        medicines,
+      );
+      final availableMedicines =
+          inventoryCheck['availableMedicines'] as List<Medicine>;
+
+      print('🔍 BILL: Available medicines after inventory check:');
+      for (final med in availableMedicines) {
+        print(
+          '   - ${med.name}: \$${med.price} x ${med.availableQuantity ?? med.quantity}',
+        );
+      }
+
+      if (availableMedicines.isEmpty) {
+        print(
+          '❌ BILL: No available medicines found - cannot proceed with billing',
+        );
+      } else {
+        // Calculate expected total
+        final expectedTotal = availableMedicines.fold(
+          0.0,
+          (sum, med) =>
+              sum + (med.price * (med.availableQuantity ?? med.quantity)),
+        );
+        print(
+          '🔍 BILL: Expected total before tax: \$${expectedTotal.toStringAsFixed(2)}',
+        );
+      }
+
+      if (availableMedicines.isEmpty) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Cannot generate bill: No medicines available in inventory',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // Create PharmacyPrescription object with updated prices
+      final pharmacyPrescription = PharmacyPrescription(
+        id: prescription['id'] ?? '',
+        orderNumber: prescription['orderNumber'] ?? 0,
+        pharmacyId: FirebaseAuth.instance.currentUser?.uid ?? '',
+        doctorInfo: DoctorInfo(
+          id: prescription['doctorId'] ?? '',
+          name: prescription['doctorName'] ?? 'Unknown Doctor',
+          specialization: prescription['doctorSpecialization'] ?? 'General',
+          hospital: prescription['doctorHospital'] ?? 'Unknown Hospital',
+        ),
+        patientInfo: PatientInfo(
+          id: prescription['patientId'] ?? '',
+          name: prescription['patientName'] ?? 'Unknown Patient',
+          email: prescription['patientEmail'] ?? '',
+          phone: prescription['patientPhone'] ?? '',
+          age: prescription['patientAge'] ?? 0,
+        ),
+        medicines: availableMedicines, // Use medicines with updated prices
+        prescriptionDate:
+            (prescription['prescriptionDate'] as Timestamp?)?.toDate() ??
+            DateTime.now(),
+        timestamp: DateTime.now(),
+        status: prescription['status'] ?? 'pending',
+        totalAmount: 0, // Will be calculated by generateBill
+      );
+
+      // Generate the bill
+      final bill = await _pharmacyService.generateBill(pharmacyPrescription);
+
+      Navigator.pop(context); // Close loading dialog
+
+      // Show bill details dialog
+      _showBillDetailsDialog(bill);
+    } catch (e) {
+      Navigator.pop(context); // Close loading dialog
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error generating bill: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _showBillDetailsDialog(PharmacyBill bill) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Generate Bill'),
-        content: Text(
-          'Generate bill for prescription #${prescription['orderNumber']}?\n\nThis feature will calculate medicine costs and create a bill for the patient.',
+        title: Text('Bill #${bill.billNumber}'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Patient: ${bill.patientName}'),
+              Text(
+                'Date: ${DateFormat('MMM dd, yyyy - hh:mm a').format(bill.billDate)}',
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Medicines:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              ...bill.medicines.map((medicine) {
+                final quantity =
+                    medicine.availableQuantity ?? medicine.quantity;
+                final lineTotal = medicine.price * quantity;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('${medicine.name} (${medicine.dosage})'),
+                            Text(
+                              'Qty: $quantity × \$${medicine.price.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                color: Colors.grey[600],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '\$${lineTotal.toStringAsFixed(2)}',
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              const Divider(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Subtotal:'),
+                  Text('\$${bill.subtotal.toStringAsFixed(2)}'),
+                ],
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Tax (8%):'),
+                  Text('\$${bill.tax.toStringAsFixed(2)}'),
+                ],
+              ),
+              const Divider(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Total:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  Text(
+                    '\$${bill.totalAmount.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: const Text('Close'),
           ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Bill generation feature coming soon!'),
-                  backgroundColor: Colors.blue,
+                  content: Text('Bill saved successfully!'),
+                  backgroundColor: Colors.green,
                 ),
               );
             },
-            child: const Text('Generate'),
+            child: const Text('Save Bill'),
           ),
         ],
       ),

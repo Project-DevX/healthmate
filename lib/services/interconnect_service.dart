@@ -563,6 +563,7 @@ class InterconnectService {
 
       switch (userType) {
         case 'patient':
+          print('🔍 INTERCONNECT: Querying prescriptions for patient: $userId');
           query = _firestore
               .collection('prescriptions')
               .where('patientId', isEqualTo: userId);
@@ -583,9 +584,41 @@ class InterconnectService {
 
       // Get data without ordering first to avoid index requirement
       final snapshot = await query.get();
-      final prescriptions = snapshot.docs
-          .map((doc) => Prescription.fromFirestore(doc))
-          .toList();
+      print(
+        '🔍 INTERCONNECT: Found ${snapshot.docs.length} prescription documents',
+      );
+
+      for (var doc in snapshot.docs.take(2)) {
+        final data = doc.data() as Map<String, dynamic>;
+        print('🔍 INTERCONNECT: Prescription doc ${doc.id}:');
+        print('   - patientId: ${data['patientId']}');
+        print('   - status: ${data['status']}');
+        print('   - prescribedDate: ${data['prescribedDate']}');
+        print('   - prescriptionDate: ${data['prescriptionDate']}');
+        print(
+          '   - medicines count: ${(data['medicines'] as List?)?.length ?? 0}',
+        );
+      }
+
+      final prescriptions = <Prescription>[];
+      for (var doc in snapshot.docs) {
+        try {
+          final prescription = Prescription.fromFirestore(doc);
+          prescriptions.add(prescription);
+        } catch (e) {
+          print('❌ INTERCONNECT: Error parsing prescription ${doc.id}: $e');
+          print('   Document data: ${doc.data()}');
+        }
+      }
+
+      print(
+        '🔍 INTERCONNECT: Successfully mapped ${prescriptions.length} prescription objects',
+      );
+      for (final prescription in prescriptions.take(3)) {
+        print(
+          '   - ID: ${prescription.id}, Doctor: ${prescription.doctorName}, Status: ${prescription.status}',
+        );
+      }
 
       // Sort in memory instead of using Firebase orderBy to avoid index requirement
       prescriptions.sort(

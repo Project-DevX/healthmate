@@ -37,7 +37,7 @@ class PrescriptionService {
       // Generate order number for pharmacy tracking
       final orderNumber = await _generateOrderNumber();
 
-      // Create prescription document
+      // Create prescription document (compatible with existing patient dashboard)
       final prescriptionData = {
         'doctorId': doctorId,
         'doctorName': doctorName,
@@ -48,12 +48,18 @@ class PrescriptionService {
         'medicines': medicines,
         'diagnosis': diagnosis,
         'notes': notes,
-        'status': 'pending', // pending -> processing -> ready -> delivered
+        'status':
+            'prescribed', // For patient dashboard compatibility: prescribed -> filled
+        'pharmacyStatus':
+            'pending', // For pharmacy workflow: pending -> processing -> ready -> delivered
         'pharmacyId': pharmacyId,
         'pharmacyEmail': defaultPharmacyEmail,
         'pharmacyName': pharmacyName,
         'orderNumber': orderNumber,
-        'prescriptionDate': FieldValue.serverTimestamp(),
+        'prescribedDate':
+            FieldValue.serverTimestamp(), // For patient dashboard compatibility
+        'prescriptionDate':
+            FieldValue.serverTimestamp(), // For pharmacy compatibility
         'createdAt': FieldValue.serverTimestamp(),
         'totalAmount': 0.0, // Will be calculated by pharmacy
       };

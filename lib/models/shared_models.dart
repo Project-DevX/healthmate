@@ -294,7 +294,10 @@ class Prescription {
       medicines: (data['medicines'] as List? ?? [])
           .map((med) => PrescriptionMedicine.fromMap(med))
           .toList(),
-      prescribedDate: (data['prescribedDate'] as Timestamp).toDate(),
+      prescribedDate:
+          (data['prescribedDate'] as Timestamp?)?.toDate() ??
+          (data['prescriptionDate'] as Timestamp?)?.toDate() ??
+          DateTime.now(),
       status: data['status'] ?? 'prescribed',
       notes: data['notes'],
       appointmentId: data['appointmentId'],
@@ -326,8 +329,10 @@ class PrescriptionMedicine {
   final String name;
   final String dosage;
   final String frequency;
-  final int duration;
+  final String
+  duration; // Changed from int to String to handle "5 days", "7 days", etc.
   final String instructions;
+  final int quantity; // Add quantity field but no pricing
 
   PrescriptionMedicine({
     required this.name,
@@ -335,15 +340,45 @@ class PrescriptionMedicine {
     required this.frequency,
     required this.duration,
     required this.instructions,
+    required this.quantity,
   });
 
   factory PrescriptionMedicine.fromMap(Map<String, dynamic> map) {
+    // Handle duration field with robust parsing
+    String durationStr = '0';
+    if (map['duration'] != null) {
+      final durationValue = map['duration'];
+      if (durationValue is String) {
+        durationStr = durationValue;
+      } else if (durationValue is int) {
+        durationStr = durationValue.toString();
+      } else if (durationValue is double) {
+        durationStr = durationValue.toInt().toString();
+      } else {
+        durationStr = durationValue.toString();
+      }
+    }
+
+    // Handle quantity field with robust parsing
+    int quantityInt = 1;
+    if (map['quantity'] != null) {
+      final quantityValue = map['quantity'];
+      if (quantityValue is int) {
+        quantityInt = quantityValue;
+      } else if (quantityValue is String) {
+        quantityInt = int.tryParse(quantityValue) ?? 1;
+      } else if (quantityValue is double) {
+        quantityInt = quantityValue.toInt();
+      }
+    }
+
     return PrescriptionMedicine(
-      name: map['name'] ?? '',
-      dosage: map['dosage'] ?? '',
-      frequency: map['frequency'] ?? '',
-      duration: map['duration'] ?? 0,
-      instructions: map['instructions'] ?? '',
+      name: map['name']?.toString() ?? '',
+      dosage: map['dosage']?.toString() ?? '',
+      frequency: map['frequency']?.toString() ?? '',
+      duration: durationStr,
+      instructions: map['instructions']?.toString() ?? '',
+      quantity: quantityInt,
     );
   }
 
@@ -354,6 +389,7 @@ class PrescriptionMedicine {
       'frequency': frequency,
       'duration': duration,
       'instructions': instructions,
+      'quantity': quantity,
     };
   }
 }

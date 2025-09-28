@@ -138,7 +138,7 @@ class PrescriptionMedicine {
       'instructions': instructionsController.text.trim(),
       'quantity':
           int.tryParse(quantityController.text.trim()) ?? calculateQuantity(),
-      'price': 0.0, // Will be updated by pharmacy
+      // Note: No pricing - will be calculated dynamically from pharmacy inventory
     };
   }
 
