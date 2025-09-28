@@ -5,6 +5,8 @@ import '../theme/app_theme.dart';
 
 import '../services/consent_service.dart';
 import 'patient_medical_records_screen.dart';
+import 'prescriptions_screen.dart';
+import 'lab_reports_screen.dart';
 
 import 'doctor_appointment_details_screen.dart';
 
@@ -551,6 +553,42 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
                   ),
                 ),
               ),
+
+              // Action buttons for upcoming appointments
+              if (!showHistory &&
+                  status == 'scheduled' &&
+                  appointmentDate.isAfter(DateTime.now())) ...[
+                const SizedBox(height: 8),
+                const Divider(),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _showPrescriptionOption(appointment),
+                        icon: const Icon(Icons.medication, size: 18),
+                        label: const Text('Create Prescription'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.successGreen,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _showLabReportOption(appointment),
+                        icon: const Icon(Icons.science, size: 18),
+                        label: const Text('Assign Lab Report'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.infoBlue,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
 
               if (!showHistory &&
                   status != 'completed' &&
@@ -1401,5 +1439,77 @@ class _DoctorAppointmentsScreenState extends State<DoctorAppointmentsScreen>
         );
       }
     }
+  }
+
+  void _showPrescriptionOption(QueryDocumentSnapshot appointment) {
+    final data = appointment.data() as Map<String, dynamic>;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create Prescription'),
+        content: Text('Create a new prescription for ${data['patientName']}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _navigateToPrescriptionForm(appointment);
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showLabReportOption(QueryDocumentSnapshot appointment) {
+    final data = appointment.data() as Map<String, dynamic>;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Assign Lab Report'),
+        content: Text('Assign lab tests for ${data['patientName']}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _navigateToLabReportForm(appointment);
+            },
+            child: const Text('Assign'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToPrescriptionForm(QueryDocumentSnapshot appointment) {
+    final data = appointment.data() as Map<String, dynamic>;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PrescriptionsScreen(
+          doctorId: widget.doctorId,
+          patientId: data['patientId'],
+          patientName: data['patientName'],
+          appointmentId: appointment.id,
+        ),
+      ),
+    );
+  }
+
+  void _navigateToLabReportForm(QueryDocumentSnapshot appointment) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => LabReportsScreen(doctorId: widget.doctorId),
+      ),
+    );
   }
 }

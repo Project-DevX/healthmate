@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import '../services/pharmacy_service.dart';
+import '../services/prescription_service.dart';
 import '../widgets/add_medicine_form.dart';
 import '../widgets/edit_medicine_form.dart';
 import '../widgets/restock_medicine_dialog.dart';
@@ -104,42 +106,86 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
                 onChanged: (value) => setState(() => _searchQuery = value),
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  _buildFilterChip('All', 'all'),
-                  _buildFilterChip('Pending', 'pending'),
-                  _buildFilterChip('Ready', 'ready'),
-                  _buildFilterChip('Delivered', 'delivered'),
-                ],
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildFilterChip('All', 'all'),
+                    _buildFilterChip('Pending', 'pending'),
+                    _buildFilterChip('Processing', 'processing'),
+                    _buildFilterChip('Ready', 'ready'),
+                    _buildFilterChip('Delivered', 'delivered'),
+                  ],
+                ),
               ),
             ],
           ),
         ),
         // Prescriptions List
         Expanded(
-          child: StreamBuilder<List<PharmacyPrescription>>(
-            stream: _pharmacyService.getPrescriptionsStream(),
+          child: StreamBuilder<List<Map<String, dynamic>>>(
+            stream: PrescriptionService.getPrescriptionsForPharmacy(
+              FirebaseAuth.instance.currentUser?.uid ?? '',
+            ),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }
 
               if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error, size: 64, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text('Error: ${snapshot.error}'),
+                      ElevatedButton(
+                        onPressed: () => setState(() {}),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                );
               }
 
-              final prescriptions = snapshot.data ?? [];
-              final filteredPrescriptions = _filterPrescriptions(prescriptions);
+              final allPrescriptions = snapshot.data ?? [];
+              final filteredPrescriptions = _filterPrescriptionMaps(
+                allPrescriptions,
+              );
 
               if (filteredPrescriptions.isEmpty) {
-                return const Center(child: Text('No prescriptions found'));
+                return const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.medical_services,
+                        size: 64,
+                        color: Colors.grey,
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        'No prescriptions found',
+                        style: TextStyle(fontSize: 18, color: Colors.grey),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Prescriptions will appear here when doctors send them',
+                        style: TextStyle(color: Colors.grey),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                );
               }
 
               return ListView.builder(
+                padding: const EdgeInsets.all(16),
                 itemCount: filteredPrescriptions.length,
                 itemBuilder: (context, index) {
                   final prescription = filteredPrescriptions[index];
-                  return _buildPrescriptionCard(prescription);
+                  return _buildEnhancedPrescriptionCard(prescription);
                 },
               );
             },
@@ -149,76 +195,133 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
     );
   }
 
-  Widget _buildPrescriptionCard(PharmacyPrescription prescription) {
+  Widget _buildEnhancedPrescriptionCard(Map<String, dynamic> prescription) {
+    final status = prescription['status'] ?? 'pending';
+    final medicines = prescription['medicines'] as List<dynamic>? ?? [];
+    final prescriptionDate = prescription['prescriptionDate'] as Timestamp?;
+    final orderNumber = prescription['orderNumber'] ?? 0;
+
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header with order number and status
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Order #${prescription.orderNumber}',
+                  'Order #${orderNumber.toString().padLeft(3, '0')}',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
                 ),
-                _buildStatusChip(prescription.status),
+                _buildStatusChip(status),
               ],
             ),
-            const SizedBox(height: 8),
-            Text('Patient: ${prescription.patientInfo.name}'),
-            Text('Doctor: ${prescription.doctorInfo.name}'),
-            Text(
-              'Date: ${DateFormat('MMM dd, yyyy').format(prescription.prescriptionDate)}',
+            const SizedBox(height: 12),
+
+            // Patient and Doctor Info
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '👤 ${prescription['patientName'] ?? 'Unknown Patient'}',
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      Text(
+                        '👨‍⚕️ Dr. ${prescription['doctorName'] ?? 'Unknown Doctor'}',
+                      ),
+                      if (prescriptionDate != null)
+                        Text(
+                          '📅 ${DateFormat('MMM dd, yyyy - hh:mm a').format(prescriptionDate.toDate())}',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 12),
+
+            // Medicines List
+            const Text(
+              'Prescribed Medicines:',
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Text(
-              'Medicines (${prescription.medicines.length}):',
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-            ...prescription.medicines.map(
-              (medicine) => Padding(
-                padding: const EdgeInsets.only(left: 16, top: 4),
+            ...medicines.take(3).map((medicine) {
+              return Padding(
+                padding: const EdgeInsets.only(left: 16, bottom: 4),
                 child: Text(
-                  '• ${medicine.name} (${medicine.dosage}) - ${medicine.duration}',
+                  '• ${medicine['name']} (${medicine['dosage']}) - Qty: ${medicine['quantity']}',
+                ),
+              );
+            }),
+            if (medicines.length > 3)
+              Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child: Text(
+                  '... and ${medicines.length - 3} more medicines',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
               ),
-            ),
+
             const SizedBox(height: 16),
+
+            // Action Buttons
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Row(
-                  children: [
-                    if (prescription.status == 'pending')
-                      ElevatedButton(
-                        onPressed: () => _updatePrescriptionStatus(
-                          prescription.id,
-                          'ready',
-                          prescription.medicines,
-                        ),
-                        child: const Text('Mark Ready'),
-                      ),
-                    if (prescription.status == 'ready')
-                      ElevatedButton(
-                        onPressed: () => _updatePrescriptionStatus(
-                          prescription.id,
-                          'delivered',
-                          prescription.medicines,
-                        ),
-                        child: const Text('Deliver'),
-                      ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.receipt),
-                      onPressed: () => _generateBill(prescription),
+                if (status == 'pending')
+                  ElevatedButton(
+                    onPressed: () => _updatePrescriptionStatus(
+                      prescription['id'],
+                      'processing',
                     ),
-                  ],
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                    ),
+                    child: const Text('Start Processing'),
+                  ),
+                if (status == 'processing')
+                  ElevatedButton(
+                    onPressed: () =>
+                        _updatePrescriptionStatus(prescription['id'], 'ready'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                    ),
+                    child: const Text('Mark Ready'),
+                  ),
+                if (status == 'ready')
+                  ElevatedButton(
+                    onPressed: () => _updatePrescriptionStatus(
+                      prescription['id'],
+                      'delivered',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                    ),
+                    child: const Text('Mark Delivered'),
+                  ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.visibility),
+                  onPressed: () => _showPrescriptionDetails(prescription),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.receipt),
+                  onPressed: () => _generateBillFromMap(prescription),
                 ),
               ],
             ),
@@ -645,35 +748,75 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          const CircleAvatar(radius: 50, child: Icon(Icons.person, size: 50)),
+          // Profile header
+          const CircleAvatar(
+            radius: 50,
+            child: Icon(Icons.local_pharmacy, size: 50),
+          ),
           const SizedBox(height: 16),
           const Text(
-            'Pharmacy Name',
+            'HealthCare Pharmacy',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const Text('License: #PHM12345'),
           const SizedBox(height: 24),
-          _buildProfileOption('Edit Profile', Icons.edit),
-          _buildProfileOption('Business Hours', Icons.schedule),
-          _buildProfileOption('Notifications', Icons.notifications),
-          _buildProfileOption('Reports', Icons.analytics),
-          _buildProfileOption('Settings', Icons.settings),
-          _buildProfileOption('Help & Support', Icons.help),
-          _buildProfileOption('Logout', Icons.logout),
+
+          // Profile options
+          _buildProfileOption('Edit Profile', Icons.edit, () {}),
+          _buildProfileOption('Business Hours', Icons.schedule, () {}),
+          _buildProfileOption('Notifications', Icons.notifications, () {}),
+          _buildProfileOption('Reports', Icons.analytics, () {}),
+          _buildProfileOption('Settings', Icons.settings, () {}),
+          _buildProfileOption('Help & Support', Icons.help, () {}),
+
+          const SizedBox(height: 16),
+
+          // Logout Section
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.red.withOpacity(0.3)),
+            ),
+            child: Column(
+              children: [
+                const Icon(Icons.logout, color: Colors.red, size: 32),
+                const SizedBox(height: 8),
+                const Text(
+                  'Logout',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ElevatedButton(
+                  onPressed: _showLogoutDialog,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 45),
+                  ),
+                  child: const Text('Sign Out'),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildProfileOption(String title, IconData icon) {
+  Widget _buildProfileOption(String title, IconData icon, VoidCallback onTap) {
     return Card(
       child: ListTile(
         leading: Icon(icon),
         title: Text(title),
         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-        onTap: () {
-          // Handle profile option tap
-        },
+        onTap: onTap,
       ),
     );
   }
@@ -692,99 +835,262 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
   }
 
   Widget _buildStatusChip(String status) {
-    Color color;
+    Color backgroundColor;
+    Color textColor;
+    String displayText;
+
     switch (status.toLowerCase()) {
       case 'pending':
-        color = Colors.orange;
+        backgroundColor = Colors.orange.withOpacity(0.2);
+        textColor = Colors.orange[800]!;
+        displayText = 'Pending';
+        break;
+      case 'processing':
+        backgroundColor = Colors.blue.withOpacity(0.2);
+        textColor = Colors.blue[800]!;
+        displayText = 'Processing';
         break;
       case 'ready':
-        color = Colors.blue;
+        backgroundColor = Colors.purple.withOpacity(0.2);
+        textColor = Colors.purple[800]!;
+        displayText = 'Ready';
         break;
       case 'delivered':
-        color = Colors.green;
+        backgroundColor = Colors.green.withOpacity(0.2);
+        textColor = Colors.green[800]!;
+        displayText = 'Delivered';
         break;
       default:
-        color = Colors.grey;
+        backgroundColor = Colors.grey.withOpacity(0.2);
+        textColor = Colors.grey[800]!;
+        displayText = status.toUpperCase();
     }
 
     return Chip(
       label: Text(
-        status.toUpperCase(),
-        style: const TextStyle(color: Colors.white, fontSize: 12),
+        displayText,
+        style: TextStyle(color: textColor, fontSize: 12),
       ),
-      backgroundColor: color,
+      backgroundColor: backgroundColor,
     );
   }
 
-  List<PharmacyPrescription> _filterPrescriptions(
-    List<PharmacyPrescription> prescriptions,
+  List<Map<String, dynamic>> _filterPrescriptionMaps(
+    List<Map<String, dynamic>> prescriptions,
   ) {
-    var filtered = prescriptions;
+    return prescriptions.where((prescription) {
+      // Filter by search query
+      if (_searchQuery.isNotEmpty) {
+        final patientName = (prescription['patientName'] ?? '')
+            .toString()
+            .toLowerCase();
+        final doctorName = (prescription['doctorName'] ?? '')
+            .toString()
+            .toLowerCase();
+        final orderNumber = (prescription['orderNumber'] ?? 0).toString();
 
-    if (_selectedFilter != 'all') {
-      filtered = filtered.where((p) => p.status == _selectedFilter).toList();
-    }
+        if (!patientName.contains(_searchQuery.toLowerCase()) &&
+            !doctorName.contains(_searchQuery.toLowerCase()) &&
+            !orderNumber.contains(_searchQuery)) {
+          return false;
+        }
+      }
 
-    if (_searchQuery.isNotEmpty) {
-      filtered = filtered
-          .where(
-            (p) =>
-                p.patientInfo.name.toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ) ||
-                p.doctorInfo.name.toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ) ||
-                p.orderNumber.toString().contains(_searchQuery),
-          )
-          .toList();
-    }
+      // Filter by status
+      if (_selectedFilter != 'all') {
+        final status = prescription['status'] ?? 'pending';
+        if (status != _selectedFilter) {
+          return false;
+        }
+      }
 
-    return filtered;
+      return true;
+    }).toList();
   }
 
   Future<void> _updatePrescriptionStatus(
     String prescriptionId,
     String newStatus,
-    List<Medicine> medicines,
   ) async {
     try {
-      print(
-        '🔍 UI: Updating prescription $prescriptionId to $newStatus with ${medicines.length} medicines',
-      );
+      // Get prescription data to extract medicines for inventory check
+      final prescriptionDoc = await FirebaseFirestore.instance
+          .collection('prescriptions')
+          .doc(prescriptionId)
+          .get();
 
-      // Use inventory-aware method for status updates
-      final result = await _pharmacyService
-          .updatePrescriptionStatusWithInventoryCheck(
+      if (!prescriptionDoc.exists) {
+        throw Exception('Prescription not found');
+      }
+
+      final prescriptionData = prescriptionDoc.data()!;
+      final medicinesData =
+          prescriptionData['medicines'] as List<dynamic>? ?? [];
+
+      // Convert to Medicine objects for inventory checking
+      final medicines = medicinesData.map((data) {
+        final medicineData = data as Map<String, dynamic>;
+        return Medicine(
+          id: medicineData['id'] ?? '',
+          name: medicineData['name'] ?? '',
+          quantity: medicineData['quantity'] ?? 0,
+          dosage: medicineData['dosage'] ?? '',
+          duration: medicineData['duration'] ?? '7 days',
+          instructions: medicineData['instructions'] ?? '',
+          price: (medicineData['price'] ?? 0.0).toDouble(),
+        );
+      }).toList();
+
+      // Use inventory checking method for status updates to 'ready' or 'delivered'
+      if (newStatus.toLowerCase() == 'ready' ||
+          newStatus.toLowerCase() == 'delivered') {
+        final result = await _pharmacyService
+            .updatePrescriptionStatusWithInventoryCheck(
+              prescriptionId,
+              newStatus,
+              medicines,
+            );
+
+        if (result['success'] == true) {
+          // Status updated successfully
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Prescription status updated to $newStatus'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } else if (result['requiresConfirmation'] == true) {
+          // Show inventory warning dialog
+          await _showInventoryWarningDialog(
             prescriptionId,
             newStatus,
             medicines,
+            result['inventoryCheck'],
           );
-
-      print('🔍 UI: Inventory check result: $result');
-
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Prescription status updated to $newStatus')),
-        );
-      } else if (result['requiresConfirmation'] == true) {
-        print('🔍 UI: Showing inventory warning dialog');
-        // Show inventory warnings and get user confirmation
-        await _showInventoryWarningDialog(
+        } else {
+          // Handle other errors
+          throw Exception(result['error'] ?? 'Unknown error occurred');
+        }
+      } else {
+        // For other status updates, use the regular method
+        await PrescriptionService.updatePrescriptionStatus(
           prescriptionId,
           newStatus,
-          medicines,
-          result['inventoryCheck'],
         );
-      } else {
-        throw Exception(result['error'] ?? 'Unknown error');
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Prescription status updated to $newStatus'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
       }
     } catch (e) {
-      print('❌ UI: Error updating prescription status: $e');
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error updating status: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating status: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
+  }
+
+  void _showPrescriptionDetails(Map<String, dynamic> prescription) {
+    final medicines = prescription['medicines'] as List<dynamic>? ?? [];
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Prescription #${prescription['orderNumber']}'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Patient: ${prescription['patientName']}'),
+              Text('Doctor: Dr. ${prescription['doctorName']}'),
+              if (prescription['diagnosis'] != null &&
+                  prescription['diagnosis'].toString().isNotEmpty)
+                Text('Diagnosis: ${prescription['diagnosis']}'),
+              const SizedBox(height: 16),
+              const Text(
+                'Medicines:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              ...medicines.map((medicine) {
+                return Padding(
+                  padding: const EdgeInsets.only(left: 8, top: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('• ${medicine['name']} (${medicine['dosage']})'),
+                      Text('  Quantity: ${medicine['quantity']}'),
+                      Text('  Frequency: ${medicine['frequency']}'),
+                      Text('  Duration: ${medicine['duration']}'),
+                      if (medicine['instructions'] != null &&
+                          medicine['instructions'].toString().isNotEmpty)
+                        Text('  Instructions: ${medicine['instructions']}'),
+                    ],
+                  ),
+                );
+              }),
+              if (prescription['notes'] != null &&
+                  prescription['notes'].toString().isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  'Notes:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(prescription['notes']),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _generateBillFromMap(Map<String, dynamic> prescription) {
+    // Placeholder for bill generation - can be enhanced later
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Generate Bill'),
+        content: Text(
+          'Generate bill for prescription #${prescription['orderNumber']}?\n\nThis feature will calculate medicine costs and create a bill for the patient.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Bill generation feature coming soon!'),
+                  backgroundColor: Colors.blue,
+                ),
+              );
+            },
+            child: const Text('Generate'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _showInventoryWarningDialog(
@@ -885,54 +1191,6 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
           ],
         );
       },
-    );
-  }
-
-  Future<void> _generateBill(PharmacyPrescription prescription) async {
-    try {
-      final bill = await _pharmacyService.generateBill(prescription);
-      _showBillDialog(bill);
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Error generating bill: $e')));
-    }
-  }
-
-  void _showBillDialog(PharmacyBill bill) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Bill #${bill.billNumber}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Patient: ${bill.patientName}'),
-            Text('Date: ${DateFormat('MMM dd, yyyy').format(bill.billDate)}'),
-            const Divider(),
-            Text('Subtotal: \$${bill.subtotal.toStringAsFixed(2)}'),
-            Text('Tax: \$${bill.tax.toStringAsFixed(2)}'),
-            Text(
-              'Total: \$${bill.totalAmount.toStringAsFixed(2)}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // Print or share bill
-            },
-            child: const Text('Print'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1083,7 +1341,36 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Settings'),
-        content: const Text('Settings page would go here'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('Profile Settings'),
+              onTap: () {
+                Navigator.pop(context);
+                // Navigate to profile settings
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.notifications),
+              title: const Text('Notification Settings'),
+              onTap: () {
+                Navigator.pop(context);
+                // Navigate to notification settings
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('Logout', style: TextStyle(color: Colors.red)),
+              onTap: () {
+                Navigator.pop(context);
+                _showLogoutDialog();
+              },
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -1092,6 +1379,45 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
         ],
       ),
     );
+  }
+
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _performLogout();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _performLogout() async {
+    try {
+      await FirebaseAuth.instance.signOut();
+      if (mounted) {
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil('/login', (route) => false);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Logout failed: $e')));
+    }
   }
 
   Future<void> _initializeSampleData() async {
