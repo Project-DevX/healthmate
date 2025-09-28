@@ -1,5 +1,6 @@
 // lib/models/shared_models.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 
 // Shared Appointment Model for all roles
 class Appointment {
@@ -297,8 +298,8 @@ class Prescription {
       status: data['status'] ?? 'prescribed',
       notes: data['notes'],
       appointmentId: data['appointmentId'],
-      filledDate: data['filledDate'] != null 
-          ? (data['filledDate'] as Timestamp).toDate() 
+      filledDate: data['filledDate'] != null
+          ? (data['filledDate'] as Timestamp).toDate()
           : null,
     );
   }
@@ -507,40 +508,38 @@ class ConsentRequest {
   Color get statusColor {
     switch (status) {
       case 'approved':
-        return const Color(0xFF4CAF50); // Green
+        return Colors.green;
       case 'denied':
-        return const Color(0xFFF44336); // Red
+        return Colors.red;
       case 'pending':
-        return const Color(0xFFFF9800); // Orange
+        return Colors.orange;
       case 'expired':
-        return const Color(0xFF9E9E9E); // Grey
+        return Colors.grey;
       default:
-        return const Color(0xFF2196F3); // Blue
+        return Colors.blue;
     }
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'requestId': this.requestId,
-      'doctorId': this.doctorId,
-      'doctorName': this.doctorName,
-      'doctorSpecialty': this.doctorSpecialty,
-      'patientId': this.patientId,
-      'patientName': this.patientName,
-      'requestType': this.requestType,
-      'purpose': this.purpose,
-      'requestDate': Timestamp.fromDate(this.requestDate),
-      'status': this.status,
-      'responseDate': this.responseDate != null
-          ? Timestamp.fromDate(this.responseDate!)
+      'requestId': requestId,
+      'doctorId': doctorId,
+      'doctorName': doctorName,
+      'doctorSpecialty': doctorSpecialty,
+      'patientId': patientId,
+      'patientName': patientName,
+      'requestType': requestType,
+      'purpose': purpose,
+      'requestDate': Timestamp.fromDate(requestDate),
+      'status': status,
+      'responseDate': responseDate != null
+          ? Timestamp.fromDate(responseDate!)
           : null,
-      'expiryDate': this.expiryDate != null
-          ? Timestamp.fromDate(this.expiryDate!)
-          : null,
-      'patientResponse': this.patientResponse,
-      'specificRecordIds': this.specificRecordIds,
-      'appointmentId': this.appointmentId,
-      'durationDays': this.durationDays,
+      'expiryDate': expiryDate != null ? Timestamp.fromDate(expiryDate!) : null,
+      'patientResponse': patientResponse,
+      'specificRecordIds': specificRecordIds,
+      'appointmentId': appointmentId,
+      'durationDays': durationDays,
     };
   }
 }

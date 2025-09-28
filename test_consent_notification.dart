@@ -1,8 +1,6 @@
 // Quick Test Script for Consent Notifications
 // Run this in your app to create a test consent request
 
-import 'lib/services/consent_service.dart';
-
 void createTestConsentRequest() async {
   try {
     print('🔐 Creating test consent request...');

@@ -10,7 +10,7 @@ import 'caregiverReg.dart';
 import 'hospitalRegNew.dart';
 import 'pharmacyReg.dart';
 import 'labReg.dart';
-import 'screens/doctor_dashboard.dart';
+import 'doctor_dashboard_new.dart';
 import 'screens/hospital_dashboard.dart';
 import 'screens/caregiver_dashboard.dart';
 import 'screens/lab_dashboard.dart';
