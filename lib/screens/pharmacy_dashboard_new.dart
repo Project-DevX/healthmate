@@ -69,27 +69,23 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
       final today = DateTime.now();
       final startOfDay = DateTime(today.year, today.month, today.day);
 
-      // Get daily sales from bills created today
-      final billsSnapshot = await FirebaseFirestore.instance
+      // Get all bills and filter for today in memory (no composite index needed)
+      final allBillsSnapshot = await FirebaseFirestore.instance
           .collection('pharmacy_bills')
           .where('pharmacyId', isEqualTo: userId)
-          .where(
-            'billDate',
-            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
-          )
           .get();
 
       double dailySales = 0.0;
-      for (var doc in billsSnapshot.docs) {
+      for (var doc in allBillsSnapshot.docs) {
         final data = doc.data();
-        dailySales += (data['totalAmount'] as num?)?.toDouble() ?? 0.0;
+        final billDate = (data['billDate'] as Timestamp?)?.toDate();
+        if (billDate != null && billDate.isAfter(startOfDay)) {
+          dailySales += (data['totalAmount'] as num?)?.toDouble() ?? 0.0;
+        }
       }
 
-      // Get total bills count
-      final totalBillsSnapshot = await FirebaseFirestore.instance
-          .collection('pharmacy_bills')
-          .where('pharmacyId', isEqualTo: userId)
-          .get();
+      // Total bills count (already have the data)
+      final totalBillsCount = allBillsSnapshot.docs.length;
 
       // Get prescriptions data
       final prescriptionsSnapshot = await FirebaseFirestore.instance
@@ -125,7 +121,7 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
         setState(() {
           _analyticsData = {
             'dailySales': dailySales,
-            'totalBills': totalBillsSnapshot.docs.length,
+            'totalBills': totalBillsCount,
             'totalPrescriptions': prescriptionsSnapshot.docs.length,
             'lowStockItems': lowStockCount,
             'pendingPrescriptions': pendingCount,
@@ -138,6 +134,20 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
       print('Error loading analytics: $e');
       if (mounted) {
         setState(() => _isLoadingAnalytics = false);
+      }
+      // Show error message to user
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load analytics: ${e.toString()}'),
+            backgroundColor: Colors.orange,
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: _loadAnalyticsData,
+            ),
+          ),
+        );
       }
     }
   }
@@ -940,12 +950,6 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
       stream: FirebaseFirestore.instance
           .collection('pharmacy_bills')
           .where('pharmacyId', isEqualTo: userId)
-          .where(
-            'billDate',
-            isGreaterThanOrEqualTo: Timestamp.fromDate(
-              DateTime.now().subtract(const Duration(days: 7)),
-            ),
-          )
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -958,15 +962,54 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
         }
 
         if (snapshot.hasError) {
+          // Show a user-friendly error message instead of raw error
+          print('Weekly trends error: ${snapshot.error}');
           return Card(
+            elevation: 2,
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Text('Error loading weekly trends: ${snapshot.error}'),
+              child: Column(
+                children: [
+                  const Icon(
+                    Icons.info_outline,
+                    size: 48,
+                    color: Colors.orange,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Weekly trends temporarily unavailable',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Using simplified view',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                ],
+              ),
             ),
           );
         }
 
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        if (!snapshot.hasData) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+
+        // Filter bills from last 7 days in memory (no index required)
+        final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
+        final allBills = snapshot.data!.docs;
+        final recentBills = allBills.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final billDate = (data['billDate'] as Timestamp?)?.toDate();
+          return billDate != null && billDate.isAfter(sevenDaysAgo);
+        }).toList();
+
+        if (recentBills.isEmpty) {
           return const Card(
             child: Padding(
               padding: EdgeInsets.all(16),
@@ -984,16 +1027,15 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
           );
         }
 
-        final bills = snapshot.data!.docs;
         double weeklyTotal = 0.0;
-        for (var bill in bills) {
+        for (var bill in recentBills) {
           final data = bill.data() as Map<String, dynamic>;
           weeklyTotal += (data['totalAmount'] as num?)?.toDouble() ?? 0.0;
         }
 
-        final averageBillValue = bills.isEmpty
+        final averageBillValue = recentBills.isEmpty
             ? 0.0
-            : weeklyTotal / bills.length;
+            : weeklyTotal / recentBills.length;
 
         return Card(
           elevation: 2,
@@ -1037,7 +1079,7 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${bills.length}',
+                          '${recentBills.length}',
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
