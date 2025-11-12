@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -21,6 +22,125 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
 
   String _searchQuery = '';
   String _selectedFilter = 'all';
+
+  // Analytics data state
+  Map<String, dynamic> _analyticsData = {
+    'dailySales': 0.0,
+    'totalBills': 0,
+    'totalPrescriptions': 0,
+    'lowStockItems': 0,
+    'pendingPrescriptions': 0,
+    'processingPrescriptions': 0,
+  };
+  bool _isLoadingAnalytics = false;
+  Timer? _analyticsTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAnalyticsData();
+    // Auto-refresh analytics every 30 seconds when on analytics tab
+    _analyticsTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (_selectedBottomNav == 3 && mounted) {
+        _loadAnalyticsData();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _analyticsTimer?.cancel();
+    super.dispose();
+  }
+
+  // Load real-time analytics data from Firebase
+  Future<void> _loadAnalyticsData() async {
+    if (_isLoadingAnalytics) return;
+
+    setState(() => _isLoadingAnalytics = true);
+
+    try {
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      if (userId == null) {
+        setState(() => _isLoadingAnalytics = false);
+        return;
+      }
+
+      final today = DateTime.now();
+      final startOfDay = DateTime(today.year, today.month, today.day);
+
+      // Get daily sales from bills created today
+      final billsSnapshot = await FirebaseFirestore.instance
+          .collection('pharmacy_bills')
+          .where('pharmacyId', isEqualTo: userId)
+          .where(
+            'billDate',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+          )
+          .get();
+
+      double dailySales = 0.0;
+      for (var doc in billsSnapshot.docs) {
+        final data = doc.data();
+        dailySales += (data['totalAmount'] as num?)?.toDouble() ?? 0.0;
+      }
+
+      // Get total bills count
+      final totalBillsSnapshot = await FirebaseFirestore.instance
+          .collection('pharmacy_bills')
+          .where('pharmacyId', isEqualTo: userId)
+          .get();
+
+      // Get prescriptions data
+      final prescriptionsSnapshot = await FirebaseFirestore.instance
+          .collection('prescriptions')
+          .where('pharmacyId', isEqualTo: userId)
+          .get();
+
+      int pendingCount = 0;
+      int processingCount = 0;
+      for (var doc in prescriptionsSnapshot.docs) {
+        final status = doc.data()['pharmacyStatus'] as String?;
+        if (status == 'pending') pendingCount++;
+        if (status == 'processing') processingCount++;
+      }
+
+      // Get low stock items
+      final inventorySnapshot = await FirebaseFirestore.instance
+          .collection('pharmacy_inventory')
+          .where('pharmacyId', isEqualTo: userId)
+          .get();
+
+      int lowStockCount = 0;
+      for (var doc in inventorySnapshot.docs) {
+        final data = doc.data();
+        final quantity = (data['quantity'] as num?)?.toInt() ?? 0;
+        final minStock = (data['minStockLevel'] as num?)?.toInt() ?? 10;
+        if (quantity < minStock) {
+          lowStockCount++;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _analyticsData = {
+            'dailySales': dailySales,
+            'totalBills': totalBillsSnapshot.docs.length,
+            'totalPrescriptions': prescriptionsSnapshot.docs.length,
+            'lowStockItems': lowStockCount,
+            'pendingPrescriptions': pendingCount,
+            'processingPrescriptions': processingCount,
+          };
+          _isLoadingAnalytics = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading analytics: $e');
+      if (mounted) {
+        setState(() => _isLoadingAnalytics = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -648,75 +768,307 @@ class _PharmacyDashboardNewState extends State<PharmacyDashboardNew> {
   }
 
   Widget _buildAnalyticsPage() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Analytics Dashboard',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildAnalyticsCard(
-                  'Daily Sales',
-                  '\$1,234',
-                  Icons.attach_money,
+    return RefreshIndicator(
+      onRefresh: _loadAnalyticsData,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Analytics Dashboard',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildAnalyticsCard('Bills', '45', Icons.receipt_long),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildAnalyticsCard(
-                  'Prescriptions',
-                  '78',
-                  Icons.medical_services,
+                IconButton(
+                  icon: _isLoadingAnalytics
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh),
+                  onPressed: _isLoadingAnalytics ? null : _loadAnalyticsData,
+                  tooltip: 'Refresh Analytics',
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _buildAnalyticsCard('Low Stock', '12', Icons.warning),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'Recent Activity',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-          _buildActivityList(),
-        ],
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Daily Sales & Bills Row
+            Row(
+              children: [
+                Expanded(
+                  child: _buildAnalyticsCard(
+                    'Daily Sales',
+                    '\$${_analyticsData['dailySales'].toStringAsFixed(2)}',
+                    Icons.attach_money,
+                    color: Colors.green,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildAnalyticsCard(
+                    'Total Bills',
+                    '${_analyticsData['totalBills']}',
+                    Icons.receipt_long,
+                    color: Colors.blue,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Prescriptions Row
+            Row(
+              children: [
+                Expanded(
+                  child: _buildAnalyticsCard(
+                    'Total Prescriptions',
+                    '${_analyticsData['totalPrescriptions']}',
+                    Icons.medical_services,
+                    color: Colors.purple,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildAnalyticsCard(
+                    'Pending',
+                    '${_analyticsData['pendingPrescriptions']}',
+                    Icons.pending_actions,
+                    color: Colors.orange,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Processing & Low Stock Row
+            Row(
+              children: [
+                Expanded(
+                  child: _buildAnalyticsCard(
+                    'Processing',
+                    '${_analyticsData['processingPrescriptions']}',
+                    Icons.hourglass_bottom,
+                    color: Colors.amber,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildAnalyticsCard(
+                    'Low Stock Items',
+                    '${_analyticsData['lowStockItems']}',
+                    Icons.warning,
+                    color: Colors.red,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            const Divider(),
+            const SizedBox(height: 16),
+            const Text(
+              'Weekly Overview',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            _buildWeeklyTrends(),
+            const SizedBox(height: 24),
+            const Text(
+              'Recent Activity',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            _buildActivityList(),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildAnalyticsCard(String title, String value, IconData icon) {
+  Widget _buildAnalyticsCard(
+    String title,
+    String value,
+    IconData icon, {
+    Color color = Colors.blue,
+  }) {
     return Card(
+      elevation: 4,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 32, color: Colors.blue),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Icon(icon, color: color, size: 32),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 8),
             Text(
-              value,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              title,
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
             ),
-            Text(title),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildWeeklyTrends() {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text('Please log in to view weekly trends'),
+        ),
+      );
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('pharmacy_bills')
+          .where('pharmacyId', isEqualTo: userId)
+          .where(
+            'billDate',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(
+              DateTime.now().subtract(const Duration(days: 7)),
+            ),
+          )
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('Error loading weekly trends: ${snapshot.error}'),
+            ),
+          );
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Icon(Icons.show_chart, size: 48, color: Colors.grey),
+                  SizedBox(height: 8),
+                  Text(
+                    'No sales data in the last 7 days',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final bills = snapshot.data!.docs;
+        double weeklyTotal = 0.0;
+        for (var bill in bills) {
+          final data = bill.data() as Map<String, dynamic>;
+          weeklyTotal += (data['totalAmount'] as num?)?.toDouble() ?? 0.0;
+        }
+
+        final averageBillValue = bills.isEmpty
+            ? 0.0
+            : weeklyTotal / bills.length;
+
+        return Card(
+          elevation: 2,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Last 7 Days Revenue',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Text(
+                      '\$${weeklyTotal.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Divider(),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Total Bills',
+                          style: TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${bills.length}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text(
+                          'Average Bill Value',
+                          style: TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '\$${averageBillValue.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
