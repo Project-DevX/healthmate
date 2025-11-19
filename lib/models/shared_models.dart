@@ -207,24 +207,36 @@ class LabReport {
   });
 
   factory LabReport.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    final rawData = doc.data();
+    if (rawData == null) {
+      throw const FormatException('Empty lab report document');
+    }
+    if (rawData is! Map<String, dynamic>) {
+      throw FormatException(
+        'Invalid lab report data format for document ${doc.id}',
+      );
+    }
+    return LabReport.fromMap(doc.id, rawData);
+  }
+
+  factory LabReport.fromMap(String id, Map<String, dynamic> data) {
     return LabReport(
-      id: doc.id,
-      patientId: data['patientId'] ?? '',
-      patientName: data['patientName'] ?? '',
-      labId: data['labId'] ?? '',
-      labName: data['labName'] ?? '',
-      doctorId: data['doctorId'] ?? '',
-      doctorName: data['doctorName'],
-      testType: data['testType'] ?? '',
-      testName: data['testName'] ?? '',
-      testDate: (data['testDate'] as Timestamp).toDate(),
-      status: data['status'] ?? 'requested',
-      reportUrl: data['reportUrl'],
-      results: data['results'],
-      notes: data['notes'],
-      createdAt: (data['createdAt'] as Timestamp).toDate(),
-      appointmentId: data['appointmentId'],
+      id: id,
+      patientId: data['patientId']?.toString() ?? '',
+      patientName: data['patientName']?.toString() ?? '',
+      labId: data['labId']?.toString() ?? '',
+      labName: data['labName']?.toString() ?? '',
+      doctorId: data['doctorId']?.toString() ?? '',
+      doctorName: data['doctorName']?.toString(),
+      testType: data['testType']?.toString() ?? '',
+      testName: data['testName']?.toString() ?? '',
+      testDate: _parseDateTime(data['testDate']),
+      status: data['status']?.toString() ?? 'requested',
+      reportUrl: data['reportUrl']?.toString(),
+      results: _parseResults(data['results']),
+      notes: data['notes']?.toString(),
+      createdAt: _parseDateTime(data['createdAt']),
+      appointmentId: data['appointmentId']?.toString(),
     );
   }
 
@@ -246,6 +258,38 @@ class LabReport {
       'createdAt': Timestamp.fromDate(createdAt),
       'appointmentId': appointmentId,
     };
+  }
+
+  static DateTime _parseDateTime(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+    if (value is DateTime) {
+      return value;
+    }
+    if (value is String) {
+      final parsed = DateTime.tryParse(value);
+      if (parsed != null) {
+        return parsed;
+      }
+    }
+    // Fallback to current time if parsing fails
+    return DateTime.now();
+  }
+
+  static Map<String, dynamic>? _parseResults(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+    if (value is Map<String, dynamic>) {
+      return value;
+    }
+    if (value is Map) {
+      // Convert any Map to Map<String, dynamic>
+      return Map<String, dynamic>.from(value);
+    }
+    // If it's a List or other type, return null (don't crash)
+    return null;
   }
 }
 

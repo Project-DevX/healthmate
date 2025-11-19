@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../theme/app_theme.dart';
+import '../services/interconnect_service.dart';
+import '../models/shared_models.dart';
 
 class LabReportsScreen extends StatefulWidget {
   final String doctorId;
@@ -20,6 +22,9 @@ class _LabReportsScreenState extends State<LabReportsScreen> {
   final _patientIdController = TextEditingController();
   final _clinicalNotesController = TextEditingController();
   final _urgencyNotesController = TextEditingController();
+  List<Map<String, String>> _availableLabs = [];
+  String? _selectedLabId;
+  String? _selectedLabName;
 
   List<LabTest> _labTests = [];
   String _urgency = 'Routine';
@@ -31,6 +36,34 @@ class _LabReportsScreenState extends State<LabReportsScreen> {
   void initState() {
     super.initState();
     _addLabTestField();
+    _loadLabs();
+  }
+
+  Future<void> _loadLabs() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .where('userType', isEqualTo: 'lab')
+          .get();
+
+      setState(() {
+        _availableLabs = snapshot.docs.map((d) {
+          final data = d.data();
+          return {
+            'id': d.id,
+            'name': (data['institutionName'] ?? data['name'] ?? '').toString(),
+          };
+        }).toList();
+
+        if (_availableLabs.isNotEmpty) {
+          _selectedLabId = _availableLabs.first['id'];
+          _selectedLabName = _availableLabs.first['name'];
+        }
+      });
+    } catch (e) {
+      // non-fatal - lab selection will remain empty
+      debugPrint('Failed to load labs: $e');
+    }
   }
 
   @override
@@ -72,6 +105,8 @@ class _LabReportsScreenState extends State<LabReportsScreen> {
     try {
       final labOrderData = {
         'doctorId': widget.doctorId,
+        'labId': _selectedLabId ?? '',
+        'labName': _selectedLabName ?? '',
         'patientName': _patientNameController.text.trim(),
         'patientId': _patientIdController.text.trim(),
         'clinicalNotes': _clinicalNotesController.text.trim(),
@@ -84,6 +119,38 @@ class _LabReportsScreenState extends State<LabReportsScreen> {
       };
 
       await _firestore.collection('lab_orders').add(labOrderData);
+
+      // Also create per-test lab_reports so the lab dashboard (which listens
+      // to `lab_reports` where labId == labUserUid) receives the requests.
+      // This uses InterconnectService.requestLabTest which handles notifications.
+      try {
+        for (var test in _labTests) {
+          final report = LabReport(
+            id: '',
+            patientId: _patientIdController.text.trim(),
+            patientName: _patientNameController.text.trim(),
+            labId: _selectedLabId ?? '',
+            labName: _selectedLabName ?? '',
+            doctorId: widget.doctorId,
+            doctorName: '',
+            testType: test.category ?? '',
+            testName: test.testNameController.text.trim(),
+            testDate: DateTime.now().add(const Duration(days: 1)),
+            status: 'requested',
+            notes: test.instructionsController.text.trim().isEmpty
+                ? null
+                : test.instructionsController.text.trim(),
+            createdAt: DateTime.now(),
+          );
+
+          // If we don't have a selected lab id, skip creating lab_reports
+          if ((report.labId).isNotEmpty) {
+            await InterconnectService.requestLabTest(report);
+          }
+        }
+      } catch (e) {
+        debugPrint('Failed to create lab_reports entries: $e');
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -220,6 +287,31 @@ class _LabReportsScreenState extends State<LabReportsScreen> {
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.badge),
                       ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Lab selection
+                    DropdownButtonFormField<String>(
+                      value: _selectedLabId,
+                      decoration: const InputDecoration(
+                        labelText: 'Select Lab (pick lab ID)',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.business),
+                      ),
+                      items: _availableLabs.map((lab) {
+                        return DropdownMenuItem(
+                          value: lab['id'],
+                          child: Text('${lab['name']} (${lab['id']})'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setState(() {
+                          _selectedLabId = val;
+                          _selectedLabName = _availableLabs.firstWhere(
+                            (l) => l['id'] == val,
+                          )['name'];
+                        });
+                      },
                     ),
                     const SizedBox(height: 16),
 

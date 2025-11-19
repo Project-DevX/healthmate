@@ -13,7 +13,7 @@ const {HttpsError} = require("firebase-functions/v2/https");
 const {defineSecret} = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const {GoogleGenerativeAI} = require("@google/generative-ai");
-const {onDocumentCreated} = require("firebase-functions/v2/firestore");
+const {onDocumentCreated, onDocumentUpdated} = require("firebase-functions/v2/firestore");
 
 
 // Define secrets
@@ -2820,6 +2820,122 @@ exports.onLabReportAdded = onDocumentCreated(
       } catch (error) {
         console.error('Firestore trigger trend analysis failed:', error);
       }
+    }
+  }
+);
+
+/**
+ * Firestore trigger when new lab test request is created in lab_reports collection
+ */
+exports.onLabTestRequestCreated = onDocumentCreated(
+  "lab_reports/{reportId}",
+  async (event) => {
+    const db = admin.firestore();
+    const reportData = event.data?.data();
+    const reportId = event.params.reportId;
+    
+    if (!reportData) {
+      console.error('❌ Lab test request created but no data found:', reportId);
+      return;
+    }
+    
+    try {
+      console.log('🔬 Lab test request created:', reportId);
+      console.log('📊 Report data:', JSON.stringify(reportData, null, 2));
+      
+      // Validate required fields
+      const labId = reportData.labId;
+      const patientId = reportData.patientId;
+      const doctorId = reportData.doctorId;
+      const testName = reportData.testName || reportData.testType || 'Lab Test';
+      
+      if (!labId || !patientId) {
+        console.error('❌ Lab test request missing required fields:', {
+          labId,
+          patientId,
+          reportId,
+        });
+        return;
+      }
+      
+      // Ensure timestamps are properly set
+      const now = admin.firestore.Timestamp.now();
+      const updateData = {
+        updatedAt: now,
+      };
+      
+      // Ensure createdAt is set if missing
+      if (!reportData.createdAt) {
+        updateData.createdAt = now;
+      }
+      
+      // Update document with timestamps if needed
+      if (Object.keys(updateData).length > 1 || !reportData.updatedAt) {
+        await db.collection('lab_reports').doc(reportId).update(updateData);
+        console.log('✅ Updated lab report timestamps:', reportId);
+      }
+      
+      // Verify lab user exists
+      const labDoc = await db.collection('users').doc(labId).get();
+      if (!labDoc.exists) {
+        console.error('❌ Lab user not found:', labId);
+        return;
+      }
+      
+      console.log('✅ Lab test request validated and processed:', reportId);
+    } catch (error) {
+      console.error('❌ Error processing lab test request creation:', error);
+      console.error('❌ Stack trace:', error.stack);
+    }
+  }
+);
+
+/**
+ * Firestore trigger when lab test request status is updated
+ */
+exports.onLabTestRequestUpdated = onDocumentUpdated(
+  "lab_reports/{reportId}",
+  async (event) => {
+    const db = admin.firestore();
+    const beforeData = event.data?.before?.data();
+    const afterData = event.data?.after?.data();
+    const reportId = event.params.reportId;
+    
+    if (!beforeData || !afterData) {
+      return;
+    }
+    
+    try {
+      const oldStatus = beforeData.status || 'requested';
+      const newStatus = afterData.status || 'requested';
+      
+      // Only process if status actually changed
+      if (oldStatus === newStatus) {
+        return;
+      }
+      
+      console.log(`🔄 Lab test request status updated: ${reportId}`);
+      console.log(`📊 Status changed from "${oldStatus}" to "${newStatus}"`);
+      
+      // Validate required fields
+      const labId = afterData.labId;
+      const patientId = afterData.patientId;
+      const doctorId = afterData.doctorId;
+      
+      if (!labId || !patientId) {
+        console.error('❌ Lab test request missing required fields:', {
+          labId,
+          patientId,
+          reportId,
+        });
+        return;
+      }
+      
+      // Log status update (InterconnectService already handles notifications and timestamps)
+      console.log('✅ Lab test request status update processed:', reportId);
+    } catch (error) {
+      console.error('❌ Error processing lab test request update:', error);
+      console.error('❌ Stack trace:', error.stack);
     }
   }
 );
