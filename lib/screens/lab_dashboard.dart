@@ -1,14 +1,54 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+
 import '../models/shared_models.dart';
 import '../services/interconnect_service.dart';
 import '../theme/app_theme.dart';
 import 'chat_page.dart';
-import 'dart:io';
+
+final DateFormat _dateFormat = DateFormat('MMM d, yyyy');
+
+bool _isSameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+String _statusLabel(String status) => status.replaceAll('_', ' ').toUpperCase();
+
+Color _statusColor(String status) {
+  switch (status.toLowerCase()) {
+    case 'requested':
+      return AppTheme.warningOrange;
+    case 'in_progress':
+      return AppTheme.infoBlue;
+    case 'completed':
+    case 'uploaded':
+      return AppTheme.successGreen;
+    default:
+      return AppTheme.textMedium;
+  }
+}
+
+Color _notificationColor(String type) {
+  switch (type.toLowerCase()) {
+    case 'warning':
+    case 'alert':
+      return AppTheme.warningOrange;
+    case 'success':
+    case 'lab_result':
+      return AppTheme.successGreen;
+    case 'appointment':
+    case 'info':
+      return AppTheme.infoBlue;
+    default:
+      return AppTheme.labColor;
+  }
+}
 
 class LabDashboard extends StatefulWidget {
   const LabDashboard({Key? key}) : super(key: key);
@@ -18,762 +58,882 @@ class LabDashboard extends StatefulWidget {
 }
 
 class _LabDashboardState extends State<LabDashboard> {
-  int _selectedBottomNav = 0;
-  bool _isLoading = false;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ImagePicker _picker = ImagePicker();
 
-  // Real-time data
-  List<LabReport> _incomingRequests = [];
-  List<LabReport> _myLabReports = [];
-  Map<String, dynamic>? _userData;
-  String? _labId;
+  bool _isLoading = true;
+  bool _isRefreshing = false;
+  int _selectedIndex = 0;
 
-  // Remove sample data lists
-  List<Map<String, dynamic>> testResults = [];
-  List<Map<String, dynamic>> labStaff = [];
-  List<Map<String, dynamic>> labAppointments = [];
+  Map<String, dynamic>? _labData;
+  List<LabReport> _labReports = [];
+  List<Map<String, dynamic>> _notifications = [];
+  StreamSubscription<QuerySnapshot>? _labReportsSubscription;
 
-  // KPI calculations
-  int get totalTests => testResults.length;
-  int get pendingUploads => testResults
-      .where((t) => (t['status'] ?? '').toLowerCase() == 'pending')
-      .length;
-  int get todaysAppointments => labAppointments.length;
-  int get completedTests => testResults
-      .where((t) => (t['status'] ?? '').toLowerCase() == 'completed')
-      .length;
-  int get urgentTests => testResults
-      .where((t) => (t['priority'] ?? '').toLowerCase() == 'urgent')
-      .length;
+  @override
+  void initState() {
+    super.initState();
+    _loadDashboardData();
+    _setupLabReportsStream();
+  }
 
-  final List<_LabDashboardFeature> _features = [
-    _LabDashboardFeature('Report Upload', Icons.upload_file),
-    _LabDashboardFeature('Report Management', Icons.folder),
-    _LabDashboardFeature('Test Requests', Icons.assignment),
-    _LabDashboardFeature('Patient Search', Icons.search),
-    _LabDashboardFeature('Appointment Calendar', Icons.calendar_today),
-    _LabDashboardFeature('Staff Assignment', Icons.people),
-    _LabDashboardFeature('Notifications', Icons.notifications),
-  ];
+  @override
+  void dispose() {
+    _labReportsSubscription?.cancel();
+    super.dispose();
+  }
 
-  void _onFeatureTap(String feature) {
-    switch (feature) {
-      case 'Report Upload':
-        _showReportUpload();
-        break;
-      case 'Report Management':
-        _showReportManagement();
-        break;
-      case 'Test Requests':
-        _showTestRequests();
-        break;
-      case 'Patient Search':
-        _showPatientSearch();
-        break;
-      case 'Appointment Calendar':
-        _showAppointmentCalendar();
-        break;
-      case 'Staff Assignment':
-        _showStaffAssignment();
-        break;
-      case 'Notifications':
-        _showNotifications();
-        break;
-      default:
-        _showFeatureModal(feature);
+  void _setupLabReportsStream() {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    print(
+      '🔍 LAB DASHBOARD: Setting up real-time stream for labId: ${user.uid}',
+    );
+
+    // Create real-time stream for lab reports
+    _labReportsSubscription = _firestore
+        .collection('lab_reports')
+        .where('labId', isEqualTo: user.uid)
+        .snapshots()
+        .listen(
+          (snapshot) {
+            print(
+              '🔄 LAB DASHBOARD: Stream update - ${snapshot.docs.length} documents',
+            );
+
+            final labReports = <LabReport>[];
+            for (final doc in snapshot.docs) {
+              try {
+                // Log key fields for debugging
+                final rawData = doc.data() as Map<String, dynamic>;
+                final reportLabId = rawData['labId']?.toString() ?? 'NULL';
+                final reportStatus = rawData['status']?.toString() ?? 'NULL';
+                final reportTestName =
+                    rawData['testName']?.toString() ?? 'NULL';
+                print(
+                  '📋 LAB DASHBOARD: Stream - Report ${doc.id}: labId=$reportLabId, status=$reportStatus, testName=$reportTestName',
+                );
+
+                labReports.add(LabReport.fromFirestore(doc));
+              } catch (e, stackTrace) {
+                print('⚠️ LAB DASHBOARD: Error parsing report ${doc.id}: $e');
+                print('⚠️ LAB DASHBOARD: Stack trace: $stackTrace');
+              }
+            }
+
+            // Sort by creation date (newest first)
+            labReports.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+            if (mounted) {
+              setState(() {
+                _labReports = labReports;
+              });
+
+              print(
+                '✅ LAB DASHBOARD: Stream update complete - ${labReports.length} reports loaded',
+              );
+
+              // Log breakdown
+              final requestedCount = labReports
+                  .where((r) => r.status.toLowerCase() == 'requested')
+                  .length;
+              final inProgressCount = labReports
+                  .where((r) => r.status.toLowerCase() == 'in_progress')
+                  .length;
+              final completedCount = labReports
+                  .where(
+                    (r) =>
+                        r.status.toLowerCase() == 'completed' ||
+                        r.status.toLowerCase() == 'uploaded',
+                  )
+                  .length;
+              print(
+                '📊 LAB DASHBOARD: Stream - Requested: $requestedCount, In Progress: $inProgressCount, Completed: $completedCount',
+              );
+            }
+          },
+          onError: (error) {
+            print('❌ LAB DASHBOARD: Stream error: $error');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Error loading lab reports: $error'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+          },
+        );
+  }
+
+  Future<void> _loadDashboardData({bool showLoader = true}) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _isRefreshing = false;
+      });
+      return;
+    }
+
+    if (showLoader) {
+      if (!mounted) return;
+      setState(() => _isLoading = true);
+    } else {
+      if (!mounted) return;
+      setState(() => _isRefreshing = true);
+    }
+
+    try {
+      print('🔍 LAB DASHBOARD: Loading data for user: ${user.uid}');
+
+      // Load lab user data
+      final labDoc = await _firestore.collection('users').doc(user.uid).get();
+      if (!labDoc.exists) {
+        throw Exception('Lab user document not found');
+      }
+
+      final labData = labDoc.data();
+      if (labData == null) {
+        throw Exception('Lab user data is null');
+      }
+
+      // Verify user type
+      final userType = labData['userType'];
+      if (userType != 'lab') {
+        print('⚠️ LAB DASHBOARD: User type is "$userType", expected "lab"');
+      }
+
+      labData['uid'] = user.uid;
+      print(
+        '✅ LAB DASHBOARD: Lab user data loaded: ${labData['institutionName'] ?? labData['name'] ?? 'Unknown'}',
+      );
+
+      // Lab reports are now loaded via real-time stream in _setupLabReportsStream()
+      // No need to fetch them here - the stream will update automatically
+      print(
+        '🔍 LAB DASHBOARD: Lab reports will be loaded via real-time stream',
+      );
+      print('🔍 LAB DASHBOARD: Lab user email: ${labData['email'] ?? 'N/A'}');
+      print(
+        '🔍 LAB DASHBOARD: Lab user name: ${labData['institutionName'] ?? labData['name'] ?? 'N/A'}',
+      );
+
+      // Load notifications
+      final notificationsSnapshot = await _firestore
+          .collection('notifications')
+          .where('recipientId', isEqualTo: user.uid)
+          .get();
+
+      final notifications = notificationsSnapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        return data;
+      }).toList();
+
+      notifications.sort((a, b) {
+        DateTime dateA;
+        DateTime dateB;
+
+        final rawA = a['createdAt'];
+        final rawB = b['createdAt'];
+
+        if (rawA is Timestamp) {
+          dateA = rawA.toDate();
+        } else if (rawA is DateTime) {
+          dateA = rawA;
+        } else {
+          dateA = DateTime.fromMillisecondsSinceEpoch(0);
+        }
+
+        if (rawB is Timestamp) {
+          dateB = rawB.toDate();
+        } else if (rawB is DateTime) {
+          dateB = rawB;
+        } else {
+          dateB = DateTime.fromMillisecondsSinceEpoch(0);
+        }
+
+        return dateB.compareTo(dateA);
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _labData = labData;
+        // _labReports is updated by the stream, don't overwrite it here
+        _notifications = notifications;
+        _isLoading = false;
+        _isRefreshing = false;
+      });
+
+      print('✅ LAB DASHBOARD: Dashboard data loaded successfully');
+    } catch (e, stackTrace) {
+      print('❌ LAB DASHBOARD: Error loading dashboard: $e');
+      print('❌ LAB DASHBOARD: Stack trace: $stackTrace');
+
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _isRefreshing = false;
+      });
+
+      // Show more detailed error message
+      final errorMessage = e.toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load lab dashboard: $errorMessage'),
+          duration: const Duration(seconds: 5),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
-  void _showReportUpload() {
+  Future<void> _handleUpdateStatus(LabReport report, String newStatus) async {
+    try {
+      if (!mounted) return;
+      setState(() => _isRefreshing = true);
+      // Use InterconnectService to update status with notifications
+      await InterconnectService.updateLabReportStatus(report.id, newStatus);
+      // No need to reload data - the stream will update automatically
+      if (!mounted) return;
+      setState(() => _isRefreshing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Report marked as ${_statusLabel(newStatus)}. Doctor and patient have been notified.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isRefreshing = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to update status: $e')));
+    }
+  }
+
+  Future<void> _handleUploadResult(LabReport report) async {
+    try {
+      final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile == null) return;
+
+      if (!mounted) return;
+      setState(() => _isRefreshing = true);
+
+      final file = File(pickedFile.path);
+      final storageRef = FirebaseStorage.instance.ref().child(
+        'lab_reports/${report.id}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+
+      await storageRef.putFile(file);
+      final downloadUrl = await storageRef.getDownloadURL();
+
+      await InterconnectService.uploadLabResult(
+        report.id,
+        downloadUrl,
+        null,
+        notes: 'Uploaded via lab dashboard',
+      );
+
+      // No need to reload data - the stream will update automatically
+      if (!mounted) return;
+      setState(() => _isRefreshing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Lab result uploaded successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isRefreshing = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to upload result: $e')));
+    }
+  }
+
+  void _showReportDetails(LabReport report) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      builder: (context) {
+        final statusColor = _statusColor(report.status);
+
+        Widget detailRow(String label, String value) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Upload Test Results',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                SizedBox(
+                  width: 120,
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textMedium,
+                    ),
+                  ),
                 ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
+                Expanded(
+                  child: Text(value, style: const TextStyle(fontSize: 14)),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
+          );
+        }
+
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(context).padding.bottom + 24,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Upload New Results',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            TextField(
-                              decoration: const InputDecoration(
-                                labelText: 'Patient ID',
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            TextField(
-                              decoration: const InputDecoration(
-                                labelText: 'Test Type',
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            DropdownButtonFormField<String>(
-                              decoration: const InputDecoration(
-                                labelText: 'Priority',
-                                border: OutlineInputBorder(),
-                              ),
-                              items: ['Normal', 'Urgent', 'Critical']
-                                  .map(
-                                    (priority) => DropdownMenuItem(
-                                      value: priority,
-                                      child: Text(priority),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) {},
-                            ),
-                            const SizedBox(height: 12),
-                            ElevatedButton.icon(
-                              onPressed: () {
-                                // Simulate file upload
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'File upload functionality would be implemented here',
-                                    ),
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.attach_file),
-                              label: const Text('Attach Report File'),
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Results uploaded successfully!',
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    child: const Text('Upload Results'),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
+                    CircleAvatar(
+                      backgroundColor: statusColor.withOpacity(0.15),
+                      child: Icon(Icons.science, color: statusColor),
                     ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Recent Uploads',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ...testResults
-                        .take(3)
-                        .map(
-                          (test) => Card(
-                            child: ListTile(
-                              leading: const Icon(Icons.description),
-                              title: Text(
-                                '${test['id']} - ${test['testType']}',
-                              ),
-                              subtitle: Text('Patient: ${test['patientName']}'),
-                              trailing: Chip(
-                                label: Text(test['status']),
-                                backgroundColor: _getStatusColor(
-                                  test['status'],
-                                ),
-                              ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            report.testName,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                        )
-                        .toList(),
+                          Text(
+                            _statusLabel(report.status),
+                            style: TextStyle(
+                              color: statusColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
                   ],
                 ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showFeatureModal(String title) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.7,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                const SizedBox(height: 16),
+                detailRow('Patient', report.patientName),
+                detailRow(
+                  'Requested By',
+                  report.doctorName != null && report.doctorName!.isNotEmpty
+                      ? 'Dr. ${report.doctorName}'
+                      : '—',
+                ),
+                detailRow('Test Type', report.testType),
+                detailRow('Test Date', _dateFormat.format(report.testDate)),
+                if (report.results != null && report.results!.isNotEmpty)
+                  detailRow(
+                    'Results',
+                    report.results!.entries
+                        .map((entry) {
+                          final value = entry.value;
+                          return '${entry.key}: $value';
+                        })
+                        .join('\n'),
                   ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: Center(
-                child: Text(
-                  '$title feature coming soon!',
-                  style: const TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _logout() async {
-    setState(() => _isLoading = true);
-    try {
-      await FirebaseAuth.instance.signOut();
-      if (mounted) {
-        Navigator.of(
-          context,
-        ).pushNamedAndRemoveUntil('/login', (route) => false);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Logout failed: \\$e')));
-      }
-    }
-    if (mounted) setState(() => _isLoading = false);
-  }
-
-  void _showReportManagement() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Report Management',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(
-                      labelText: 'Filter by Status',
-                      border: OutlineInputBorder(),
+                if (report.notes != null && report.notes!.isNotEmpty)
+                  detailRow('Notes', report.notes!),
+                if (report.reportUrl != null && report.reportUrl!.isNotEmpty)
+                  detailRow('Report URL', report.reportUrl!),
+                const SizedBox(height: 24),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.visibility),
+                      label: const Text('View Details'),
+                      onPressed: () {},
                     ),
-                    items: ['All', 'Pending', 'In Progress', 'Completed']
-                        .map(
-                          (status) => DropdownMenuItem(
-                            value: status,
-                            child: Text(status),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {},
-                  ),
-                ),
-                const SizedBox(width: 16),
-                ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Refresh'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: testResults.length,
-                itemBuilder: (context, index) {
-                  final test = testResults[index];
-                  return Card(
-                    child: ExpansionTile(
-                      leading: Icon(
-                        _getTestIcon(test['testType']),
-                        color: test['priority'] == 'Urgent'
-                            ? Colors.red
-                            : AppTheme.labColor,
-                      ),
-                      title: Text('${test['id']} - ${test['patientName']}'),
-                      subtitle: Text('${test['testType']} | ${test['date']}'),
-                      trailing: Chip(
-                        label: Text(test['status']),
-                        backgroundColor: _getStatusColor(test['status']),
-                      ),
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Priority: ${test['priority']}'),
-                              Text('Technician: ${test['technician']}'),
-                              Text('Results: ${test['results']}'),
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  ElevatedButton.icon(
-                                    onPressed: () {},
-                                    icon: const Icon(Icons.visibility),
-                                    label: const Text('View'),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  ElevatedButton.icon(
-                                    onPressed: () {},
-                                    icon: const Icon(Icons.edit),
-                                    label: const Text('Edit'),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  ElevatedButton.icon(
-                                    onPressed: () {},
-                                    icon: const Icon(Icons.download),
-                                    label: const Text('Download'),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showTestRequests() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Test Requests',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: testResults.length,
-                itemBuilder: (context, index) {
-                  final test = testResults[index];
-                  return Card(
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: test['priority'] == 'Urgent'
-                            ? Colors.red
-                            : AppTheme.labColor,
-                        child: Text(test['id'].substring(3)),
-                      ),
-                      title: Text(test['patientName']),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Test: ${test['testType']}'),
-                          Text('Priority: ${test['priority']}'),
-                          Text('Date: ${test['date']}'),
-                        ],
-                      ),
-                      trailing: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Chip(
-                            label: Text(test['status']),
-                            backgroundColor: _getStatusColor(test['status']),
-                          ),
-                        ],
-                      ),
-                      onTap: () {
-                        _showTestRequestDetails(test);
-                      },
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showPatientSearch() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Patient Search',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              decoration: const InputDecoration(
-                hintText: 'Search by patient name, ID, or test type...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (value) {
-                // Implement search functionality
-              },
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Search Results:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                itemCount: testResults.length,
-                itemBuilder: (context, index) {
-                  final test = testResults[index];
-                  return Card(
-                    child: ListTile(
-                      leading: const CircleAvatar(child: Icon(Icons.person)),
-                      title: Text(test['patientName']),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('ID: ${test['id']}'),
-                          Text('Test: ${test['testType']}'),
-                          Text('Date: ${test['date']}'),
-                        ],
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.arrow_forward),
+                    if (report.status == 'requested')
+                      FilledButton.icon(
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Start Processing'),
                         onPressed: () {
-                          _showPatientDetails(test);
+                          Navigator.pop(context);
+                          _handleUpdateStatus(report, 'in_progress');
                         },
                       ),
-                    ),
-                  );
-                },
-              ),
+                    if (report.status == 'in_progress')
+                      FilledButton.icon(
+                        icon: const Icon(Icons.check_circle),
+                        label: const Text('Mark Completed'),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _handleUpdateStatus(report, 'completed');
+                        },
+                      ),
+                    if (report.status == 'requested' ||
+                        report.status == 'in_progress')
+                      FilledButton.icon(
+                        icon: const Icon(Icons.upload_file),
+                        label: const Text('Upload Result'),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _handleUploadResult(report);
+                        },
+                      ),
+                  ],
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showNotificationsSheet() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Lab Notifications',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (_notifications.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    child: Center(
+                      child: Text(
+                        'No notifications yet.',
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                    ),
+                  )
+                else
+                  SizedBox(
+                    height: 360,
+                    child: ListView.separated(
+                      itemCount: _notifications.length,
+                      separatorBuilder: (context, _) =>
+                          const Divider(height: 1),
+                      itemBuilder: (context, index) =>
+                          _buildNotificationTile(_notifications[index]),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildNotificationTile(Map<String, dynamic> notification) {
+    final title = notification['title'] as String? ?? 'Notification';
+    final message = notification['message'] as String? ?? '';
+    final type = notification['type'] as String? ?? 'info';
+    final color = _notificationColor(type);
+
+    DateTime? createdAt;
+    final raw = notification['createdAt'];
+    if (raw is Timestamp) {
+      createdAt = raw.toDate();
+    } else if (raw is DateTime) {
+      createdAt = raw;
+    }
+
+    final timeLabel = createdAt != null
+        ? DateFormat('MMM d, h:mm a').format(createdAt)
+        : '';
+
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: color.withOpacity(0.15),
+        child: Icon(Icons.notifications, color: color),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (message.isNotEmpty) Text(message),
+          if (timeLabel.isNotEmpty)
+            Text(
+              timeLabel,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
+        ],
       ),
     );
   }
 
-  void _showAppointmentCalendar() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Lab Appointments',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                const Text(
-                  'Today\'s Appointments',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                const Spacer(),
-                ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.add),
-                  label: const Text('New Appointment'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: labAppointments.length,
-                itemBuilder: (context, index) {
-                  final appointment = labAppointments[index];
-                  return Card(
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: _getAppointmentStatusColor(
-                          appointment['status'],
-                        ),
-                        child: Text(appointment['time'].substring(0, 2)),
-                      ),
-                      title: Text(appointment['patientName']),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Test: ${appointment['testType']}'),
-                          Text('Time: ${appointment['time']}'),
-                          if (appointment['fasting'])
-                            const Text(
-                              '⚠️ Fasting Required',
-                              style: TextStyle(color: Colors.orange),
-                            ),
-                        ],
-                      ),
-                      trailing: Chip(
-                        label: Text(appointment['status']),
-                        backgroundColor: _getAppointmentStatusColor(
-                          appointment['status'],
-                        ),
-                      ),
-                      onTap: () {
-                        _showAppointmentDetails(appointment);
-                      },
-                    ),
-                  );
-                },
+  String get _labDisplayName =>
+      _labData?['institutionName'] ?? _labData?['name'] ?? 'Lab Team';
+
+  List<LabReport> get _requestedReports {
+    final requested = _labReports
+        .where((report) => report.status.toLowerCase() == 'requested')
+        .toList();
+
+    // Debug: Log if we have reports but none are requested
+    if (_labReports.isNotEmpty && requested.isEmpty) {
+      print(
+        '⚠️ LAB DASHBOARD: Have ${_labReports.length} reports but none are "requested"',
+      );
+      print(
+        '⚠️ LAB DASHBOARD: Report statuses: ${_labReports.map((r) => r.status).toList()}',
+      );
+    }
+
+    return requested;
+  }
+
+  List<LabReport> get _inProgressReports => _labReports
+      .where((report) => report.status.toLowerCase() == 'in_progress')
+      .toList();
+
+  List<LabReport> get _completedReports => _labReports
+      .where(
+        (report) =>
+            report.status.toLowerCase() == 'completed' ||
+            report.status.toLowerCase() == 'uploaded',
+      )
+      .toList();
+
+  List<LabReport> get _todayReports => _labReports
+      .where((report) => _isSameDay(report.testDate, DateTime.now()))
+      .toList();
+
+  void _navigateToRequests() {
+    setState(() => _selectedIndex = 1);
+  }
+
+  void _openChat() {
+    setState(() => _selectedIndex = 2);
+  }
+
+  void _uploadNextPending() {
+    LabReport? target;
+    if (_inProgressReports.isNotEmpty) {
+      target = _inProgressReports.first;
+    } else if (_requestedReports.isNotEmpty) {
+      target = _requestedReports.first;
+    }
+
+    if (target == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No pending reports to upload')),
+      );
+      return;
+    }
+
+    _handleUploadResult(target);
+  }
+
+  List<Widget> get _pages => [
+    LabDashboardContent(
+      labName: _labDisplayName,
+      onRefresh: () => _loadDashboardData(showLoader: false),
+      allReports: _labReports,
+      requestedReports: _requestedReports,
+      inProgressReports: _inProgressReports,
+      completedReports: _completedReports,
+      todayReports: _todayReports,
+      notifications: _notifications,
+      onShowReport: _showReportDetails,
+      onViewRequests: _navigateToRequests,
+      onOpenChat: _openChat,
+      onUploadPending: _uploadNextPending,
+      isRefreshing: _isRefreshing,
+    ),
+    LabRequestsView(
+      reports: _labReports,
+      onRefresh: () => _loadDashboardData(showLoader: false),
+      onUpdateStatus: _handleUpdateStatus,
+      onUploadResult: _handleUploadResult,
+      onShowReport: _showReportDetails,
+    ),
+    const ChatPage(),
+    LabProfilePage(
+      onProfileUpdated: () => _loadDashboardData(showLoader: false),
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppWidgets.buildAppBar(
+        title: 'HealthMate - Lab',
+        userType: 'lab',
+        actions: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                tooltip: 'Notifications',
+                icon: const Icon(Icons.notifications_outlined),
+                onPressed: _showNotificationsSheet,
               ),
-            ),
-          ],
-        ),
+              if (_notifications.isNotEmpty)
+                Positioned(
+                  right: 10,
+                  top: 12,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: const BoxDecoration(
+                      color: AppTheme.warningOrange,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          IconButton(
+            tooltip: 'Refresh',
+            icon: _isRefreshing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh),
+            onPressed: _isRefreshing
+                ? null
+                : () => _loadDashboardData(showLoader: false),
+          ),
+          IconButton(
+            tooltip: 'Logout',
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await FirebaseAuth.instance.signOut();
+              if (!mounted) return;
+              Navigator.of(
+                context,
+              ).pushNamedAndRemoveUntil('/login', (route) => false);
+            },
+          ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _pages[_selectedIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: (index) => setState(() => _selectedIndex = index),
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: AppTheme.labColor,
+        unselectedItemColor: AppTheme.textMedium,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.assignment),
+            label: 'Requests',
+          ),
+          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        ],
+      ),
+    );
+  }
+}
+
+class LabDashboardContent extends StatelessWidget {
+  const LabDashboardContent({
+    super.key,
+    required this.labName,
+    required this.onRefresh,
+    required this.allReports,
+    required this.requestedReports,
+    required this.inProgressReports,
+    required this.completedReports,
+    required this.todayReports,
+    required this.notifications,
+    required this.onShowReport,
+    required this.onViewRequests,
+    required this.onOpenChat,
+    required this.onUploadPending,
+    required this.isRefreshing,
+  });
+
+  final String labName;
+  final Future<void> Function() onRefresh;
+  final List<LabReport> allReports;
+  final List<LabReport> requestedReports;
+  final List<LabReport> inProgressReports;
+  final List<LabReport> completedReports;
+  final List<LabReport> todayReports;
+  final List<Map<String, dynamic>> notifications;
+  final ValueChanged<LabReport> onShowReport;
+  final VoidCallback onViewRequests;
+  final VoidCallback onOpenChat;
+  final VoidCallback onUploadPending;
+  final bool isRefreshing;
+
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
+    return 'Good Evening';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = AppTheme.labColor;
+
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      color: accent,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          _buildWelcomeCard(accent),
+          const SizedBox(height: 16),
+          _buildStatsSection(context),
+          const SizedBox(height: 24),
+          _buildQuickActions(context),
+          const SizedBox(height: 24),
+          _buildSectionHeader(
+            context,
+            title: 'Incoming Requests',
+            icon: Icons.pending_actions,
+            action: requestedReports.isNotEmpty ? 'View all' : null,
+            onActionTap: requestedReports.isNotEmpty ? onViewRequests : null,
+          ),
+          if (requestedReports.isEmpty)
+            _buildEmptyState(
+              icon: Icons.inbox_outlined,
+              message: 'No pending requests right now.',
+            )
+          else
+            ...requestedReports
+                .take(3)
+                .map((report) => _buildReportCard(report))
+                .toList(),
+          const SizedBox(height: 24),
+          _buildSectionHeader(
+            context,
+            title: 'In Progress',
+            icon: Icons.timelapse,
+          ),
+          if (inProgressReports.isEmpty)
+            _buildEmptyState(
+              icon: Icons.hourglass_empty,
+              message: 'No tests are currently in progress.',
+            )
+          else
+            ...inProgressReports
+                .take(3)
+                .map((report) => _buildReportCard(report))
+                .toList(),
+          const SizedBox(height: 24),
+          _buildSectionHeader(
+            context,
+            title: 'Completed Recently',
+            icon: Icons.check_circle,
+          ),
+          if (completedReports.isEmpty)
+            _buildEmptyState(
+              icon: Icons.auto_graph,
+              message: 'Completed tests will appear here.',
+            )
+          else
+            ...completedReports
+                .take(3)
+                .map((report) => _buildReportCard(report))
+                .toList(),
+          const SizedBox(height: 24),
+          _buildSectionHeader(
+            context,
+            title: 'Recent Activity',
+            icon: Icons.notifications,
+            action: notifications.isNotEmpty ? 'View all' : null,
+            onActionTap: notifications.isNotEmpty ? onViewRequests : null,
+          ),
+          if (notifications.isEmpty)
+            _buildEmptyState(
+              icon: Icons.notifications_none,
+              message: 'No recent activity to show.',
+            )
+          else
+            ...notifications.take(4).map(_buildNotificationCard).toList(),
+          const SizedBox(height: 80),
+        ],
       ),
     );
   }
 
-  void _showStaffAssignment() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
+  Widget _buildWelcomeCard(Color accent) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Lab Staff Assignment',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: accent.withOpacity(0.15),
+              child: Icon(Icons.science, color: accent, size: 28),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(width: 16),
             Expanded(
-              child: ListView.builder(
-                itemCount: labStaff.length,
-                itemBuilder: (context, index) {
-                  final staff = labStaff[index];
-                  return Card(
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: staff['status'] == 'Active'
-                            ? Colors.green
-                            : Colors.orange,
-                        child: Text(staff['name'].substring(0, 1)),
-                      ),
-                      title: Text(staff['name']),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Role: ${staff['role']}'),
-                          Text('Department: ${staff['department']}'),
-                          Text('Shift: ${staff['shift']}'),
-                          Text('Experience: ${staff['experience']}'),
-                        ],
-                      ),
-                      trailing: Chip(
-                        label: Text(staff['status']),
-                        backgroundColor: staff['status'] == 'Active'
-                            ? Colors.green.withOpacity(0.3)
-                            : Colors.orange.withOpacity(0.3),
-                      ),
-                      onTap: () {
-                        _showStaffDetails(staff);
-                      },
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showNotifications() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Lab Notifications',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Card(
-                    child: ListTile(
-                      leading: const CircleAvatar(
-                        backgroundColor: Colors.red,
-                        child: Icon(Icons.priority_high, color: Colors.white),
-                      ),
-                      title: const Text('Urgent Test Request'),
-                      subtitle: const Text(
-                        'Cardiac markers needed for ICU patient',
-                      ),
-                      trailing: const Text('5 min ago'),
-                      onTap: () {},
+                  Text(
+                    '${_greeting()},',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  Card(
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: AppTheme.labColor,
-                        child: Icon(Icons.assignment, color: Colors.white),
-                      ),
-                      title: const Text('New Test Assignment'),
-                      subtitle: const Text(
-                        'Blood work assigned to Tech. Sarah Wilson',
-                      ),
-                      trailing: const Text('15 min ago'),
-                      onTap: () {},
+                  Text(
+                    labName,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  Card(
-                    child: ListTile(
-                      leading: const CircleAvatar(
-                        backgroundColor: Colors.green,
-                        child: Icon(Icons.check_circle, color: Colors.white),
-                      ),
-                      title: const Text('Results Uploaded'),
-                      subtitle: const Text(
-                        'LAB001 results uploaded successfully',
-                      ),
-                      trailing: const Text('30 min ago'),
-                      onTap: () {},
-                    ),
+                  Text(
+                    'Here\'s a quick view of today\'s workloads.',
+                    style: TextStyle(color: Colors.grey.shade600),
                   ),
                 ],
               ),
@@ -784,552 +944,45 @@ class _LabDashboardState extends State<LabDashboard> {
     );
   }
 
-  // Helper methods for lab dashboard
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Pending':
-        return Colors.orange.withOpacity(0.3);
-      case 'In Progress':
-        return AppTheme.labColor.withOpacity(0.3);
-      case 'Completed':
-        return Colors.green.withOpacity(0.3);
-      default:
-        return Colors.grey.withOpacity(0.3);
-    }
-  }
-
-  Color _getAppointmentStatusColor(String status) {
-    switch (status) {
-      case 'Scheduled':
-        return AppTheme.labColor.withOpacity(0.3);
-      case 'Checked In':
-        return Colors.orange.withOpacity(0.3);
-      case 'Completed':
-        return Colors.green.withOpacity(0.3);
-      default:
-        return Colors.grey.withOpacity(0.3);
-    }
-  }
-
-  IconData _getTestIcon(String testType) {
-    if (testType.toLowerCase().contains('blood')) {
-      return Icons.water_drop;
-    } else if (testType.toLowerCase().contains('cardiac')) {
-      return Icons.favorite;
-    } else if (testType.toLowerCase().contains('liver')) {
-      return Icons.health_and_safety;
-    } else {
-      return Icons.science;
-    }
-  }
-
-  void _showTestRequestDetails(Map<String, dynamic> test) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Test Request ${test['id']}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Patient: ${test['patientName']}'),
-            Text('Test Type: ${test['testType']}'),
-            Text('Priority: ${test['priority']}'),
-            Text('Status: ${test['status']}'),
-            Text('Technician: ${test['technician']}'),
-            Text('Date: ${test['date']}'),
-            Text('Results: ${test['results']}'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          if (test['status'] == 'Pending')
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  test['status'] = 'In Progress';
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${test['id']} started processing')),
-                );
-              },
-              child: const Text('Start Processing'),
-            ),
-        ],
+  Widget _buildStatsSection(BuildContext context) {
+    final stats = [
+      _DashboardStat(
+        label: 'Total Reports',
+        value: allReports.length.toString(),
+        icon: Icons.analytics,
+        color: AppTheme.labColor,
       ),
+      _DashboardStat(
+        label: 'Pending',
+        value: requestedReports.length.toString(),
+        icon: Icons.pending_actions,
+        color: AppTheme.warningOrange,
+      ),
+      _DashboardStat(
+        label: 'In Progress',
+        value: inProgressReports.length.toString(),
+        icon: Icons.timelapse,
+        color: AppTheme.infoBlue,
+      ),
+      _DashboardStat(
+        label: 'Today\'s Tests',
+        value: todayReports.length.toString(),
+        icon: Icons.calendar_today,
+        color: AppTheme.successGreen,
+      ),
+    ];
+
+    return GridView.count(
+      crossAxisCount: MediaQuery.of(context).size.width > 600 ? 4 : 2,
+      crossAxisSpacing: 12,
+      mainAxisSpacing: 12,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      children: stats.map((stat) => stat.build()).toList(),
     );
   }
 
-  void _showPatientDetails(Map<String, dynamic> test) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Patient: ${test['patientName']}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Patient ID: ${test['id']}'),
-            Text('Test Type: ${test['testType']}'),
-            Text('Date: ${test['date']}'),
-            Text('Status: ${test['status']}'),
-            Text('Results: ${test['results']}'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('View Full History'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAppointmentDetails(Map<String, dynamic> appointment) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Appointment ${appointment['id']}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Patient: ${appointment['patientName']}'),
-            Text('Test Type: ${appointment['testType']}'),
-            Text('Time: ${appointment['time']}'),
-            Text('Date: ${appointment['date']}'),
-            Text('Status: ${appointment['status']}'),
-            if (appointment['fasting'])
-              const Text(
-                '⚠️ Fasting Required',
-                style: TextStyle(color: Colors.orange),
-              ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          if (appointment['status'] == 'Scheduled')
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  appointment['status'] = 'Checked In';
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('${appointment['patientName']} checked in'),
-                  ),
-                );
-              },
-              child: const Text('Check In'),
-            ),
-        ],
-      ),
-    );
-  }
-
-  void _showStaffDetails(Map<String, dynamic> staff) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(staff['name']),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('ID: ${staff['id']}'),
-            Text('Role: ${staff['role']}'),
-            Text('Department: ${staff['department']}'),
-            Text('Shift: ${staff['shift']}'),
-            Text('Experience: ${staff['experience']}'),
-            Text('Status: ${staff['status']}'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Assign Task'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadLabDashboardData();
-  }
-
-  Future<void> _loadLabDashboardData() async {
-    setState(() => _isLoading = true);
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      setState(() => _isLoading = false);
-      return;
-    }
-    final uid = user.uid;
-    try {
-      // Fetch lab reports
-      final reportsSnap = await FirebaseFirestore.instance
-          .collection('lab_reports')
-          .where('labId', isEqualTo: uid)
-          .get();
-      testResults = reportsSnap.docs.map((d) => d.data()).toList();
-
-      // Fetch lab staff
-      final staffSnap = await FirebaseFirestore.instance
-          .collection('users')
-          .where('userType', isEqualTo: 'lab_staff')
-          .where('labId', isEqualTo: uid)
-          .get();
-      labStaff = staffSnap.docs.map((d) => d.data()).toList();
-
-      // Fetch lab appointments
-      final apptSnap = await FirebaseFirestore.instance
-          .collection('appointments')
-          .where('labId', isEqualTo: uid)
-          .get();
-      labAppointments = apptSnap.docs.map((d) => d.data()).toList();
-    } catch (e) {
-      print('Error loading lab dashboard data: $e');
-    }
-    setState(() => _isLoading = false);
-  }
-
-  Future<void> _loadLabRequests() async {
-    if (_labId == null) return;
-
-    try {
-      setState(() => _isLoading = true);
-
-      // Get lab reports assigned to this lab
-      final labReports = await InterconnectService.getUserLabReports(
-        _labId!,
-        'lab',
-      );
-
-      setState(() {
-        _myLabReports = labReports;
-        _incomingRequests = labReports
-            .where((report) => report.status == 'requested')
-            .toList();
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load lab requests: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _updateLabReportStatus(String reportId, String status) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection('lab_reports')
-          .doc(reportId)
-          .update({'status': status});
-
-      await _loadLabRequests(); // Refresh data
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Test status updated to $status'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to update status: $e')));
-      }
-    }
-  }
-
-  Future<void> _uploadLabResult(LabReport report) async {
-    try {
-      final picker = ImagePicker();
-      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
-      if (pickedFile != null) {
-        setState(() => _isLoading = true);
-
-        // Upload to Firebase Storage
-        final file = File(pickedFile.path);
-        final storageRef = FirebaseStorage.instance
-            .ref()
-            .child('lab_reports')
-            .child('${report.id}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-
-        await storageRef.putFile(file);
-        final downloadUrl = await storageRef.getDownloadURL();
-
-        // Update lab report with results
-        await InterconnectService.uploadLabResult(report.id, downloadUrl, {
-          'uploaded_by': _userData?['name'] ?? 'Lab Staff',
-        }, notes: 'Results uploaded by lab staff');
-
-        await _loadLabRequests(); // Refresh data
-        setState(() => _isLoading = false);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Lab results uploaded successfully!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      setState(() => _isLoading = false);
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to upload results: $e')));
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final Color mainBlue = AppTheme.labColor;
-    final Color scaffoldBg = theme.scaffoldBackgroundColor;
-    final Color textColor = theme.textTheme.bodyLarge?.color ?? Colors.black;
-    final Color subTextColor = theme.textTheme.bodyMedium?.color ?? Colors.grey;
-
-    return Scaffold(
-      backgroundColor: scaffoldBg,
-      appBar: AppBar(
-        backgroundColor: mainBlue,
-        foregroundColor: Colors.white,
-        title: const Text('Lab Dashboard'),
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: Icon(
-              theme.brightness == Brightness.dark
-                  ? Icons.light_mode
-                  : Icons.dark_mode,
-            ),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Theme toggle requires app restart'),
-                ),
-              );
-            },
-          ),
-          IconButton(icon: const Icon(Icons.logout), onPressed: _logout),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _selectedBottomNav == 0
-          ? Container(
-              color: scaffoldBg,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  // Responsive column count based on screen width
-                  final screenWidth = constraints.maxWidth;
-                  final crossAxisCount = screenWidth > 600 ? 3 : 2;
-
-                  return ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    children: [
-                      // Welcome Card - Compact version
-                      Card(
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 24,
-                                backgroundColor: mainBlue,
-                                child: Icon(
-                                  Icons.science,
-                                  color: Colors.white,
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Welcome, Lab Staff!',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: textColor,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Laboratory Department',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: subTextColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      // Statistics Cards - Responsive grid
-                      GridView.count(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        crossAxisCount: crossAxisCount,
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 8,
-                        childAspectRatio: crossAxisCount == 3 ? 1.1 : 1.3,
-                        children: [
-                          _buildStatCard(
-                            'Total Tests',
-                            '$totalTests',
-                            Icons.assignment_turned_in,
-                            Colors.green,
-                          ),
-                          _buildStatCard(
-                            'Pending Uploads',
-                            '$pendingUploads',
-                            Icons.upload_file,
-                            Colors.orange,
-                          ),
-                          _buildStatCard(
-                            "Today's Appointments",
-                            '$todaysAppointments',
-                            Icons.calendar_today,
-                            AppTheme.labColor,
-                          ),
-                          _buildStatCard(
-                            'Completed',
-                            '${totalTests - pendingUploads}',
-                            Icons.check_circle,
-                            Colors.teal,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Quick Actions - Responsive grid
-                      Text(
-                        'Quick Actions',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: crossAxisCount,
-                          crossAxisSpacing: 8,
-                          mainAxisSpacing: 8,
-                          childAspectRatio: crossAxisCount == 3 ? 0.9 : 1.0,
-                        ),
-                        itemCount: _features.length,
-                        itemBuilder: (context, index) {
-                          final feature = _features[index];
-                          return GestureDetector(
-                            onTap: () => _onFeatureTap(feature.label),
-                            child: Card(
-                              elevation: 2,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(feature.icon, size: 28, color: mainBlue),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      feature.label,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                        color: textColor,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  );
-                },
-              ),
-            )
-          : _selectedBottomNav == 1
-          ? const ChatPage()
-          : const LabProfilePage(),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedBottomNav,
-        onTap: (index) => setState(() => _selectedBottomNav = index),
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: mainBlue,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatCard(
-    String title,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _buildQuickActions(BuildContext context) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1338,24 +991,197 @@ class _LabDashboardState extends State<LabDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            const Text(
+              'Quick Actions',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
               children: [
-                Icon(icon, color: color, size: 24),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
+                _QuickAction(
+                  icon: Icons.assignment,
+                  label: 'Review Requests',
+                  color: AppTheme.labColor,
+                  onTap: onViewRequests,
+                ),
+                _QuickAction(
+                  icon: Icons.upload_file,
+                  label: 'Upload Results',
+                  color: AppTheme.infoBlue,
+                  onTap: onUploadPending,
+                ),
+                _QuickAction(
+                  icon: Icons.today,
+                  label: 'Today\'s Tests (${todayReports.length})',
+                  color: AppTheme.warningOrange,
+                  onTap: onViewRequests,
+                ),
+                _QuickAction(
+                  icon: Icons.chat,
+                  label: 'Open Chat',
+                  color: AppTheme.accentPurple,
+                  onTap: onOpenChat,
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    String? action,
+    VoidCallback? onActionTap,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, color: AppTheme.labColor),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        const Spacer(),
+        if (action != null && onActionTap != null)
+          TextButton(onPressed: onActionTap, child: Text(action)),
+      ],
+    );
+  }
+
+  Widget _buildReportCard(LabReport report) {
+    final statusColor = _statusColor(report.status);
+
+    return Card(
+      child: ListTile(
+        onTap: () => onShowReport(report),
+        leading: CircleAvatar(
+          backgroundColor: statusColor.withOpacity(0.15),
+          child: Icon(Icons.description, color: statusColor),
+        ),
+        title: Text(
+          report.patientName,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (report.doctorName != null && report.doctorName!.isNotEmpty)
+              Text('Requested by Dr. ${report.doctorName}'),
+            Text('${report.testName} • ${_dateFormat.format(report.testDate)}'),
+          ],
+        ),
+        trailing: Chip(
+          label: Text(
+            _statusLabel(report.status),
+            style: TextStyle(color: statusColor, fontWeight: FontWeight.w600),
+          ),
+          backgroundColor: statusColor.withOpacity(0.12),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationCard(Map<String, dynamic> notification) {
+    final title = notification['title'] as String? ?? 'Notification';
+    final message = notification['message'] as String? ?? '';
+    final type = notification['type'] as String? ?? 'info';
+    final color = _notificationColor(type);
+
+    DateTime? createdAt;
+    final raw = notification['createdAt'];
+    if (raw is Timestamp) {
+      createdAt = raw.toDate();
+    } else if (raw is DateTime) {
+      createdAt = raw;
+    }
+
+    final timeLabel = createdAt != null
+        ? DateFormat('MMM d, h:mm a').format(createdAt)
+        : '';
+
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: color.withOpacity(0.15),
+          child: Icon(Icons.notifications, color: color),
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (message.isNotEmpty) Text(message),
+            if (timeLabel.isNotEmpty)
+              Text(
+                timeLabel,
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState({required IconData icon, required String message}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      alignment: Alignment.center,
+      child: Column(
+        children: [
+          Icon(icon, size: 36, color: Colors.grey.shade400),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashboardStat {
+  const _DashboardStat({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  Widget build() {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(height: 12),
             Text(
-              title,
-              style: const TextStyle(fontSize: 14, color: Colors.grey),
+              value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -1364,21 +1190,268 @@ class _LabDashboardState extends State<LabDashboard> {
   }
 }
 
-class _LabDashboardFeature {
-  final String label;
+class _QuickAction extends StatelessWidget {
+  const _QuickAction({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
   final IconData icon;
-  const _LabDashboardFeature(this.label, this.icon);
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 150,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class LabRequestsView extends StatefulWidget {
+  const LabRequestsView({
+    super.key,
+    required this.reports,
+    required this.onRefresh,
+    required this.onUpdateStatus,
+    required this.onUploadResult,
+    required this.onShowReport,
+  });
+
+  final List<LabReport> reports;
+  final Future<void> Function() onRefresh;
+  final Future<void> Function(LabReport, String) onUpdateStatus;
+  final Future<void> Function(LabReport) onUploadResult;
+  final ValueChanged<LabReport> onShowReport;
+
+  @override
+  State<LabRequestsView> createState() => _LabRequestsViewState();
+}
+
+class _LabRequestsViewState extends State<LabRequestsView>
+    with SingleTickerProviderStateMixin {
+  @override
+  Widget build(BuildContext context) {
+    final requested = widget.reports
+        .where((report) => report.status.toLowerCase() == 'requested')
+        .toList();
+    final inProgress = widget.reports
+        .where((report) => report.status.toLowerCase() == 'in_progress')
+        .toList();
+    final completed = widget.reports
+        .where(
+          (report) =>
+              report.status.toLowerCase() == 'completed' ||
+              report.status.toLowerCase() == 'uploaded',
+        )
+        .toList();
+
+    return DefaultTabController(
+      length: 3,
+      child: Column(
+        children: [
+          Container(
+            color: Theme.of(context).cardColor,
+            child: TabBar(
+              labelColor: AppTheme.labColor,
+              unselectedLabelColor: AppTheme.textMedium,
+              tabs: [
+                Tab(text: 'Requested (${requested.length})'),
+                Tab(text: 'In Progress (${inProgress.length})'),
+                Tab(text: 'Completed (${completed.length})'),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildReportList(requested, 'requested'),
+                _buildReportList(inProgress, 'in_progress'),
+                _buildReportList(completed, 'completed'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportList(List<LabReport> reports, String filter) {
+    return RefreshIndicator(
+      onRefresh: widget.onRefresh,
+      color: AppTheme.labColor,
+      child: reports.isEmpty
+          ? ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                const SizedBox(height: 80),
+                Center(
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.medical_information,
+                        size: 48,
+                        color: Colors.grey.shade400,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        filter == 'requested'
+                            ? 'No pending lab requests.'
+                            : filter == 'in_progress'
+                            ? 'No tests in progress.'
+                            : 'No completed reports yet.',
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          : ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              itemCount: reports.length,
+              separatorBuilder: (context, _) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final report = reports[index];
+                final statusColor = _statusColor(report.status);
+
+                return Card(
+                  elevation: 1,
+                  child: ListTile(
+                    onTap: () => widget.onShowReport(report),
+                    leading: CircleAvatar(
+                      backgroundColor: statusColor.withOpacity(0.15),
+                      child: Icon(Icons.science, color: statusColor),
+                    ),
+                    title: Text(
+                      report.patientName,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${report.testName} • ${_dateFormat.format(report.testDate)}',
+                        ),
+                        if (report.doctorName != null &&
+                            report.doctorName!.isNotEmpty)
+                          Text('Doctor: Dr. ${report.doctorName}'),
+                      ],
+                    ),
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (value) => _handleAction(value, report),
+                      itemBuilder: (context) {
+                        final actions = <PopupMenuEntry<String>>[];
+                        if (report.status == 'requested') {
+                          actions.add(
+                            const PopupMenuItem(
+                              value: 'start',
+                              child: ListTile(
+                                leading: Icon(Icons.play_arrow),
+                                title: Text('Start Processing'),
+                              ),
+                            ),
+                          );
+                        }
+                        if (report.status == 'in_progress') {
+                          actions.addAll([
+                            const PopupMenuItem(
+                              value: 'complete',
+                              child: ListTile(
+                                leading: Icon(Icons.check_circle),
+                                title: Text('Mark Completed'),
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'upload',
+                              child: ListTile(
+                                leading: Icon(Icons.upload_file),
+                                title: Text('Upload Result'),
+                              ),
+                            ),
+                          ]);
+                        }
+                        actions.add(
+                          const PopupMenuItem(
+                            value: 'view',
+                            child: ListTile(
+                              leading: Icon(Icons.visibility),
+                              title: Text('View Details'),
+                            ),
+                          ),
+                        );
+                        return actions;
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+
+  void _handleAction(String value, LabReport report) {
+    switch (value) {
+      case 'start':
+        widget.onUpdateStatus(report, 'in_progress');
+        break;
+      case 'complete':
+        widget.onUpdateStatus(report, 'completed');
+        break;
+      case 'upload':
+        widget.onUploadResult(report);
+        break;
+      case 'view':
+        widget.onShowReport(report);
+        break;
+    }
+  }
 }
 
 class LabProfilePage extends StatefulWidget {
-  const LabProfilePage({Key? key}) : super(key: key);
+  const LabProfilePage({super.key, this.onProfileUpdated});
+
+  final VoidCallback? onProfileUpdated;
 
   @override
   State<LabProfilePage> createState() => _LabProfilePageState();
 }
 
 class _LabProfilePageState extends State<LabProfilePage> {
-  Map<String, dynamic>? labData;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ImagePicker _picker = ImagePicker();
+
+  Map<String, dynamic>? _labData;
   bool _isLoading = true;
   bool _isUploading = false;
 
@@ -1389,96 +1462,98 @@ class _LabProfilePageState extends State<LabProfilePage> {
   }
 
   Future<void> _loadLabData() async {
-    setState(() => _isLoading = true);
-    final user = FirebaseAuth.instance.currentUser;
+    final user = _auth.currentUser;
     if (user == null) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
       return;
     }
-    final uid = user.uid;
+
     try {
-      final docSnap = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-      if (docSnap.exists) {
-        labData = docSnap.data();
-      }
+      final snapshot = await _firestore.collection('users').doc(user.uid).get();
+      if (!mounted) return;
+      setState(() {
+        _labData = snapshot.data();
+        _isLoading = false;
+      });
     } catch (e) {
-      print('Error loading lab profile: $e');
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to load profile: $e')));
     }
-    setState(() => _isLoading = false);
   }
 
   Future<void> _pickAndUploadPhoto() async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = _auth.currentUser;
     if (user == null) return;
-    final picker = ImagePicker();
+
     try {
-      final picked = await picker.pickImage(
+      final picked = await _picker.pickImage(
         source: ImageSource.gallery,
         imageQuality: 80,
       );
       if (picked == null) return;
+
       setState(() => _isUploading = true);
+
       final file = File(picked.path);
       final storageRef = FirebaseStorage.instance.ref().child(
         'lab_profile_photos/${user.uid}.jpg',
       );
+
       await storageRef.putFile(file);
       final url = await storageRef.getDownloadURL();
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
-        {'photoURL': url},
-      );
+
+      await _firestore.collection('users').doc(user.uid).update({
+        'photoURL': url,
+      });
+
       await _loadLabData();
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Profile photo updated!')));
-      }
+      widget.onProfileUpdated?.call();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Profile photo updated')));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to update photo: $e')));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to update photo: $e')));
+    } finally {
+      if (!mounted) return;
+      setState(() => _isUploading = false);
     }
-    if (mounted) setState(() => _isUploading = false);
   }
 
   void _showEditProfileDialog() {
-    final _institutionNameController = TextEditingController(
-      text: labData?['institutionName'] ?? '',
+    final institutionController = TextEditingController(
+      text: _labData?['institutionName'] ?? '',
     );
-    final _hotlineController = TextEditingController(
-      text: labData?['hotline'] ?? '',
+    final hotlineController = TextEditingController(
+      text: _labData?['hotline'] ?? '',
     );
-    final _addressController = TextEditingController(
-      text: labData?['address'] ?? '',
+    final addressController = TextEditingController(
+      text: _labData?['address'] ?? '',
     );
-    final _websiteController = TextEditingController(
-      text: labData?['website'] ?? '',
+    final websiteController = TextEditingController(
+      text: _labData?['website'] ?? '',
     );
-    final _repNameController = TextEditingController(
-      text: labData?['repName'] ?? '',
+    final repNameController = TextEditingController(
+      text: _labData?['repName'] ?? '',
     );
-    final _repDesignationController = TextEditingController(
-      text: labData?['repDesignation'] ?? '',
+    final repEmailController = TextEditingController(
+      text: _labData?['repEmail'] ?? '',
     );
-    final _repContactController = TextEditingController(
-      text: labData?['repContact'] ?? '',
+    final operatingHoursController = TextEditingController(
+      text: _labData?['operatingHours'] ?? '',
     );
-    final _repEmailController = TextEditingController(
-      text: labData?['repEmail'] ?? '',
+    final testTypesController = TextEditingController(
+      text: _labData?['testTypes'] ?? '',
     );
-    final _hoursController = TextEditingController(
-      text: labData?['operatingHours'] ?? '',
-    );
-    final _testTypesController = TextEditingController(
-      text: labData?['testTypes'] ?? '',
-    );
-    final _turnaroundController = TextEditingController(
-      text: labData?['turnaroundTime'] ?? '',
+    final turnaroundController = TextEditingController(
+      text: _labData?['turnaroundTime'] ?? '',
     );
 
     showDialog(
@@ -1489,63 +1564,52 @@ class _LabProfilePageState extends State<LabProfilePage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Lab Details
               TextField(
-                controller: _institutionNameController,
+                controller: institutionController,
                 decoration: const InputDecoration(
                   labelText: 'Institution Name',
                 ),
               ),
               TextField(
-                controller: _hotlineController,
+                controller: hotlineController,
                 decoration: const InputDecoration(labelText: 'Hotline'),
               ),
               TextField(
-                controller: _addressController,
+                controller: addressController,
                 decoration: const InputDecoration(labelText: 'Address'),
               ),
               TextField(
-                controller: _websiteController,
+                controller: websiteController,
                 decoration: const InputDecoration(labelText: 'Website'),
               ),
               const SizedBox(height: 12),
-              // Authorized Representative
-              Text(
-                'Authorized Representative',
-                style: TextStyle(fontWeight: FontWeight.bold),
+              TextField(
+                controller: repNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Representative Name',
+                ),
               ),
               TextField(
-                controller: _repNameController,
-                decoration: const InputDecoration(labelText: 'Name'),
-              ),
-              TextField(
-                controller: _repDesignationController,
-                decoration: const InputDecoration(labelText: 'Designation'),
-              ),
-              TextField(
-                controller: _repContactController,
-                decoration: const InputDecoration(labelText: 'Contact'),
-              ),
-              TextField(
-                controller: _repEmailController,
-                decoration: const InputDecoration(labelText: 'Email'),
+                controller: repEmailController,
+                decoration: const InputDecoration(
+                  labelText: 'Representative Email',
+                ),
               ),
               const SizedBox(height: 12),
-              // Other editable fields
               TextField(
-                controller: _hoursController,
+                controller: operatingHoursController,
                 decoration: const InputDecoration(labelText: 'Operating Hours'),
               ),
               TextField(
-                controller: _testTypesController,
+                controller: testTypesController,
                 decoration: const InputDecoration(
                   labelText: 'Test Types Offered',
                 ),
               ),
               TextField(
-                controller: _turnaroundController,
+                controller: turnaroundController,
                 decoration: const InputDecoration(
-                  labelText: 'Report Turnaround Time',
+                  labelText: 'Average Turnaround Time',
                 ),
               ),
             ],
@@ -1556,48 +1620,36 @@ class _LabProfilePageState extends State<LabProfilePage> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: const Color(0xFF7B61FF),
-              textStyle: const TextStyle(fontWeight: FontWeight.bold),
-              elevation: 1,
-            ),
+          FilledButton(
             onPressed: () async {
+              final user = _auth.currentUser;
+              if (user == null) return;
+
               try {
-                final user = FirebaseAuth.instance.currentUser;
-                if (user == null) return;
-                final uid = user.uid;
-                final updatedData = {
-                  'institutionName': _institutionNameController.text.trim(),
-                  'hotline': _hotlineController.text.trim(),
-                  'address': _addressController.text.trim(),
-                  'website': _websiteController.text.trim(),
-                  'repName': _repNameController.text.trim(),
-                  'repDesignation': _repDesignationController.text.trim(),
-                  'repContact': _repContactController.text.trim(),
-                  'repEmail': _repEmailController.text.trim(),
-                  'operatingHours': _hoursController.text.trim(),
-                  'testTypes': _testTypesController.text.trim(),
-                  'turnaroundTime': _turnaroundController.text.trim(),
-                };
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(uid)
-                    .update(updatedData);
+                await _firestore.collection('users').doc(user.uid).update({
+                  'institutionName': institutionController.text.trim(),
+                  'hotline': hotlineController.text.trim(),
+                  'address': addressController.text.trim(),
+                  'website': websiteController.text.trim(),
+                  'repName': repNameController.text.trim(),
+                  'repEmail': repEmailController.text.trim(),
+                  'operatingHours': operatingHoursController.text.trim(),
+                  'testTypes': testTypesController.text.trim(),
+                  'turnaroundTime': turnaroundController.text.trim(),
+                });
+
+                if (!mounted) return;
+                Navigator.pop(context);
                 await _loadLabData();
-                if (mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Lab profile updated!')),
-                  );
-                }
+                widget.onProfileUpdated?.call();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Lab profile updated')),
+                );
               } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error updating profile: $e')),
-                  );
-                }
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to update profile: $e')),
+                );
               }
             },
             child: const Text('Save'),
@@ -1609,212 +1661,208 @@ class _LabProfilePageState extends State<LabProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final Brightness brightness = Theme.of(context).brightness;
-    final bool isDarkMode = brightness == Brightness.dark;
-    final Color mainBlue = const Color(0xFF7B61FF);
-    final Color cardBg = isDarkMode
-        ? const Color(0xFF232A34)
-        : const Color(0xFFF5F9FF);
-    final Color scaffoldBg = isDarkMode
-        ? const Color(0xFF181C22)
-        : Colors.white;
-    final Color textColor = isDarkMode ? Colors.white : mainBlue;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Lab Profile'),
-        backgroundColor: isDarkMode ? const Color(0xFF232A34) : Colors.white,
-        elevation: 0,
-        iconTheme: IconThemeData(color: mainBlue),
-        titleTextStyle: TextStyle(
-          color: textColor,
-          fontWeight: FontWeight.bold,
-          fontSize: 22,
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: labData == null ? null : _showEditProfileDialog,
-            tooltip: 'Edit Lab Details',
-          ),
-        ],
-      ),
-      backgroundColor: scaffoldBg,
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : labData == null
-          ? const Center(child: Text('No profile data found.'))
-          : ListView(
-              padding: const EdgeInsets.all(24),
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_labData == null) {
+      return const Center(child: Text('No lab profile data found.'));
+    }
+
+    final photoUrl = _labData?['photoURL'] as String?;
+    final displayName = _labData?['institutionName'] ?? 'Lab';
+    final officialEmail =
+        _labData?['officialEmail'] ?? _labData?['email'] ?? 'Not set';
+
+    return RefreshIndicator(
+      onRefresh: _loadLabData,
+      color: AppTheme.labColor,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(20),
+        children: [
+          Center(
+            child: Stack(
+              alignment: Alignment.bottomRight,
               children: [
-                Center(
-                  child: Stack(
-                    children: [
-                      GestureDetector(
-                        onTap: _isUploading ? null : _pickAndUploadPhoto,
-                        child: CircleAvatar(
-                          radius: 48,
-                          backgroundImage: NetworkImage(
-                            labData?['photoURL'] ??
-                                'https://ui-avatars.com/api/?name=${Uri.encodeComponent(labData?['institutionName'] ?? 'Lab')}&background=7B61FF&color=fff',
+                CircleAvatar(
+                  radius: 48,
+                  backgroundImage: photoUrl != null
+                      ? NetworkImage(photoUrl)
+                      : null,
+                  backgroundColor: AppTheme.labColor.withOpacity(0.15),
+                  child: photoUrl == null
+                      ? Text(
+                          displayName.isNotEmpty
+                              ? displayName[0].toUpperCase()
+                              : 'L',
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.labColor,
                           ),
-                          child: _isUploading
-                              ? const CircularProgressIndicator()
-                              : null,
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: CircleAvatar(
-                          radius: 16,
-                          backgroundColor: mainBlue,
-                          child: const Icon(
-                            Icons.camera_alt,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                        )
+                      : null,
                 ),
-                const SizedBox(height: 16),
-                Center(
-                  child: Text(
-                    labData?['institutionName'] ?? 'Lab Name',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: IconButton(
+                    icon: _isUploading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.camera_alt, color: Colors.white),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppTheme.labColor,
+                      padding: const EdgeInsets.all(8),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Center(
-                  child: Text(
-                    labData?['officialEmail'] ?? 'Email not set',
-                    style: const TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Card(
-                  color: cardBg,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Lab Details',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        _profileRow(
-                          'Institution Name',
-                          labData?['institutionName'],
-                        ),
-                        _profileRow(
-                          'License Number',
-                          labData?['licenseNumber'],
-                        ),
-                        _profileRow('Hotline', labData?['hotline']),
-                        _profileRow('Address', labData?['address']),
-                        _profileRow('Website', labData?['website']),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Authorized Representative',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        _profileRow('Name', labData?['repName']),
-                        _profileRow('Designation', labData?['repDesignation']),
-                        _profileRow('Contact', labData?['repContact']),
-                        _profileRow('Email', labData?['repEmail']),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Operating Hours:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          labData?['operatingHours'] ?? 'Not set',
-                          style: const TextStyle(color: Colors.grey),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Test Types Offered:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          (labData?['testTypes'] as String? ?? 'Not set'),
-                          style: const TextStyle(color: Colors.grey),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Report Turnaround Time:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          labData?['turnaroundTime'] ?? 'Not set',
-                          style: const TextStyle(color: Colors.grey),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'User Management:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Add/remove lab technicians (admin only) - Coming soon',
-                          style: const TextStyle(color: Colors.grey),
-                        ),
-                      ],
-                    ),
+                    onPressed: _isUploading ? null : _pickAndUploadPhoto,
                   ),
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: Column(
+              children: [
+                Text(
+                  displayName,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  officialEmail,
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              onPressed: _showEditProfileDialog,
+              icon: const Icon(Icons.edit),
+              label: const Text('Edit Profile'),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildInfoCard(
+            title: 'Institution Details',
+            items: [
+              _InfoEntry('Institution Name', _labData?['institutionName']),
+              _InfoEntry('License Number', _labData?['licenseNumber']),
+              _InfoEntry('Hotline', _labData?['hotline']),
+              _InfoEntry('Address', _labData?['address']),
+              _InfoEntry('Website', _labData?['website']),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildInfoCard(
+            title: 'Authorized Representative',
+            items: [
+              _InfoEntry('Name', _labData?['repName']),
+              _InfoEntry('Email', _labData?['repEmail']),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildInfoCard(
+            title: 'Operations',
+            items: [
+              _InfoEntry('Operating Hours', _labData?['operatingHours']),
+              _InfoEntry('Test Types', _labData?['testTypes']),
+              _InfoEntry('Avg Turnaround Time', _labData?['turnaroundTime']),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Need Changes?',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.labColor,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Update lab contact details to keep doctors and patients informed. '
+                    'Accurate operating hours help doctors schedule tests seamlessly.',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 60),
+        ],
+      ),
     );
   }
 
-  Widget _profileRow(String label, dynamic value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+  Widget _buildInfoCard({
+    required String title,
+    required List<_InfoEntry> items,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            ...items.map(
+              (item) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 140,
+                      child: Text(
+                        item.label,
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        (item.value as String?)?.isNotEmpty ?? false
+                            ? item.value as String
+                            : 'Not set',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
-        Text(
-          value?.toString() ?? 'Not set',
-          style: const TextStyle(color: Colors.grey),
-        ),
-      ],
+      ),
     );
   }
+}
+
+class _InfoEntry {
+  const _InfoEntry(this.label, this.value);
+
+  final String label;
+  final dynamic value;
 }

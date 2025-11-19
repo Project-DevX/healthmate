@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/shared_models.dart';
 import '../services/document_service.dart';
 import '../services/gemini_service.dart';
+import '../services/interconnect_service.dart';
 import '../theme/app_theme.dart';
 import 'medical_records_screen.dart';
 import 'prescriptions_screen.dart';
@@ -19,10 +20,12 @@ class DoctorAppointmentDetailsScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<DoctorAppointmentDetailsScreen> createState() => _DoctorAppointmentDetailsScreenState();
+  State<DoctorAppointmentDetailsScreen> createState() =>
+      _DoctorAppointmentDetailsScreenState();
 }
 
-class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetailsScreen>
+class _DoctorAppointmentDetailsScreenState
+    extends State<DoctorAppointmentDetailsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -52,7 +55,9 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
           .get();
 
       if (permissionDoc.docs.isNotEmpty) {
-        _permission = MedicalRecordPermission.fromFirestore(permissionDoc.docs.first);
+        _permission = MedicalRecordPermission.fromFirestore(
+          permissionDoc.docs.first,
+        );
       }
     } catch (e) {
       print('Error loading permission: $e');
@@ -77,11 +82,15 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
         'canViewAnalysis': true,
         'canWritePrescriptions': true,
         'grantedAt': FieldValue.serverTimestamp(),
-        'expiresAt': Timestamp.fromDate(DateTime.now().add(const Duration(days: 30))),
+        'expiresAt': Timestamp.fromDate(
+          DateTime.now().add(const Duration(days: 30)),
+        ),
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Permission granted for this appointment')),
+        const SnackBar(
+          content: Text('Permission granted for this appointment'),
+        ),
       );
 
       _loadPermission();
@@ -95,7 +104,9 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
   Future<void> _writePrescription() async {
     if (_permission == null || !_permission!.canWritePrescriptions) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You need patient permission to write prescriptions')),
+        const SnackBar(
+          content: Text('You need patient permission to write prescriptions'),
+        ),
       );
       return;
     }
@@ -123,15 +134,54 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
     final patientName = data['patientName'];
 
     // Show lab selection dialog
-    showDialog(
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (context) => _LabReferralDialog(
+      builder: (dialogContext) => _LabReferralDialog(
         patientId: patientId,
         patientName: patientName,
         doctorId: widget.doctorId,
         appointmentId: widget.appointment.id,
       ),
     );
+
+    // Handle result after dialog closes
+    if (result != null && mounted) {
+      final successCount = result['successCount'] as int? ?? 0;
+      final totalTests = result['totalTests'] as int? ?? 0;
+      final errors = result['errors'] as List<String>? ?? [];
+
+      if (successCount == totalTests && totalTests > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Lab test${totalTests > 1 ? 's' : ''} requested successfully! Lab and patient have been notified.',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      } else if (successCount > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Requested $successCount of $totalTests test${totalTests > 1 ? 's' : ''}. Some may have failed.',
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      } else if (errors.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to request lab tests. Please try again.${errors.isNotEmpty ? '\nErrors: ${errors.take(2).join(", ")}' : ''}',
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -188,13 +238,18 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Patient Information', style: Theme.of(context).textTheme.titleLarge),
+                  Text(
+                    'Patient Information',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   const SizedBox(height: 16),
                   _buildDetailRow('Name', data['patientName'] ?? 'Unknown'),
                   _buildDetailRow('Email', data['patientEmail'] ?? 'N/A'),
                   _buildDetailRow('Phone', data['patientPhone'] ?? 'N/A'),
-                  if (data['patientAge'] != null) _buildDetailRow('Age', '${data['patientAge']}'),
-                  if (data['patientGender'] != null) _buildDetailRow('Gender', data['patientGender']),
+                  if (data['patientAge'] != null)
+                    _buildDetailRow('Age', '${data['patientAge']}'),
+                  if (data['patientGender'] != null)
+                    _buildDetailRow('Gender', data['patientGender']),
                 ],
               ),
             ),
@@ -206,13 +261,28 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Appointment Information', style: Theme.of(context).textTheme.titleLarge),
+                  Text(
+                    'Appointment Information',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   const SizedBox(height: 16),
-                  _buildDetailRow('Type', data['appointmentType'] ?? 'Consultation'),
-                  _buildDetailRow('Date', DateFormat('MMMM dd, yyyy').format(appointmentDate)),
-                  _buildDetailRow('Time', DateFormat('hh:mm a').format(appointmentDate)),
+                  _buildDetailRow(
+                    'Type',
+                    data['appointmentType'] ?? 'Consultation',
+                  ),
+                  _buildDetailRow(
+                    'Date',
+                    DateFormat('MMMM dd, yyyy').format(appointmentDate),
+                  ),
+                  _buildDetailRow(
+                    'Time',
+                    DateFormat('hh:mm a').format(appointmentDate),
+                  ),
                   _buildDetailRow('Duration', data['duration'] ?? '30 min'),
-                  _buildDetailRow('Status', (data['status'] ?? 'scheduled').toUpperCase()),
+                  _buildDetailRow(
+                    'Status',
+                    (data['status'] ?? 'scheduled').toUpperCase(),
+                  ),
                   if (data['symptoms'] != null && data['symptoms'].isNotEmpty)
                     _buildDetailRow('Symptoms', data['symptoms']),
                   if (data['notes'] != null && data['notes'].isNotEmpty)
@@ -228,14 +298,19 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Permission Status', style: Theme.of(context).textTheme.titleLarge),
+                  Text(
+                    'Permission Status',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   const SizedBox(height: 16),
                   if (_isLoadingPermission)
                     const Center(child: CircularProgressIndicator())
                   else if (_permission == null)
                     Column(
                       children: [
-                        const Text('No permission granted for accessing patient medical records.'),
+                        const Text(
+                          'No permission granted for accessing patient medical records.',
+                        ),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: _requestPermission,
@@ -246,9 +321,18 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
                   else
                     Column(
                       children: [
-                        _buildPermissionRow('View Medical Records', _permission!.canViewRecords),
-                        _buildPermissionRow('View Analysis', _permission!.canViewAnalysis),
-                        _buildPermissionRow('Write Prescriptions', _permission!.canWritePrescriptions),
+                        _buildPermissionRow(
+                          'View Medical Records',
+                          _permission!.canViewRecords,
+                        ),
+                        _buildPermissionRow(
+                          'View Analysis',
+                          _permission!.canViewAnalysis,
+                        ),
+                        _buildPermissionRow(
+                          'Write Prescriptions',
+                          _permission!.canWritePrescriptions,
+                        ),
                         const SizedBox(height: 8),
                         Text(
                           'Granted: ${DateFormat('MMM dd, yyyy').format(_permission!.grantedAt)}',
@@ -322,12 +406,17 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Medical Actions', style: Theme.of(context).textTheme.titleLarge),
+                  Text(
+                    'Medical Actions',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   const SizedBox(height: 16),
                   ListTile(
                     leading: const Icon(Icons.edit_document),
                     title: const Text('Write Prescription'),
-                    subtitle: const Text('Create a new prescription for the patient'),
+                    subtitle: const Text(
+                      'Create a new prescription for the patient',
+                    ),
                     onTap: _writePrescription,
                     enabled: _permission?.canWritePrescriptions ?? false,
                   ),
@@ -342,7 +431,9 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
                   ListTile(
                     leading: const Icon(Icons.chat),
                     title: const Text('Chat with Patient'),
-                    subtitle: const Text('Start a conversation with the patient'),
+                    subtitle: const Text(
+                      'Start a conversation with the patient',
+                    ),
                     onTap: () {
                       // Navigate to chat
                       // This will be implemented when integrating chat
@@ -359,14 +450,18 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Appointment Actions', style: Theme.of(context).textTheme.titleLarge),
+                  Text(
+                    'Appointment Actions',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   const SizedBox(height: 16),
                   if (status != 'completed' && status != 'cancelled')
                     Row(
                       children: [
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: () => _updateAppointmentStatus('completed'),
+                            onPressed: () =>
+                                _updateAppointmentStatus('completed'),
                             icon: const Icon(Icons.check),
                             label: const Text('Mark Completed'),
                             style: ElevatedButton.styleFrom(
@@ -378,7 +473,8 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
                         const SizedBox(width: 16),
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: () => _updateAppointmentStatus('cancelled'),
+                            onPressed: () =>
+                                _updateAppointmentStatus('cancelled'),
                             icon: const Icon(Icons.cancel),
                             label: const Text('Cancel Appointment'),
                             style: ElevatedButton.styleFrom(
@@ -436,10 +532,13 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
 
   Future<void> _updateAppointmentStatus(String newStatus) async {
     try {
-      await _firestore.collection('appointments').doc(widget.appointment.id).update({
-        'status': newStatus,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      await _firestore
+          .collection('appointments')
+          .doc(widget.appointment.id)
+          .update({
+            'status': newStatus,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -450,9 +549,9 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
 
       Navigator.pop(context); // Go back to appointments list
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating appointment: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error updating appointment: $e')));
     }
   }
 
@@ -486,6 +585,7 @@ class _LabReferralDialogState extends State<_LabReferralDialog> {
   String? _selectedLabId;
   final List<String> _selectedTests = [];
   final TextEditingController _notesController = TextEditingController();
+  bool _isSubmitting = false;
 
   final List<String> _availableTests = [
     'Blood Test',
@@ -529,40 +629,122 @@ class _LabReferralDialogState extends State<_LabReferralDialog> {
   }
 
   Future<void> _submitReferral() async {
+    if (_isSubmitting) return;
+
     if (_selectedLabId == null || _selectedTests.isEmpty) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a lab and at least one test')),
+        const SnackBar(
+          content: Text('Please select a lab and at least one test'),
+        ),
       );
       return;
     }
 
+    setState(() {
+      _isSubmitting = true;
+    });
+
     try {
-      final selectedLab = _labs.firstWhere((lab) => lab['id'] == _selectedLabId);
-      final currentUser = await _firestore.collection('users').doc(widget.doctorId).get();
+      final selectedLab = _labs.firstWhere(
+        (lab) => lab['id'] == _selectedLabId,
+      );
+      final currentUser = await _firestore
+          .collection('users')
+          .doc(widget.doctorId)
+          .get();
       final doctorName = currentUser.data()?['fullName'] ?? 'Doctor';
+      final labName = selectedLab['name'] as String;
 
-      await _firestore.collection('lab_referrals').add({
-        'patientId': widget.patientId,
-        'patientName': widget.patientName,
-        'doctorId': widget.doctorId,
-        'doctorName': doctorName,
-        'labId': _selectedLabId,
-        'labName': selectedLab['name'],
-        'appointmentId': widget.appointmentId,
-        'testTypes': _selectedTests,
-        'status': 'pending',
-        'notes': _notesController.text.trim(),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      // Verify lab user exists
+      final labUserDoc = await _firestore
+          .collection('users')
+          .doc(_selectedLabId!)
+          .get();
+      if (!labUserDoc.exists) {
+        throw Exception('Selected lab user not found: $_selectedLabId');
+      }
 
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lab referral sent successfully')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sending referral: $e')),
-      );
+      final labUserData = labUserDoc.data();
+      if (labUserData == null) {
+        throw Exception('Lab user data is null');
+      }
+
+      final labUserType = labUserData['userType'];
+      if (labUserType != 'lab') {
+        throw Exception('Selected user is not a lab: $labUserType');
+      }
+
+      print('🔬 DOCTOR: Creating lab test request for lab: $_selectedLabId');
+      print('🔬 DOCTOR: Lab name: $labName');
+      print('🔬 DOCTOR: Patient: ${widget.patientName} (${widget.patientId})');
+      print('🔬 DOCTOR: Doctor: $doctorName (${widget.doctorId})');
+      print('🔬 DOCTOR: Tests: $_selectedTests');
+
+      // Create lab reports for each selected test using InterconnectService
+      int successCount = 0;
+      List<String> errors = [];
+
+      for (final testType in _selectedTests) {
+        try {
+          final labReport = LabReport(
+            id: '', // Will be generated by Firestore
+            patientId: widget.patientId,
+            patientName: widget.patientName,
+            labId: _selectedLabId!,
+            labName: labName,
+            doctorId: widget.doctorId,
+            doctorName: doctorName,
+            testType: testType,
+            testName: testType,
+            testDate: DateTime.now().add(
+              const Duration(days: 1),
+            ), // Default to tomorrow
+            status: 'requested',
+            notes: _notesController.text.trim().isEmpty
+                ? null
+                : _notesController.text.trim(),
+            createdAt: DateTime.now(),
+            appointmentId: widget.appointmentId,
+          );
+
+          print('🔬 DOCTOR: Requesting lab test: $testType');
+          final reportId = await InterconnectService.requestLabTest(labReport);
+          print('✅ DOCTOR: Lab test requested successfully: $reportId');
+          successCount++;
+        } catch (e, stackTrace) {
+          print('❌ DOCTOR: Error creating lab report for $testType: $e');
+          print('❌ DOCTOR: Stack trace: $stackTrace');
+          errors.add(e.toString());
+        }
+      }
+
+      // Close dialog and return result
+      if (mounted) {
+        Navigator.of(context).pop({
+          'successCount': successCount,
+          'totalTests': _selectedTests.length,
+          'errors': errors,
+        });
+      }
+    } catch (e, stackTrace) {
+      print('❌ DOCTOR: Error in _submitReferral: $e');
+      print('❌ DOCTOR: Stack trace: $stackTrace');
+
+      // Close dialog and return error
+      if (mounted) {
+        Navigator.of(context).pop({
+          'successCount': 0,
+          'totalTests': _selectedTests.length,
+          'errors': [e.toString()],
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
     }
   }
 
@@ -627,12 +809,18 @@ class _LabReferralDialogState extends State<_LabReferralDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _isSubmitting ? null : () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: _submitReferral,
-          child: const Text('Send Referral'),
+          onPressed: _isSubmitting ? null : _submitReferral,
+          child: _isSubmitting
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Send Referral'),
         ),
       ],
     );

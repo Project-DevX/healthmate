@@ -1,6 +1,7 @@
 // lib/widgets/patient_medical_history_widget.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/shared_models.dart';
 import '../services/interconnect_service.dart';
 
@@ -120,7 +121,6 @@ class _PatientMedicalHistoryWidgetState
                                   _selectedPatient?['id'] == patient['id'];
 
                               return Container(
-
                                 color: isSelected
                                     ? Theme.of(
                                         context,
@@ -592,6 +592,7 @@ class _PatientMedicalHistoryWidgetState
     final dosageController = TextEditingController();
     final frequencyController = TextEditingController();
     final durationController = TextEditingController();
+    final quantityController = TextEditingController(text: '1');
     final instructionsController = TextEditingController();
 
     showDialog(
@@ -635,6 +636,15 @@ class _PatientMedicalHistoryWidgetState
             ),
             const SizedBox(height: 12),
             TextField(
+              controller: quantityController,
+              decoration: const InputDecoration(
+                labelText: 'Quantity',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 12),
+            TextField(
               controller: instructionsController,
               decoration: const InputDecoration(
                 labelText: 'Instructions',
@@ -659,8 +669,9 @@ class _PatientMedicalHistoryWidgetState
                   name: nameController.text.trim(),
                   dosage: dosageController.text.trim(),
                   frequency: frequencyController.text.trim(),
-                  duration: int.tryParse(durationController.text.trim()) ?? 1,
+                  duration: durationController.text.trim(),
                   instructions: instructionsController.text.trim(),
+                  quantity: int.tryParse(quantityController.text.trim()) ?? 1,
                 );
                 onAdd(medicine);
                 Navigator.of(context).pop();
@@ -741,12 +752,106 @@ class _PatientMedicalHistoryWidgetState
               onPressed: testNameController.text.trim().isNotEmpty
                   ? () async {
                       try {
+                        // Fetch registered labs and prompt the doctor to choose one
+                        // before creating the lab request. This replaces silently
+                        // picking a default lab and ensures the doctor explicitly
+                        // assigns the request.
+                        String selectedLabId = '';
+                        String selectedLabName = 'Pending Assignment';
+
+                        final labsSnapshot = await FirebaseFirestore.instance
+                            .collection('users')
+                            .where('userType', isEqualTo: 'lab')
+                            .get();
+
+                        if (labsSnapshot.docs.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'No labs are registered in the system. Please register a lab first.',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        // Build a simple selection dialog for available labs
+                        final labs = labsSnapshot.docs
+                            .map(
+                              (d) => {
+                                'id': d.id,
+                                'name':
+                                    (d.data()['institutionName'] ??
+                                            d.data()['name'])
+                                        .toString(),
+                              },
+                            )
+                            .toList();
+
+                        final selection = await showDialog<Map<String, String>>(
+                          context: context,
+                          builder: (ctx) {
+                            String chosenId = labs.first['id'].toString();
+                            return AlertDialog(
+                              title: const Text('Select Lab'),
+                              content: SizedBox(
+                                width: double.maxFinite,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: labs.map((lab) {
+                                    final labId = lab['id'] as String;
+                                    final labName = lab['name'] as String;
+                                    return RadioListTile<String>(
+                                      value: labId,
+                                      groupValue: chosenId,
+                                      title: Text(labName),
+                                      onChanged: (val) {
+                                        chosenId = val ?? chosenId;
+                                        // Rebuild dialog
+                                        (ctx as Element).markNeedsBuild();
+                                      },
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(null),
+                                  child: const Text('Cancel'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    final chosen = chosenId;
+                                    final chosenName = labs
+                                        .firstWhere(
+                                          (l) => l['id'] == chosen,
+                                        )['name']
+                                        .toString();
+                                    Navigator.of(
+                                      ctx,
+                                    ).pop({'id': chosen, 'name': chosenName});
+                                  },
+                                  child: const Text('Select'),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+
+                        if (selection == null) {
+                          // User cancelled the lab selection
+                          return;
+                        }
+
+                        selectedLabId = selection['id']!;
+                        selectedLabName = selection['name']!;
+
                         final labReport = LabReport(
                           id: '',
                           patientId: _selectedPatient!['id'],
                           patientName: _selectedPatient!['name'],
-                          labId: '', // Will be assigned by lab
-                          labName: 'Pending Assignment',
+                          labId: selectedLabId,
+                          labName: selectedLabName,
                           doctorId: widget.doctorId,
                           doctorName: widget.doctorName,
                           testType: selectedTestType,

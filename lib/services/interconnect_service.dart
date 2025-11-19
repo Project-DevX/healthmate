@@ -348,9 +348,57 @@ class InterconnectService {
   // Request lab test (from doctor)
   static Future<String> requestLabTest(LabReport labReport) async {
     try {
-      final docRef = await _firestore
-          .collection('lab_reports')
-          .add(labReport.toMap());
+      // Log the lab report data before creating
+      final reportMap = labReport.toMap();
+      print('🔬 INTERCONNECT: Creating lab test request...');
+      print('🔬 INTERCONNECT: labId: ${labReport.labId}');
+      print('🔬 INTERCONNECT: patientId: ${labReport.patientId}');
+      print('🔬 INTERCONNECT: doctorId: ${labReport.doctorId}');
+      print('🔬 INTERCONNECT: testName: ${labReport.testName}');
+      print('🔬 INTERCONNECT: status: ${labReport.status}');
+      print('🔬 INTERCONNECT: Full data map: $reportMap');
+
+      // Verify labId is not empty
+      if (labReport.labId.isEmpty) {
+        throw Exception('labId cannot be empty when creating lab test request');
+      }
+
+      // Verify lab user exists
+      final labUserDoc = await _firestore
+          .collection('users')
+          .doc(labReport.labId)
+          .get();
+      if (!labUserDoc.exists) {
+        throw Exception(
+          'Lab user not found with ID: ${labReport.labId}. Cannot create lab test request.',
+        );
+      }
+      final labUserData = labUserDoc.data();
+      final labUserType = labUserData?['userType'] ?? 'unknown';
+      if (labUserType != 'lab') {
+        print(
+          '⚠️ INTERCONNECT: Warning - User ${labReport.labId} has userType "$labUserType", expected "lab"',
+        );
+      }
+      print(
+        '✅ INTERCONNECT: Verified lab user exists: ${labUserData?['institutionName'] ?? labUserData?['name'] ?? labReport.labId}',
+      );
+
+      final docRef = await _firestore.collection('lab_reports').add(reportMap);
+
+      print('✅ INTERCONNECT: Lab test request created with ID: ${docRef.id}');
+      print('✅ INTERCONNECT: Document path: lab_reports/${docRef.id}');
+
+      // Verify the document was created correctly
+      final createdDoc = await docRef.get();
+      if (createdDoc.exists) {
+        final createdData = createdDoc.data();
+        print(
+          '✅ INTERCONNECT: Verified created document - labId: ${createdData?['labId']}, status: ${createdData?['status']}',
+        );
+      } else {
+        print('⚠️ INTERCONNECT: WARNING - Created document does not exist!');
+      }
 
       // Notify lab
       await _sendNotification(
@@ -362,6 +410,7 @@ class InterconnectService {
         type: 'lab_result',
         relatedId: docRef.id,
       );
+      print('✅ INTERCONNECT: Notification sent to lab: ${labReport.labId}');
 
       // Notify patient
       await _sendNotification(
@@ -372,9 +421,14 @@ class InterconnectService {
         type: 'lab_result',
         relatedId: docRef.id,
       );
+      print(
+        '✅ INTERCONNECT: Notification sent to patient: ${labReport.patientId}',
+      );
 
       return docRef.id;
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('❌ INTERCONNECT: Failed to request lab test: $e');
+      print('❌ INTERCONNECT: Stack trace: $stackTrace');
       throw Exception('Failed to request lab test: $e');
     }
   }
@@ -426,6 +480,93 @@ class InterconnectService {
     }
   }
 
+  // Update lab report status (from lab) with notifications
+  static Future<void> updateLabReportStatus(
+    String reportId,
+    String status, {
+    String? notes,
+  }) async {
+    try {
+      // Update the lab report status
+      final updateData = <String, dynamic>{
+        'status': status,
+        'updatedAt': Timestamp.now(),
+      };
+      if (notes != null) {
+        updateData['notes'] = notes;
+      }
+
+      await _firestore
+          .collection('lab_reports')
+          .doc(reportId)
+          .update(updateData);
+
+      // Get report details for notifications
+      final reportDoc = await _firestore
+          .collection('lab_reports')
+          .doc(reportId)
+          .get();
+      final report = LabReport.fromFirestore(reportDoc);
+
+      // Determine notification messages based on status
+      String patientTitle;
+      String patientMessage;
+      String doctorTitle;
+      String doctorMessage;
+
+      switch (status.toLowerCase()) {
+        case 'in_progress':
+          patientTitle = 'Lab Test Started';
+          patientMessage =
+              'Your ${report.testName} test is now being processed at ${report.labName}';
+          doctorTitle = 'Lab Test Processing';
+          doctorMessage =
+              '${report.patientName}\'s ${report.testName} test is now being processed';
+          break;
+        case 'completed':
+        case 'uploaded':
+          patientTitle = 'Lab Test Completed';
+          patientMessage =
+              'Your ${report.testName} test has been completed at ${report.labName}';
+          doctorTitle = 'Lab Test Completed';
+          doctorMessage =
+              '${report.patientName}\'s ${report.testName} test has been completed';
+          break;
+        default:
+          patientTitle = 'Lab Test Status Update';
+          patientMessage =
+              'Your ${report.testName} test status has been updated to: ${status.replaceAll('_', ' ')}';
+          doctorTitle = 'Lab Test Status Update';
+          doctorMessage =
+              '${report.patientName}\'s ${report.testName} test status updated to: ${status.replaceAll('_', ' ')}';
+      }
+
+      // Notify patient
+      await _sendNotification(
+        recipientId: report.patientId,
+        recipientType: 'patient',
+        title: patientTitle,
+        message: patientMessage,
+        type: 'lab_result',
+        relatedId: reportId,
+      );
+
+      // Notify doctor (if doctor requested the test)
+      if (report.doctorId.isNotEmpty) {
+        await _sendNotification(
+          recipientId: report.doctorId,
+          recipientType: 'doctor',
+          title: doctorTitle,
+          message: doctorMessage,
+          type: 'lab_result',
+          relatedId: reportId,
+        );
+      }
+    } catch (e) {
+      throw Exception('Failed to update lab report status: $e');
+    }
+  }
+
   // Get lab reports for user
   static Future<List<LabReport>> getUserLabReports(
     String userId,
@@ -451,20 +592,99 @@ class InterconnectService {
               .where('labId', isEqualTo: userId);
           break;
         default:
-          throw Exception('Invalid user type');
+          throw Exception('Invalid user type: $userType');
+      }
+
+      print('🔍 INTERCONNECT: Fetching lab reports for $userType: $userId');
+      print('🔍 INTERCONNECT: Query collection: lab_reports');
+      if (userType == 'lab') {
+        print('🔍 INTERCONNECT: Query filter: labId == $userId');
       }
 
       // Get data without ordering first to avoid index requirement
       final snapshot = await query.get();
-      final labReports = snapshot.docs
-          .map((doc) => LabReport.fromFirestore(doc))
-          .toList();
+      print(
+        '📊 INTERCONNECT: Found ${snapshot.docs.length} lab report documents',
+      );
+
+      // DIAGNOSTIC: Also check ALL lab_reports to see what's in the database
+      if (userType == 'lab' && snapshot.docs.isEmpty) {
+        print('⚠️ INTERCONNECT: No reports found for labId: $userId');
+        print(
+          '🔍 INTERCONNECT: Running diagnostic query - checking ALL lab_reports...',
+        );
+        try {
+          final allReportsSnapshot = await _firestore
+              .collection('lab_reports')
+              .limit(10)
+              .get();
+          print(
+            '📊 INTERCONNECT: DIAGNOSTIC - Total lab_reports in database: ${allReportsSnapshot.docs.length}',
+          );
+          for (final doc in allReportsSnapshot.docs) {
+            final data = doc.data();
+            final docLabId = data['labId']?.toString() ?? 'NULL';
+            final docPatientId = data['patientId']?.toString() ?? 'NULL';
+            final docStatus = data['status']?.toString() ?? 'NULL';
+            final docTestName = data['testName']?.toString() ?? 'NULL';
+            print(
+              '📄 INTERCONNECT: DIAGNOSTIC - Report ${doc.id}: labId=$docLabId, patientId=$docPatientId, status=$docStatus, testName=$docTestName',
+            );
+            print(
+              '   Looking for: labId=$userId (match: ${docLabId == userId})',
+            );
+          }
+        } catch (e) {
+          print('⚠️ INTERCONNECT: Diagnostic query failed: $e');
+        }
+      }
+
+      final labReports = <LabReport>[];
+      for (final doc in snapshot.docs) {
+        try {
+          final rawData = doc.data();
+          if (rawData == null) {
+            print('⚠️ INTERCONNECT: Document ${doc.id} has no data');
+            continue;
+          }
+
+          // Validate that rawData is a Map
+          if (rawData is! Map<String, dynamic>) {
+            print(
+              '⚠️ INTERCONNECT: Document ${doc.id} data is not a Map, type: ${rawData.runtimeType}',
+            );
+            print('⚠️ INTERCONNECT: Raw data: $rawData');
+            continue;
+          }
+
+          // Log key fields for debugging
+          final reportLabId = rawData['labId']?.toString() ?? 'NULL';
+          final reportStatus = rawData['status']?.toString() ?? 'NULL';
+          final reportTestName = rawData['testName']?.toString() ?? 'NULL';
+          print(
+            '📋 INTERCONNECT: Parsing report ${doc.id}: labId=$reportLabId, status=$reportStatus, testName=$reportTestName',
+          );
+
+          labReports.add(LabReport.fromFirestore(doc));
+          print('✅ INTERCONNECT: Successfully parsed lab report ${doc.id}');
+        } catch (e, stackTrace) {
+          print(
+            '⚠️ INTERCONNECT: Skipping lab report ${doc.id} due to parse error: $e',
+          );
+          print('⚠️ INTERCONNECT: Stack trace: $stackTrace');
+        }
+      }
 
       // Sort in memory instead of using Firebase orderBy to avoid index requirement
       labReports.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
+      print(
+        '✅ INTERCONNECT: Successfully loaded ${labReports.length} lab reports',
+      );
       return labReports;
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('❌ INTERCONNECT: Failed to fetch lab reports: $e');
+      print('❌ INTERCONNECT: Stack trace: $stackTrace');
       throw Exception('Failed to fetch lab reports: $e');
     }
   }

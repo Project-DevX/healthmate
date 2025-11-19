@@ -20,6 +20,221 @@ class DoctorPatientManagementScreen extends StatefulWidget {
       _DoctorPatientManagementScreenState();
 }
 
+class _DoctorLabRequestDialog extends StatefulWidget {
+  final String patientId;
+  final String patientName;
+  final String doctorId;
+  final String doctorName;
+  final Future<void> Function()? onRequestComplete;
+
+  const _DoctorLabRequestDialog({
+    Key? key,
+    required this.patientId,
+    required this.patientName,
+    required this.doctorId,
+    required this.doctorName,
+    this.onRequestComplete,
+  }) : super(key: key);
+
+  @override
+  State<_DoctorLabRequestDialog> createState() =>
+      _DoctorLabRequestDialogState();
+}
+
+class _DoctorLabRequestDialogState extends State<_DoctorLabRequestDialog> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  bool _isSubmitting = false;
+  List<Map<String, dynamic>> _labs = [];
+  String? _selectedLabId;
+  String _selectedTestType = 'Blood Test';
+  final List<String> _testTypes = [
+    'Blood Test',
+    'Urine Test',
+    'X-Ray',
+    'CT Scan',
+    'MRI',
+    'ECG',
+    'Ultrasound',
+    'Biopsy',
+    'Other',
+  ];
+  final TextEditingController _testNameController = TextEditingController();
+  final TextEditingController _notesController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLabs();
+  }
+
+  Future<void> _loadLabs() async {
+    try {
+      final snapshot = await _firestore
+          .collection('users')
+          .where('userType', isEqualTo: 'lab')
+          .get();
+      setState(() {
+        _labs = snapshot.docs.map((d) {
+          final data = d.data();
+          return {
+            'id': d.id,
+            'name': (data['institutionName'] ?? data['name'] ?? 'Lab')
+                .toString(),
+          };
+        }).toList();
+        if (_labs.isNotEmpty) {
+          _selectedLabId = _labs.first['id'] as String;
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load labs: $e')));
+      }
+    }
+  }
+
+  Future<void> _submitRequest() async {
+    if (_selectedLabId == null || _testNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a lab and enter a test name'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final labReport = LabReport(
+        id: '',
+        patientId: widget.patientId,
+        patientName: widget.patientName,
+        labId: _selectedLabId!,
+        labName:
+            _labs.firstWhere((l) => l['id'] == _selectedLabId)['name']
+                as String,
+        doctorId: widget.doctorId,
+        doctorName: widget.doctorName,
+        testType: _selectedTestType,
+        testName: _testNameController.text.trim(),
+        testDate: DateTime.now().add(const Duration(days: 1)),
+        status: 'requested',
+        notes: _notesController.text.trim().isEmpty
+            ? null
+            : _notesController.text.trim(),
+        createdAt: DateTime.now(),
+      );
+
+      await InterconnectService.requestLabTest(labReport);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Lab test requested successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.of(context).pop();
+      }
+
+      if (widget.onRequestComplete != null) await widget.onRequestComplete!();
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to request test: $e')));
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _testNameController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Request Lab Test for ${widget.patientName}'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_labs.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12.0),
+                child: Text('No labs registered yet.'),
+              )
+            else ...[
+              DropdownButtonFormField<String>(
+                value: _selectedLabId,
+                decoration: const InputDecoration(labelText: 'Select Lab'),
+                items: _labs
+                    .map(
+                      (lab) => DropdownMenuItem(
+                        value: lab['id'] as String,
+                        child: Text(lab['name'] as String),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (val) => setState(() => _selectedLabId = val),
+              ),
+              const SizedBox(height: 12),
+            ],
+            DropdownButtonFormField<String>(
+              value: _selectedTestType,
+              decoration: const InputDecoration(labelText: 'Test Type'),
+              items: _testTypes
+                  .map((t) => DropdownMenuItem(value: t, child: Text(t)))
+                  .toList(),
+              onChanged: (val) =>
+                  setState(() => _selectedTestType = val ?? _selectedTestType),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _testNameController,
+              decoration: const InputDecoration(
+                labelText: 'Specific Test Name',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notesController,
+              decoration: const InputDecoration(
+                labelText: 'Notes (optional)',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSubmitting ? null : _submitRequest,
+          child: _isSubmitting
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Request Test'),
+        ),
+      ],
+    );
+  }
+}
+
 class _DoctorPatientManagementScreenState
     extends State<DoctorPatientManagementScreen>
     with SingleTickerProviderStateMixin {
@@ -733,12 +948,18 @@ class _DoctorPatientManagementScreenState
   }
 
   void _requestLabTest(Map<String, dynamic> patient) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Requesting lab test for ${patient['firstName']} ${patient['lastName']}',
-        ),
-        backgroundColor: AppTheme.successGreen,
+    // Show a dialog that lets the doctor select a registered lab and test
+    showDialog(
+      context: context,
+      builder: (context) => _DoctorLabRequestDialog(
+        patientId: patient['id'] as String,
+        patientName: '${patient['firstName']} ${patient['lastName']}',
+        doctorId: widget.doctorId,
+        doctorName: widget.doctorName,
+        onRequestComplete: () async {
+          // Refresh patients to update lab report counts
+          await _loadPatients();
+        },
       ),
     );
   }
