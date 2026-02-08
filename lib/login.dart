@@ -596,11 +596,6 @@ class _LoginPageState extends State<LoginPage> {
                                 Colors.blue,
                               ),
                               _buildSampleLoginButton(
-                                'Hospital',
-                                Icons.local_hospital,
-                                Colors.green,
-                              ),
-                              _buildSampleLoginButton(
                                 'Pharmacy',
                                 Icons.local_pharmacy,
                                 Colors.purple,
@@ -609,11 +604,6 @@ class _LoginPageState extends State<LoginPage> {
                                 'Lab',
                                 Icons.science,
                                 Colors.orange,
-                              ),
-                              _buildSampleLoginButton(
-                                'Caregiver',
-                                Icons.favorite,
-                                Colors.pink,
                               ),
                               _buildSampleLoginButton(
                                 'Patient',
