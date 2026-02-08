@@ -494,6 +494,8 @@ class PharmacyService {
       // Update prescription status
       await _firestore.collection('prescriptions').doc(prescriptionId).update({
         'status': status,
+        // Sync pharmacyStatus when delivering
+        if (status.toLowerCase() == 'delivered') 'pharmacyStatus': 'delivered',
         'lastUpdated': FieldValue.serverTimestamp(),
       });
 
@@ -565,6 +567,8 @@ class PharmacyService {
     try {
       await _firestore.collection('prescriptions').doc(prescriptionId).update({
         'status': status,
+        // Sync pharmacyStatus when delivering
+        if (status.toLowerCase() == 'delivered') 'pharmacyStatus': 'delivered',
         'lastUpdated': FieldValue.serverTimestamp(),
       });
 
