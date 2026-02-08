@@ -136,20 +136,6 @@ class RegisterPage extends StatelessWidget {
                       ),
                       _buildRoleCard(
                         context,
-                        'Caregiver',
-                        Icons.favorite,
-                        Colors.pink,
-                        'Care for your loved ones',
-                      ),
-                      _buildRoleCard(
-                        context,
-                        'Hospital',
-                        Icons.local_hospital,
-                        Colors.red,
-                        'Register your hospital for healthcare services',
-                      ),
-                      _buildRoleCard(
-                        context,
                         'Pharmacy',
                         Icons.local_pharmacy,
                         Colors.orange,
