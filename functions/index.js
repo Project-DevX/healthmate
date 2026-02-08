@@ -413,7 +413,7 @@ exports.analyzeLabReports = onCall(
           const docInfo = {
             id: labDoc.id,
             fileName: docData.fileName,
-            storagePath: docData.filePath, // Updated field name
+            storagePath: docData.storagePath || docData.filePath, // Support both field names
             downloadUrl: docData.downloadUrl,
             uploadDate: docData.uploadDate,
             category: docData.category,
@@ -612,7 +612,7 @@ exports.analyzeAllMedicalRecords = onCall(
           const docInfo = {
             id: doc.id,
             fileName: docData.fileName,
-            storagePath: docData.filePath, // Updated field name
+            storagePath: docData.storagePath || docData.filePath, // Support both field names
             downloadUrl: docData.downloadUrl,
             uploadDate: docData.uploadDate,
             category: docData.category,
