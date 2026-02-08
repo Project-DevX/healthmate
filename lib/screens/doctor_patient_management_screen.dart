@@ -107,7 +107,7 @@ class _DoctorPatientManagementScreenState
 
             // Get lab report count
             final labReports = await _firestore
-                .collection('labReports')
+                .collection('lab_reports')
                 .where('patientId', isEqualTo: patientId)
                 .where('doctorId', isEqualTo: widget.doctorId)
                 .get();
