@@ -152,7 +152,7 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
       int pendingLabsCount = 0;
       try {
         final pendingLabsQuery = await _firestore
-            .collection('labReports')
+            .collection('lab_reports')
             .where('doctorId', isEqualTo: doctorId)
             .get();
 

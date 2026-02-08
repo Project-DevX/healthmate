@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/shared_models.dart';
+import '../services/interconnect_service.dart';
 import '../theme/app_theme.dart';
 
 class LabReportsScreen extends StatefulWidget {
@@ -25,12 +27,38 @@ class _LabReportsScreenState extends State<LabReportsScreen> {
   String _urgency = 'Routine';
   bool _isLoading = false;
 
+  // Lab selection
+  List<Map<String, dynamic>> _labs = [];
+  String? _selectedLabId;
+
   final List<String> _urgencyOptions = ['Routine', 'Urgent', 'STAT'];
 
   @override
   void initState() {
     super.initState();
     _addLabTestField();
+    _loadLabs();
+  }
+
+  Future<void> _loadLabs() async {
+    try {
+      final labsSnapshot = await _firestore
+          .collection('users')
+          .where('userType', isEqualTo: 'lab')
+          .get();
+
+      setState(() {
+        _labs = labsSnapshot.docs.map((doc) {
+          final data = doc.data();
+          return {
+            'id': doc.id,
+            'name': data['institutionName'] ?? data['name'] ?? 'Lab',
+          };
+        }).toList();
+      });
+    } catch (e) {
+      print('Error loading labs: $e');
+    }
   }
 
   @override
@@ -65,25 +93,65 @@ class _LabReportsScreenState extends State<LabReportsScreen> {
       return;
     }
 
+    if (_selectedLabId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a lab'),
+          backgroundColor: AppTheme.errorRed,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final labOrderData = {
-        'doctorId': widget.doctorId,
-        'patientName': _patientNameController.text.trim(),
-        'patientId': _patientIdController.text.trim(),
-        'clinicalNotes': _clinicalNotesController.text.trim(),
-        'urgency': _urgency,
-        'urgencyNotes': _urgencyNotesController.text.trim(),
-        'labTests': _labTests.map((test) => test.toMap()).toList(),
-        'createdAt': FieldValue.serverTimestamp(),
-        'orderDate': DateTime.now(),
-        'status': 'pending',
-      };
+      // Get doctor name
+      final doctorDoc = await _firestore
+          .collection('users')
+          .doc(widget.doctorId)
+          .get();
+      final doctorName = doctorDoc.data()?['fullName'] ?? 'Doctor';
 
-      await _firestore.collection('lab_orders').add(labOrderData);
+      // Get selected lab name
+      final selectedLab = _labs.firstWhere(
+        (lab) => lab['id'] == _selectedLabId,
+      );
+      final labName = selectedLab['name'] as String;
+
+      final patientName = _patientNameController.text.trim();
+      final patientId = _patientIdController.text.trim();
+      final notes = _clinicalNotesController.text.trim();
+      final priority = _urgency.toLowerCase() == 'stat'
+          ? 'critical'
+          : _urgency.toLowerCase();
+
+      // Create a lab_reports entry for each test via InterconnectService
+      for (final test in _labTests) {
+        final testName = test.testNameController.text.trim();
+        if (testName.isEmpty) continue;
+
+        final labReport = LabReport(
+          id: '',
+          patientId: patientId,
+          patientName: patientName,
+          labId: _selectedLabId!,
+          labName: labName,
+          doctorId: widget.doctorId,
+          doctorName: doctorName,
+          testType: test.category ?? 'Other',
+          testName: testName,
+          testDate: DateTime.now(),
+          status: 'requested',
+          notes:
+              '$notes${test.instructionsController.text.trim().isNotEmpty ? '\nInstructions: ${test.instructionsController.text.trim()}' : ''}',
+          createdAt: DateTime.now(),
+        );
+
+        await InterconnectService.requestLabTest(labReport);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -234,6 +302,37 @@ class _LabReportsScreenState extends State<LabReportsScreen> {
                       validator: (value) => value == null || value.isEmpty
                           ? 'Please enter clinical notes'
                           : null,
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Select Lab
+                    const Text(
+                      'Select Laboratory',
+                      style: AppTheme.headingMedium,
+                    ),
+                    const SizedBox(height: 12),
+
+                    DropdownButtonFormField<String>(
+                      value: _selectedLabId,
+                      decoration: const InputDecoration(
+                        labelText: 'Choose a lab',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.biotech),
+                      ),
+                      items: _labs.map((lab) {
+                        return DropdownMenuItem<String>(
+                          value: lab['id'] as String,
+                          child: Text(lab['name'] as String),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedLabId = value;
+                        });
+                      },
+                      validator: (value) =>
+                          value == null ? 'Please select a lab' : null,
                     ),
 
                     const SizedBox(height: 24),

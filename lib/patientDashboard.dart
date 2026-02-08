@@ -1824,6 +1824,7 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
   List<Appointment> _appointments = [];
   List<LabReport> _labReports = [];
   List<Prescription> _prescriptions = [];
+  List<Map<String, dynamic>> _bills = [];
   bool _isLoading = true;
   int _selectedTab = 0;
 
@@ -1866,11 +1867,35 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
         print('     Medicines: ${prescription.medicines.length}');
       }
 
+      // Load bills for this patient
+      List<Map<String, dynamic>> bills = [];
+      try {
+        final billsQuery = await FirebaseFirestore.instance
+            .collection('pharmacy_bills')
+            .where('patientId', isEqualTo: userId)
+            .get();
+        bills = billsQuery.docs.map((doc) {
+          final data = doc.data();
+          data['id'] = doc.id;
+          return data;
+        }).toList();
+        // Sort by timestamp descending
+        bills.sort((a, b) {
+          final aTime = a['timestamp'] as Timestamp?;
+          final bTime = b['timestamp'] as Timestamp?;
+          if (aTime == null || bTime == null) return 0;
+          return bTime.compareTo(aTime);
+        });
+      } catch (e) {
+        print('⚠️ Could not load bills: $e');
+      }
+
       if (mounted) {
         setState(() {
           _appointments = appointments;
           _labReports = labReports;
           _prescriptions = prescriptions;
+          _bills = bills;
           _isLoading = false;
         });
       }
@@ -1967,6 +1992,19 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
                   child: const Text('Prescriptions'),
                 ),
               ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextButton(
+                  onPressed: () => setState(() => _selectedTab = 3),
+                  style: TextButton.styleFrom(
+                    backgroundColor: _selectedTab == 3
+                        ? Theme.of(context).primaryColor
+                        : null,
+                    foregroundColor: _selectedTab == 3 ? Colors.white : null,
+                  ),
+                  child: const Text('Bills'),
+                ),
+              ),
             ],
           ),
         ),
@@ -1987,6 +2025,8 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
         return _buildLabReportsList();
       case 2:
         return _buildPrescriptionsList();
+      case 3:
+        return _buildBillsList();
       default:
         return const SizedBox();
     }
@@ -2225,6 +2265,153 @@ class _AppointmentsContentState extends State<AppointmentsContent> {
                         style: const TextStyle(fontStyle: FontStyle.italic),
                       ),
                     ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBillsList() {
+    if (_bills.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.receipt_long, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('No bills yet'),
+            Text('Your pharmacy bills will appear here'),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: _bills.length,
+      itemBuilder: (context, index) {
+        final bill = _bills[index];
+        final billNumber = bill['billNumber'] as String? ?? 'N/A';
+        final totalAmount = (bill['totalAmount'] ?? 0.0).toDouble();
+        final subtotal = (bill['subtotal'] ?? 0.0).toDouble();
+        final tax = (bill['tax'] ?? 0.0).toDouble();
+        final billDate = bill['billDate'] as Timestamp?;
+        final doctorName = bill['doctorName'] as String? ?? 'Unknown';
+        final medicines = (bill['medicines'] as List<dynamic>?) ?? [];
+        final status = bill['status'] as String? ?? 'paid';
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: ExpansionTile(
+            leading: CircleAvatar(
+              backgroundColor: Colors.green.withOpacity(0.2),
+              child: const Icon(
+                Icons.receipt_long,
+                color: Colors.green,
+                size: 20,
+              ),
+            ),
+            title: Text(
+              billNumber,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Dr. $doctorName'),
+                if (billDate != null)
+                  Text(
+                    'Date: ${DateFormat('MMM dd, yyyy').format(billDate.toDate())}',
+                  ),
+                Row(
+                  children: [
+                    Text(
+                      '\$${totalAmount.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: Colors.green,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Chip(
+                      label: Text(
+                        status.toUpperCase(),
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                      backgroundColor: Colors.green.withOpacity(0.2),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Medicines:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    ...medicines.map((med) {
+                      final m = med as Map<String, dynamic>;
+                      final name = m['name'] ?? 'Medicine';
+                      final qty = m['quantity'] ?? 0;
+                      final price = (m['price'] ?? 0.0).toDouble();
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(child: Text('$name × $qty')),
+                            Text('\$${(price * qty).toStringAsFixed(2)}'),
+                          ],
+                        ),
+                      );
+                    }),
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Subtotal'),
+                        Text('\$${subtotal.toStringAsFixed(2)}'),
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Tax (8%)'),
+                        Text('\$${tax.toStringAsFixed(2)}'),
+                      ],
+                    ),
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Total',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        Text(
+                          '\$${totalAmount.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),

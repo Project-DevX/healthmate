@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/shared_models.dart';
 import '../services/document_service.dart';
 import '../services/gemini_service.dart';
+import '../services/interconnect_service.dart';
 import '../theme/app_theme.dart';
 import 'medical_records_screen.dart';
 import 'prescriptions_screen.dart';
@@ -19,10 +20,12 @@ class DoctorAppointmentDetailsScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<DoctorAppointmentDetailsScreen> createState() => _DoctorAppointmentDetailsScreenState();
+  State<DoctorAppointmentDetailsScreen> createState() =>
+      _DoctorAppointmentDetailsScreenState();
 }
 
-class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetailsScreen>
+class _DoctorAppointmentDetailsScreenState
+    extends State<DoctorAppointmentDetailsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -52,7 +55,9 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
           .get();
 
       if (permissionDoc.docs.isNotEmpty) {
-        _permission = MedicalRecordPermission.fromFirestore(permissionDoc.docs.first);
+        _permission = MedicalRecordPermission.fromFirestore(
+          permissionDoc.docs.first,
+        );
       }
     } catch (e) {
       print('Error loading permission: $e');
@@ -77,11 +82,15 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
         'canViewAnalysis': true,
         'canWritePrescriptions': true,
         'grantedAt': FieldValue.serverTimestamp(),
-        'expiresAt': Timestamp.fromDate(DateTime.now().add(const Duration(days: 30))),
+        'expiresAt': Timestamp.fromDate(
+          DateTime.now().add(const Duration(days: 30)),
+        ),
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Permission granted for this appointment')),
+        const SnackBar(
+          content: Text('Permission granted for this appointment'),
+        ),
       );
 
       _loadPermission();
@@ -95,7 +104,9 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
   Future<void> _writePrescription() async {
     if (_permission == null || !_permission!.canWritePrescriptions) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You need patient permission to write prescriptions')),
+        const SnackBar(
+          content: Text('You need patient permission to write prescriptions'),
+        ),
       );
       return;
     }
@@ -188,13 +199,18 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Patient Information', style: Theme.of(context).textTheme.titleLarge),
+                  Text(
+                    'Patient Information',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   const SizedBox(height: 16),
                   _buildDetailRow('Name', data['patientName'] ?? 'Unknown'),
                   _buildDetailRow('Email', data['patientEmail'] ?? 'N/A'),
                   _buildDetailRow('Phone', data['patientPhone'] ?? 'N/A'),
-                  if (data['patientAge'] != null) _buildDetailRow('Age', '${data['patientAge']}'),
-                  if (data['patientGender'] != null) _buildDetailRow('Gender', data['patientGender']),
+                  if (data['patientAge'] != null)
+                    _buildDetailRow('Age', '${data['patientAge']}'),
+                  if (data['patientGender'] != null)
+                    _buildDetailRow('Gender', data['patientGender']),
                 ],
               ),
             ),
@@ -206,13 +222,28 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Appointment Information', style: Theme.of(context).textTheme.titleLarge),
+                  Text(
+                    'Appointment Information',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   const SizedBox(height: 16),
-                  _buildDetailRow('Type', data['appointmentType'] ?? 'Consultation'),
-                  _buildDetailRow('Date', DateFormat('MMMM dd, yyyy').format(appointmentDate)),
-                  _buildDetailRow('Time', DateFormat('hh:mm a').format(appointmentDate)),
+                  _buildDetailRow(
+                    'Type',
+                    data['appointmentType'] ?? 'Consultation',
+                  ),
+                  _buildDetailRow(
+                    'Date',
+                    DateFormat('MMMM dd, yyyy').format(appointmentDate),
+                  ),
+                  _buildDetailRow(
+                    'Time',
+                    DateFormat('hh:mm a').format(appointmentDate),
+                  ),
                   _buildDetailRow('Duration', data['duration'] ?? '30 min'),
-                  _buildDetailRow('Status', (data['status'] ?? 'scheduled').toUpperCase()),
+                  _buildDetailRow(
+                    'Status',
+                    (data['status'] ?? 'scheduled').toUpperCase(),
+                  ),
                   if (data['symptoms'] != null && data['symptoms'].isNotEmpty)
                     _buildDetailRow('Symptoms', data['symptoms']),
                   if (data['notes'] != null && data['notes'].isNotEmpty)
@@ -228,14 +259,19 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Permission Status', style: Theme.of(context).textTheme.titleLarge),
+                  Text(
+                    'Permission Status',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   const SizedBox(height: 16),
                   if (_isLoadingPermission)
                     const Center(child: CircularProgressIndicator())
                   else if (_permission == null)
                     Column(
                       children: [
-                        const Text('No permission granted for accessing patient medical records.'),
+                        const Text(
+                          'No permission granted for accessing patient medical records.',
+                        ),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: _requestPermission,
@@ -246,9 +282,18 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
                   else
                     Column(
                       children: [
-                        _buildPermissionRow('View Medical Records', _permission!.canViewRecords),
-                        _buildPermissionRow('View Analysis', _permission!.canViewAnalysis),
-                        _buildPermissionRow('Write Prescriptions', _permission!.canWritePrescriptions),
+                        _buildPermissionRow(
+                          'View Medical Records',
+                          _permission!.canViewRecords,
+                        ),
+                        _buildPermissionRow(
+                          'View Analysis',
+                          _permission!.canViewAnalysis,
+                        ),
+                        _buildPermissionRow(
+                          'Write Prescriptions',
+                          _permission!.canWritePrescriptions,
+                        ),
                         const SizedBox(height: 8),
                         Text(
                           'Granted: ${DateFormat('MMM dd, yyyy').format(_permission!.grantedAt)}',
@@ -322,12 +367,17 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Medical Actions', style: Theme.of(context).textTheme.titleLarge),
+                  Text(
+                    'Medical Actions',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   const SizedBox(height: 16),
                   ListTile(
                     leading: const Icon(Icons.edit_document),
                     title: const Text('Write Prescription'),
-                    subtitle: const Text('Create a new prescription for the patient'),
+                    subtitle: const Text(
+                      'Create a new prescription for the patient',
+                    ),
                     onTap: _writePrescription,
                     enabled: _permission?.canWritePrescriptions ?? false,
                   ),
@@ -342,7 +392,9 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
                   ListTile(
                     leading: const Icon(Icons.chat),
                     title: const Text('Chat with Patient'),
-                    subtitle: const Text('Start a conversation with the patient'),
+                    subtitle: const Text(
+                      'Start a conversation with the patient',
+                    ),
                     onTap: () {
                       // Navigate to chat
                       // This will be implemented when integrating chat
@@ -359,33 +411,57 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Appointment Actions', style: Theme.of(context).textTheme.titleLarge),
+                  Text(
+                    'Appointment Actions',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
                   const SizedBox(height: 16),
                   if (status != 'completed' && status != 'cancelled')
-                    Row(
+                    Column(
                       children: [
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () => _updateAppointmentStatus('completed'),
-                            icon: const Icon(Icons.check),
-                            label: const Text('Mark Completed'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
+                        if (status == 'scheduled')
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () =>
+                                  _updateAppointmentStatus('confirmed'),
+                              icon: const Icon(Icons.check_circle_outline),
+                              label: const Text('Confirm Appointment'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () => _updateAppointmentStatus('cancelled'),
-                            icon: const Icon(Icons.cancel),
-                            label: const Text('Cancel Appointment'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
+                        if (status == 'scheduled') const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () =>
+                                    _updateAppointmentStatus('completed'),
+                                icon: const Icon(Icons.check),
+                                label: const Text('Mark Completed'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () =>
+                                    _updateAppointmentStatus('cancelled'),
+                                icon: const Icon(Icons.cancel),
+                                label: const Text('Cancel Appointment'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -436,10 +512,13 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
 
   Future<void> _updateAppointmentStatus(String newStatus) async {
     try {
-      await _firestore.collection('appointments').doc(widget.appointment.id).update({
-        'status': newStatus,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      await _firestore
+          .collection('appointments')
+          .doc(widget.appointment.id)
+          .update({
+            'status': newStatus,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -450,9 +529,9 @@ class _DoctorAppointmentDetailsScreenState extends State<DoctorAppointmentDetail
 
       Navigator.pop(context); // Go back to appointments list
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating appointment: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error updating appointment: $e')));
     }
   }
 
@@ -531,38 +610,59 @@ class _LabReferralDialogState extends State<_LabReferralDialog> {
   Future<void> _submitReferral() async {
     if (_selectedLabId == null || _selectedTests.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a lab and at least one test')),
+        const SnackBar(
+          content: Text('Please select a lab and at least one test'),
+        ),
       );
       return;
     }
 
     try {
-      final selectedLab = _labs.firstWhere((lab) => lab['id'] == _selectedLabId);
-      final currentUser = await _firestore.collection('users').doc(widget.doctorId).get();
+      final selectedLab = _labs.firstWhere(
+        (lab) => lab['id'] == _selectedLabId,
+      );
+      final currentUser = await _firestore
+          .collection('users')
+          .doc(widget.doctorId)
+          .get();
       final doctorName = currentUser.data()?['fullName'] ?? 'Doctor';
 
-      await _firestore.collection('lab_referrals').add({
-        'patientId': widget.patientId,
-        'patientName': widget.patientName,
-        'doctorId': widget.doctorId,
-        'doctorName': doctorName,
-        'labId': _selectedLabId,
-        'labName': selectedLab['name'],
-        'appointmentId': widget.appointmentId,
-        'testTypes': _selectedTests,
-        'status': 'pending',
-        'notes': _notesController.text.trim(),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      // Create a lab report entry for EACH selected test via InterconnectService
+      // This writes to 'lab_reports' collection which the lab dashboard actually reads
+      for (final testType in _selectedTests) {
+        final labReport = LabReport(
+          id: '',
+          patientId: widget.patientId,
+          patientName: widget.patientName,
+          labId: _selectedLabId!,
+          labName: selectedLab['name'] as String,
+          doctorId: widget.doctorId,
+          doctorName: doctorName,
+          testType: testType,
+          testName: testType,
+          testDate: DateTime.now(),
+          status: 'requested',
+          notes: _notesController.text.trim(),
+          createdAt: DateTime.now(),
+          appointmentId: widget.appointmentId,
+        );
+
+        await InterconnectService.requestLabTest(labReport);
+      }
 
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lab referral sent successfully')),
+        SnackBar(
+          content: Text(
+            '${_selectedTests.length} lab test(s) sent to ${selectedLab['name']}',
+          ),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sending referral: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error sending referral: $e')));
     }
   }
 

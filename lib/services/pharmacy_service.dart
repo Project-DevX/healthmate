@@ -460,6 +460,8 @@ class PharmacyService {
       // Update prescription pharmacy status
       await _firestore.collection('prescriptions').doc(prescriptionId).update({
         'pharmacyStatus': status,
+        // Sync the patient-facing 'status' field when pharmacy delivers
+        if (status.toLowerCase() == 'delivered') 'status': 'filled',
         'lastUpdated': FieldValue.serverTimestamp(),
       });
 
@@ -492,6 +494,8 @@ class PharmacyService {
       // Update prescription status
       await _firestore.collection('prescriptions').doc(prescriptionId).update({
         'status': status,
+        // Sync pharmacyStatus when delivering
+        if (status.toLowerCase() == 'delivered') 'pharmacyStatus': 'delivered',
         'lastUpdated': FieldValue.serverTimestamp(),
       });
 
@@ -563,6 +567,8 @@ class PharmacyService {
     try {
       await _firestore.collection('prescriptions').doc(prescriptionId).update({
         'status': status,
+        // Sync pharmacyStatus when delivering
+        if (status.toLowerCase() == 'delivered') 'pharmacyStatus': 'delivered',
         'lastUpdated': FieldValue.serverTimestamp(),
       });
 
@@ -632,6 +638,7 @@ class PharmacyService {
           .get();
 
       String patientName = 'Unknown Patient';
+      String patientId = prescription.patientInfo.id;
       String doctorName = 'Unknown Doctor';
       String doctorSpecialization = 'General Medicine';
       String doctorHospital = 'Unknown Hospital';
@@ -642,6 +649,7 @@ class PharmacyService {
       if (freshPrescriptionDoc.exists) {
         final freshData = freshPrescriptionDoc.data()!;
         patientName = freshData['patientName'] ?? 'Unknown Patient';
+        patientId = freshData['patientId'] ?? patientId;
         doctorName = freshData['doctorName'] ?? 'Unknown Doctor';
         doctorSpecialization =
             freshData['doctorSpecialization'] ?? 'General Medicine';
@@ -767,6 +775,7 @@ class PharmacyService {
         'billNumber': billNumber,
         'prescriptionId': prescription.id,
         'pharmacyId': currentPharmacyId,
+        'patientId': patientId,
         'patientName': patientName, // Use fresh patient name directly
         'doctorName': doctorName, // Add doctor name directly to bill
         'medicines': medicinesWithCurrentPricing.map((m) => m.toMap()).toList(),
