@@ -88,7 +88,7 @@ exports.classifyMedicalDocument = onCall(
         }
 
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+        const model = genAI.getGenerativeModel({model: "gemini-2.0-flash"});
         const bucket = admin.storage().bucket();
 
         // Check if file exists and is an image
@@ -246,7 +246,7 @@ Focus on identifying:
           try {
             console.log('🔄 Attempting content-based classification after error...');
             const genAI = new GoogleGenerativeAI(apiKey);
-            const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+            const model = genAI.getGenerativeModel({model: "gemini-2.0-flash"});
             const contentClassificationResult = await performContentBasedClassification(base64Data, mimeType, model);
             
             // If content-based classification succeeded, use it
@@ -313,7 +313,7 @@ exports.analyzeLabReports = onCall(
         }
 
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+        const model = genAI.getGenerativeModel({model: "gemini-2.0-flash"});
         const db = admin.firestore();
 
         // Get existing lab analysis
@@ -549,7 +549,7 @@ exports.analyzeAllMedicalRecords = onCall(
         }
 
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+        const model = genAI.getGenerativeModel({model: "gemini-2.0-flash"});
         const db = admin.firestore();
 
         // Get existing comprehensive analysis
@@ -1622,7 +1622,7 @@ exports.updateLabReportType = onCall(
         }
 
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({model: "gemini-1.5-flash"});
+        const model = genAI.getGenerativeModel({model: "gemini-2.0-flash"});
         const bucket = admin.storage().bucket();
 
         // Check if file exists and is an image
